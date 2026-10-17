@@ -40,7 +40,17 @@ Bu komut yalnızca **dry-run** yapar; model çağrısı ve worktree oluşturmaz.
 npm run live -- --config agentmesh.config.json --execute
 ```
 
-Canlı JSONL stdout/stderr olaylarını ve görev durumlarını izlemek için `--execute --stream` kullanın. Çalışan komutta `Ctrl+C`, aktif CLI süreçlerine iptal sinyali gönderir ve bekleyen görevleri iptal eder. İptal edilen işler `cancelled` olarak kalır; kısmi worktree dosyaları silinmez. Yeniden çalıştırmadan önce bunları inceleyin. Ham CLI olayları gizli içerik barındırabileceğinden logları dışarı paylaşırken filtreleyin.
+Canlı JSONL stdout/stderr olaylarını ve görev durumlarını izlemek için `--execute --stream` kullanın. Çalışan komutta `Ctrl+C`, aktif CLI süreçlerine iptal sinyali gönderir ve bekleyen görevleri iptal eder. İptal edilen işler `cancelled` olarak kalır; kısmi worktree dosyaları silinmez. Ham CLI olayları gizli içerik barındırabileceğinden logları dışarı paylaşırken filtreleyin.
+
+İptal edilen, başarısız veya engellenmiş bir görevi tekrar çalıştırmadan önce `--review` ile kısmi dosyaları inceleyin ve ardından açıkça kuyruğa alın:
+
+```powershell
+npm run live -- --config agentmesh.config.json --review
+npm run live -- --config agentmesh.config.json --retry backend-auth
+npm run live -- --config agentmesh.config.json --execute --stream
+```
+
+`--retry` tek başına model çağırmaz. `backend-auth` yerine hedef görev ID'sini kullanın; aynı worktree varsa korunur.
 
 `--execute`, gerçek CLI çağrıları yapar; kimlik doğrulama, kullanım limiti ve olası maliyetler bağlı olduğunuz CLI hesabına aittir. OpenCode için `--auto` kullanılmaz, Codex için `workspace-write` sandbox istenir. Bu **işletim sistemi düzeyinde bir izolasyon garantisi değildir**; özellikle OpenCode tool izinleri ayrıca değerlendirilmelidir. Otomatik push/deploy yapılmaz.
 

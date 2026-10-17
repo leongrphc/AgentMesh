@@ -135,6 +135,11 @@ test("canlı olaylar iletilir; iptal edilen iş geç sonuç yayınlamaz ve bekle
     const restored = new Orchestrator(new Journal(f.path));
     assert.deepEqual(restored.snapshot("p").tasks.map((task) => task.status), ["cancelled", "cancelled"]);
     assert.throws(() => f.engine.cancelTask("active"), /iptal edilemez/);
+    f.engine.retryTask("active");
+    f.engine.retryTask("waiting");
+    const replay = await f.engine.run("p", 1);
+    assert.deepEqual(replay.tasks.map((task) => task.status), ["completed", "completed"]);
+    assert.equal(replay.context.unexpected?.value, "yes");
   } finally { f.cleanup(); }
 });
 

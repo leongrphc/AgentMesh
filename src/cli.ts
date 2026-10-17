@@ -72,27 +72,28 @@ async function main(): Promise<void> {
   const args = process.argv.slice(2);
   const reviewing = args.includes("--review");
   const approving = args.includes("--approve");
+  const retrying = args.includes("--retry");
   const executing = args.includes("--execute");
   const streaming = args.includes("--stream");
-  if (Number(reviewing) + Number(approving) + Number(executing) > 1) {
-    throw new Error("--review, --approve ve --execute birlikte kullanılamaz");
+  if (Number(reviewing) + Number(approving) + Number(retrying) + Number(executing) > 1) {
+    throw new Error("--review, --approve, --retry ve --execute birlikte kullanılamaz");
   }
   if (streaming && !executing) throw new Error("--stream yalnızca --execute ile kullanılabilir");
   const configIndex = args.indexOf("--config");
   const configArg = args[configIndex + 1];
   if (configIndex < 0 || !configArg) {
-    throw new Error("Kullanım: npm run live -- --config .\\agentmesh.config.json [--execute [--stream] | --review | --approve TASK --digest SHA256]");
+    throw new Error("Kullanım: npm run live -- --config .\\agentmesh.config.json [--execute [--stream] | --review | --approve TASK --digest SHA256 | --retry TASK]");
   }
   const configFile = resolve(configArg);
   const config = JSON.parse(readFileSync(configFile, "utf8")) as Config;
   validate(config);
   const repoPath = isAbsolute(config.repoPath)
     ? realpathSync(config.repoPath) : realpathSync(resolve(dirname(configFile), config.repoPath));
-  if (!executing && !reviewing && !approving) {
+  if (!executing && !reviewing && !approving && !retrying) {
     console.log(JSON.stringify({
       dryRun: true, repoPath, projectId: config.projectId,
       agents: config.agents, tasks: config.tasks.map(({ id, agentId, dependsOn, allowedPaths }) => ({ id, agentId, dependsOn, allowedPaths })),
-      instruction: "--execute [--stream]: ajanları çalıştır, --review: diff görüntüle, --approve TASK --digest SHA256: onayla.",
+      instruction: "--execute [--stream]: ajanları çalıştır, --review: diff görüntüle, --approve TASK --digest SHA256: onayla, --retry TASK: görevi yeniden kuyruğa al.",
     }, null, 2));
     return;
   }
@@ -138,6 +139,13 @@ async function main(): Promise<void> {
       }
       const commit = engine.approveTask(taskId, digest);
       console.log(JSON.stringify({ approved: taskId, taskCommit: commit, instruction: "Bağımlı görevleri çalıştırmak için ayrıca --execute kullanın." }, null, 2));
+      return;
+    }
+    if (retrying) {
+      const taskId = args[args.indexOf("--retry") + 1];
+      if (!taskId || taskId.startsWith("--")) throw new Error("Yeniden deneme için --retry TASK_ID gerekli");
+      engine.retryTask(taskId);
+      console.log(JSON.stringify({ retried: taskId, status: "pending", instruction: "Yeniden başlatmak için --execute kullanın. Önce kısmi worktree değişikliklerini inceleyin." }, null, 2));
       return;
     }
     let snapshot;
