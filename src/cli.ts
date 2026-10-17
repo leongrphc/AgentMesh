@@ -73,13 +73,15 @@ async function main(): Promise<void> {
   const reviewing = args.includes("--review");
   const approving = args.includes("--approve");
   const executing = args.includes("--execute");
+  const streaming = args.includes("--stream");
   if (Number(reviewing) + Number(approving) + Number(executing) > 1) {
     throw new Error("--review, --approve ve --execute birlikte kullanılamaz");
   }
+  if (streaming && !executing) throw new Error("--stream yalnızca --execute ile kullanılabilir");
   const configIndex = args.indexOf("--config");
   const configArg = args[configIndex + 1];
   if (configIndex < 0 || !configArg) {
-    throw new Error("Kullanım: npm run live -- --config .\\agentmesh.config.json [--execute | --review | --approve TASK --digest SHA256]");
+    throw new Error("Kullanım: npm run live -- --config .\\agentmesh.config.json [--execute [--stream] | --review | --approve TASK --digest SHA256]");
   }
   const configFile = resolve(configArg);
   const config = JSON.parse(readFileSync(configFile, "utf8")) as Config;
@@ -90,7 +92,7 @@ async function main(): Promise<void> {
     console.log(JSON.stringify({
       dryRun: true, repoPath, projectId: config.projectId,
       agents: config.agents, tasks: config.tasks.map(({ id, agentId, dependsOn, allowedPaths }) => ({ id, agentId, dependsOn, allowedPaths })),
-      instruction: "--execute: ajanları çalıştır, --review: diff görüntüle, --approve TASK --digest SHA256: onayla.",
+      instruction: "--execute [--stream]: ajanları çalıştır, --review: diff görüntüle, --approve TASK --digest SHA256: onayla.",
     }, null, 2));
     return;
   }
@@ -103,6 +105,9 @@ async function main(): Promise<void> {
   try {
     const manager = new WorktreeManager();
     const engine = new Orchestrator(journal, manager);
+    if (streaming) engine.subscribe((notice) => {
+      console.log(JSON.stringify(notice));
+    });
     for (const agent of config.agents) {
       engine.registerAgent(agent.provider === "codex"
         ? new CodexCliAdapter(agent.id, { model: agent.model })
@@ -135,7 +140,17 @@ async function main(): Promise<void> {
       console.log(JSON.stringify({ approved: taskId, taskCommit: commit, instruction: "Bağımlı görevleri çalıştırmak için ayrıca --execute kullanın." }, null, 2));
       return;
     }
-    const snapshot = executing ? await engine.run(config.projectId, config.maxParallel ?? 2) : engine.snapshot(config.projectId);
+    let snapshot;
+    if (executing) {
+      const abort = new AbortController();
+      const onSigint = () => {
+        console.error("SIGINT: çalışan ve bekleyen görevler iptal ediliyor");
+        abort.abort();
+      };
+      process.on("SIGINT", onSigint);
+      try { snapshot = await engine.run(config.projectId, config.maxParallel ?? 2, abort.signal); }
+      finally { process.off("SIGINT", onSigint); }
+    } else snapshot = engine.snapshot(config.projectId);
     const reports = snapshot.tasks.map((task) => {
       const changes = task.worktree && existsSync(task.worktree.path)
         ? manager.inspect(task.worktree.path, task.allowedPaths)
@@ -150,8 +165,9 @@ async function main(): Promise<void> {
         ...(reviewing ? { trackedDiff: changes?.trackedDiff, untrackedPreviews: changes?.untrackedPreviews } : {}),
       };
     });
-    console.log(JSON.stringify({ dbPath, mode: reviewing ? "review" : "execute", reports }, null, 2));
-    if (reports.some((task) => task.status === "failed" || task.status === "blocked" || task.status === "needs_review")) process.exitCode = 1;
+    console.log(JSON.stringify({ dbPath, mode: reviewing ? "review" : "execute", reports }, null, streaming ? 0 : 2));
+    if (reports.some((task) => task.status === "cancelled")) process.exitCode = 130;
+    else if (reports.some((task) => task.status === "failed" || task.status === "blocked" || task.status === "needs_review")) process.exitCode = 1;
   } finally { journal.close(); }
 }
 

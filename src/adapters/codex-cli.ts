@@ -21,6 +21,8 @@ export class CodexCliAdapter implements AgentAdapter {
       args,
       cwd: input.workspaceRoot,
       stdin: prompt,
+      signal: input.signal,
+      onOutput: input.onOutput,
     });
     return parseAgentEvents(events);
   }

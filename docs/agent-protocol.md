@@ -63,7 +63,7 @@ Context sadece özet sohbet değildir. Her kararın **kaynak görevi** bulunur. 
 
 ## Olaylar
 
-Orkestratör journal'ındaki temel olaylar: `project.created`, `task.created`, `task.started`, `task.review.requested`, `task.review.approved`, `task.completed`, `task.failed`, `task.blocked`, `task.interrupted`, `task.retried`, `context.updated`, `message.sent`.
+Orkestratör journal'ındaki temel olaylar: `project.created`, `task.created`, `task.started`, `task.review.requested`, `task.review.approved`, `task.completed`, `task.failed`, `task.blocked`, `task.interrupted`, `task.cancelled`, `task.retried`, `context.updated`, `message.sent`.
 
 Örnek olay:
 
@@ -80,7 +80,7 @@ Orkestratör journal'ındaki temel olaylar: `project.created`, `task.created`, `
 }
 ```
 
-**MVP semantiği:** tek-yazıcı SQLite WAL ve eski JSONL kayıtlarını içe aktarma; sonuç, mesaj ve summary olayları transaction içinde birlikte kaydedilir. Dosya değiştiren görev `pending_review` durumuna geçer; sonuç ve context olayları sadece aynı digest'in insan tarafından onaylanmasının ardından yayınlanır. Yeni işler entegrasyon dalındaki onaylanmış koddan başlar. Ajanlar her çalıştırmada başlangıçtaki context ve mesaj görüntüsünü alır. Çalışma **sırasında** canlı mesaj iletimi henüz yoktur; bir sonraki görev/turn'da aktarılır. Kaydedilen olaylar uygulama kapanıp açılsa da korunur. Çöken çalışma `needs_review` durumuna geçer.
+**MVP semantiği:** tek-yazıcı SQLite WAL ve eski JSONL kayıtlarını içe aktarma; sonuç, mesaj ve summary olayları transaction içinde birlikte kaydedilir. Dosya değiştiren görev `pending_review` durumuna geçer; sonuç ve context olayları sadece aynı digest'in insan tarafından onaylanmasının ardından yayınlanır. Yeni işler entegrasyon dalındaki onaylanmış koddan başlar. Çalışma **sırasında** ajan JSONL stdout/stderr olayları geçici `subscribe()` abonelerine iletilir, ancak ajanlar arası canlı mesaj yönlendirme henüz yoktur; mesajlar bir sonraki görev/turn'da aktarılır. `cancelTask()` / `AbortSignal` aktif CLI sürecini durdurur ve `cancelled` olayı kalıcıdır; kısmi dosyalar inceleme için korunur. Kaydedilen olaylar uygulama kapanıp açılsa da korunur. Çöken çalışma `needs_review` durumuna geçer.
 
 **Üretim semantiği (sonraki faz):** şema sürümleme, teslim alındı işaretleri, gerçek zamanlı event subscription, backpressure, hata tekrar deneme limitleri, per-agent inbox cursor, onay bekleyen araç çağrıları ve correlation trace.
 

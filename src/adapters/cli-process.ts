@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process";
 import { createInterface } from "node:readline";
-import type { AgentExecution } from "../core/contracts.js";
+import type { AgentExecution, AgentOutput } from "../core/contracts.js";
 
 export interface ProcessSpec {
   executable: string;
@@ -8,6 +8,8 @@ export interface ProcessSpec {
   cwd: string;
   stdin?: string;
   timeoutMs?: number;
+  signal?: AbortSignal;
+  onOutput?: (output: AgentOutput) => void;
 }
 
 export interface ProcessResult {
@@ -18,6 +20,7 @@ export interface ProcessResult {
 export type ProcessRunner = (spec: ProcessSpec) => Promise<ProcessResult>;
 
 export const runJsonlProcess: ProcessRunner = async (spec) => {
+  if (spec.signal?.aborted) throw new Error("CLI işlemi iptal edildi");
   const child = spawn(spec.executable, spec.args, {
     cwd: spec.cwd, stdio: ["pipe", "pipe", "pipe"], shell: false, windowsHide: true,
   });
@@ -25,14 +28,23 @@ export const runJsonlProcess: ProcessRunner = async (spec) => {
   let stderr = "";
   let rawOutput = "";
   let parseError: Error | undefined;
-  const timer = setTimeout(() => child.kill(), spec.timeoutMs ?? 10 * 60 * 1000);
+  let aborted = false;
+  let timedOut = false;
+  const abort = () => { aborted = true; child.kill(); };
+  spec.signal?.addEventListener("abort", abort, { once: true });
+  if (spec.signal?.aborted) abort();
+  const timer = setTimeout(() => { timedOut = true; child.kill(); }, spec.timeoutMs ?? 10 * 60 * 1000);
   timer.unref();
+  const report = (output: AgentOutput) => {
+    try { spec.onOutput?.(output); } catch { /* UI subscriber failures must not crash CLI execution. */ }
+  };
   const reader = createInterface({ input: child.stdout });
   reader.on("line", (line) => {
     try {
       const value: unknown = JSON.parse(line);
       if (value && typeof value === "object" && !Array.isArray(value)) {
         if (events.length < 20_000) events.push(value as Record<string, unknown>);
+        report({ channel: "stdout", data: value as Record<string, unknown> });
       } else if (rawOutput.length < 8192) rawOutput += line + "\n";
     } catch {
       if (rawOutput.length < 8192) rawOutput += line + "\n";
@@ -43,7 +55,11 @@ export const runJsonlProcess: ProcessRunner = async (spec) => {
     }
   });
   child.stderr.setEncoding("utf8");
-  child.stderr.on("data", (text: string) => { stderr += text; stderr = stderr.slice(-8192); });
+  child.stderr.on("data", (text: string) => {
+    stderr += text; stderr = stderr.slice(-8192);
+    report({ channel: "stderr", data: text.slice(-8192) });
+  });
+  child.stdin.on("error", () => { /* A child may exit before it accepts all stdin. */ });
   if (spec.stdin !== undefined) child.stdin.end(spec.stdin);
   else child.stdin.end();
   let exitCode: number | null;
@@ -52,8 +68,13 @@ export const runJsonlProcess: ProcessRunner = async (spec) => {
       child.once("error", reject);
       child.once("close", resolve);
     });
-  } finally { clearTimeout(timer); }
+  } finally {
+    clearTimeout(timer);
+    spec.signal?.removeEventListener("abort", abort);
+  }
   if (parseError) throw parseError;
+  if (aborted) throw new Error("CLI işlemi iptal edildi");
+  if (timedOut) throw new Error("CLI zaman aşımı");
   if (exitCode !== 0) throw new Error(`CLI hata kodu ${exitCode}: ${stderr || rawOutput.slice(-1024)}`);
   return { events, stderr };
 };

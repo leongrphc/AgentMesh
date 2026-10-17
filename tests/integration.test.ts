@@ -235,10 +235,31 @@ test("Codex/OpenCode gerçek CLI komutları güvenli bayraklar ve session ile ha
 });
 
 test("JSONL process runner gerçekten ayrı işlem açıp olayları okur", async () => {
+  const updates: Array<{ channel: string; data: unknown }> = [];
   const result = await runJsonlProcess({
     executable: process.execPath,
-    args: ["-e", "process.stdout.write(JSON.stringify({type:'text',part:{text:'ok'}})+'\\n')"],
+    args: ["-e", "process.stdout.write(JSON.stringify({type:'text',part:{text:'ok'}})+'\\n'); process.stderr.write('diagnostic')"],
     cwd: process.cwd(), timeoutMs: 5000,
+    onOutput: (event) => { updates.push(event); },
   });
   assert.equal(result.events[0]?.type, "text");
+  assert.ok(updates.some((item) => item.channel === "stdout" && typeof item.data === "object"));
+  assert.ok(updates.some((item) => item.channel === "stderr" && item.data === "diagnostic"));
+});
+
+test("JSONL CLI işlemi canlı olaydan iptal edilir; uzun süreç durdurulur", async () => {
+  const abort = new AbortController();
+  let outputs = 0;
+  const start = Date.now();
+  await assert.rejects(runJsonlProcess({
+    executable: process.execPath,
+    args: ["-e", "process.stdout.write(JSON.stringify({type:'progress'})+'\\n'); setInterval(() => {}, 1000)"],
+    cwd: process.cwd(), signal: abort.signal, timeoutMs: 5000,
+    onOutput: (event) => {
+      outputs++;
+      if (event.channel === "stdout") abort.abort();
+    },
+  }), /iptal edildi/);
+  assert.equal(outputs, 1);
+  assert.ok(Date.now() - start < 4500);
 });

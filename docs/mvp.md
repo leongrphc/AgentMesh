@@ -23,7 +23,8 @@
 - [x] Dry-run ve açık `--execute` kapısıyla çalışan komut satırı girişi.
 - [x] SHA-256 diff incelemesi, kullanıcı digest onayı ve ayrı entegrasyon worktree'sine merge.
 - [x] Onaylanan kodun bağımlı görevlerde görünmesi; değişen diff ve merge çakışmalarının reddi.
-- [ ] Canlı stream/iptal, CLI izin talepleri ve log arayüzü.
+- [x] CLI stdout/stderr olaylarını canlı abonelere aktarma; `AbortSignal` / `Ctrl+C` iptali ve kalıcı `cancelled` durumu.
+- [ ] CLI izin talepleri için etkileşimli onay köprüsü, kalıcı filtrelenmiş log arayüzü.
 - [ ] Codex/OpenCode canlı model oturumlarının uçtan uca sınanması.
 - [ ] Ajan bağlantı durumunu/eksik kimlik doğrulamayı gösterme; gerçek ajanın yazma izinleri.
 - [x] İki sahte CLI ajanının ayrı worktree'lerde paralel çalışması ve değişiklik raporu.
@@ -60,4 +61,4 @@ Bir kullanıcı Windows'ta depoyu seçer. `Codex-manager`, `OpenCode-frontend` v
 
 ## İlk gerçek geliştirme kartı
 
-**Sıradaki kart `CORE-003`: Canlı olay akışı ve iptal.** CLI stdout/stderr olaylarını orkestratöre aktar, çalışan ajanın iptal edilmesini sağla ve izin taleplerini kullanıcıya gösterecek sözleşmeyi ekle. Entegrasyon dalının ana dala alınması ayrıca kullanıcı kararına bağlı kalır.
+**Sıradaki kart `CORE-004`: İzin talepleri ve desktop shell.** CLI'deki etkileşimli izin taleplerini kullanıcıya taşımak için güvenli onay köprüsü ve IPC sözleşmesi hazırla; kalıcı loglarda gizli bilgi filtrelemesi uygula. Entegrasyon dalının ana dala alınması ayrıca kullanıcı kararına bağlı kalır.

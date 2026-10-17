@@ -26,6 +26,8 @@ export class OpenCodeCliAdapter implements AgentAdapter {
     const { events } = await (this.options.runner ?? runJsonlProcess)({
       executable: this.options.executable ?? defaultOpenCodeCommand(),
       args, cwd: input.workspaceRoot,
+      signal: input.signal,
+      onOutput: input.onOutput,
     });
     return parseAgentEvents(events);
   }

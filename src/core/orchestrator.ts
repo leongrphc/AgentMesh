@@ -2,11 +2,13 @@ import { randomUUID } from "node:crypto";
 import type {
   AgentAdapter,
   AgentMessage,
+  AgentOutput,
   AgentResult,
   AgentTask,
   DomainEvent,
   Fact,
   Project,
+  StoredEvent,
   TaskRecord,
 } from "./contracts.js";
 import type { EventStore } from "./journal.js";
@@ -19,12 +21,19 @@ export interface ProjectSnapshot {
   messages: AgentMessage[];
 }
 
+/** Live notifications are ephemeral; domain events are additionally kept in the journal. */
+export type OrchestratorNotice =
+  | { kind: "event"; event: StoredEvent }
+  | { kind: "output"; projectId: string; taskId: string; output: AgentOutput };
+
 export class Orchestrator {
   private readonly projects = new Map<string, Project>();
   private readonly tasks = new Map<string, TaskRecord>();
   private readonly facts = new Map<string, Map<string, Fact>>();
   private readonly messages: AgentMessage[] = [];
   private readonly adapters = new Map<string, AgentAdapter>();
+  private readonly controllers = new Map<string, AbortController>();
+  private readonly subscribers = new Set<(notice: OrchestratorNotice) => void>();
 
   constructor(private readonly journal: EventStore, private readonly worktrees?: WorktreeManager) {
     for (const event of journal.all()) this.apply(event.payload);
@@ -39,6 +48,33 @@ export class Orchestrator {
   registerAgent(adapter: AgentAdapter): void {
     if (this.adapters.has(adapter.id)) throw new Error(`Ajan zaten kayıtlı: ${adapter.id}`);
     this.adapters.set(adapter.id, adapter);
+  }
+
+  subscribe(listener: (notice: OrchestratorNotice) => void): () => void {
+    this.subscribers.add(listener);
+    return () => { this.subscribers.delete(listener); };
+  }
+
+  private notify(notice: OrchestratorNotice): void {
+    for (const listener of this.subscribers) {
+      try { listener(notice); } catch { /* Observer errors must not modify task state. */ }
+    }
+  }
+
+  /** Cancels queued work immediately and signals any active adapter to stop. */
+  cancelTask(taskId: string): void {
+    const task = this.requireTask(taskId);
+    if (task.status !== "pending" && task.status !== "running") {
+      throw new Error(`Görev iptal edilemez: ${task.status}`);
+    }
+    this.emit({ type: "task.cancelled", projectId: task.projectId, taskId });
+    this.controllers.get(taskId)?.abort();
+  }
+
+  cancelRunning(projectId: string): void {
+    for (const task of this.tasks.values()) {
+      if (task.projectId === projectId && task.status === "running") this.cancelTask(task.id);
+    }
   }
 
   createProject(project: Project): void {
@@ -78,7 +114,7 @@ export class Orchestrator {
 
   retryTask(taskId: string): void {
     const task = this.requireTask(taskId);
-    if (!["failed", "blocked", "needs_review"].includes(task.status)) {
+    if (!["failed", "blocked", "needs_review", "cancelled"].includes(task.status)) {
       throw new Error(`Görev tekrar çalıştırılamaz: ${task.status}`);
     }
     this.emit({ type: "task.retried", projectId: task.projectId, taskId });
@@ -100,31 +136,46 @@ export class Orchestrator {
     return commit;
   }
 
-  async run(projectId: string, maxParallel = 2): Promise<ProjectSnapshot> {
+  async run(projectId: string, maxParallel = 2, signal?: AbortSignal): Promise<ProjectSnapshot> {
     if (!Number.isInteger(maxParallel) || maxParallel < 1) throw new Error("maxParallel >= 1 olmalı");
     if (!this.projects.has(projectId)) throw new Error(`Proje bulunamadı: ${projectId}`);
-
-    while (true) {
-      const tasks = this.snapshot(projectId).tasks;
-      for (const task of tasks.filter((item) => item.status === "pending")) {
-        if (task.dependsOn.some((id) => {
-          const status = this.requireTask(id).status;
-          return status === "failed" || status === "blocked" || status === "needs_review";
-        })) this.emit({ type: "task.blocked", projectId, taskId: task.id });
+    const cancelRemaining = () => {
+      for (const task of this.tasks.values()) {
+        if (task.projectId === projectId && (task.status === "pending" || task.status === "running")) {
+          this.cancelTask(task.id);
+        }
       }
-      const available = this.snapshot(projectId).tasks.filter((task) =>
-        task.status === "pending" && task.dependsOn.every((id) => this.requireTask(id).status === "completed"),
-      );
-      if (available.length === 0) break;
-      await Promise.all(available.slice(0, maxParallel).map((task) => this.runTask(task)));
+    };
+    signal?.addEventListener("abort", cancelRemaining, { once: true });
+    if (signal?.aborted) cancelRemaining();
+    try {
+      while (true) {
+        if (signal?.aborted) break;
+        const tasks = this.snapshot(projectId).tasks;
+        for (const task of tasks.filter((item) => item.status === "pending")) {
+          if (task.dependsOn.some((id) => {
+            const status = this.requireTask(id).status;
+            return status === "failed" || status === "blocked" || status === "needs_review" || status === "cancelled";
+          })) this.emit({ type: "task.blocked", projectId, taskId: task.id });
+        }
+        const available = this.snapshot(projectId).tasks.filter((task) =>
+          task.status === "pending" && task.dependsOn.every((id) => this.requireTask(id).status === "completed"),
+        );
+        if (available.length === 0) break;
+        await Promise.all(available.slice(0, maxParallel).map((task) => this.runTask(task)));
+      }
+      return this.snapshot(projectId);
+    } finally {
+      signal?.removeEventListener("abort", cancelRemaining);
     }
-    return this.snapshot(projectId);
   }
 
   private async runTask(task: TaskRecord): Promise<void> {
+    if (this.requireTask(task.id).status !== "pending") return;
     const adapter = this.adapters.get(task.agentId);
     if (!adapter) throw new Error(`Ajan kayıtlı değil: ${task.agentId}`);
     const snapshot = this.snapshot(task.projectId);
+    let controller: AbortController | undefined;
     try {
       let workspaceRoot = snapshot.project.workspaceRoot;
       if (adapter.connection !== "mock") {
@@ -139,14 +190,20 @@ export class Orchestrator {
           taskId: task.id, path: lease.path, branch: lease.branch,
         });
       }
+      controller = new AbortController();
+      this.controllers.set(task.id, controller);
       this.emit({ type: "task.started", projectId: task.projectId, taskId: task.id });
+      if (controller.signal.aborted) return;
       const output = await adapter.execute({
         task,
         workspaceRoot,
         context: snapshot.context,
         inbox: snapshot.messages.filter((message) => message.to === task.agentId || message.to === "*"),
         sessionId: task.sessionId,
+        signal: controller.signal,
+        onOutput: (event) => this.notify({ kind: "output", projectId: task.projectId, taskId: task.id, output: event }),
       });
+      if (controller.signal.aborted || this.requireTask(task.id).status === "cancelled") return;
       if (output.sessionId) this.emit({
         type: "task.session.saved", projectId: task.projectId, taskId: task.id, sessionId: output.sessionId,
       });
@@ -165,12 +222,15 @@ export class Orchestrator {
       }
       this.emitBatch(this.resultEvents(task, output));
     } catch (error) {
+      if (this.requireTask(task.id).status === "cancelled") return;
       this.emit({
         type: "task.failed",
         projectId: task.projectId,
         taskId: task.id,
         error: error instanceof Error ? error.message : String(error),
       });
+    } finally {
+      this.controllers.delete(task.id);
     }
   }
 
@@ -226,8 +286,9 @@ export class Orchestrator {
   }
 
   private emitBatch(payloads: readonly DomainEvent[]): void {
-    this.journal.appendBatch(payloads);
+    const entries = this.journal.appendBatch(payloads);
     for (const event of payloads) this.apply(event);
+    for (const event of entries) this.notify({ kind: "event", event });
   }
 
   private apply(event: DomainEvent): void {
@@ -265,6 +326,9 @@ export class Orchestrator {
         break;
       case "task.interrupted":
         this.requireTask(event.taskId).status = "needs_review";
+        break;
+      case "task.cancelled":
+        this.requireTask(event.taskId).status = "cancelled";
         break;
       case "task.retried": {
         const task = this.requireTask(event.taskId);

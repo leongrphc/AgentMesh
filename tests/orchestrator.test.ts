@@ -105,3 +105,56 @@ test("çapraz proje bağımlılığı kabul edilmez", () => {
     assert.throws(() => f.engine.addTask({ ...f.makeTask("other", "worker", ["first"]), projectId: "q" }), /Geçersiz bağımlılık/);
   } finally { f.cleanup(); }
 });
+
+test("canlı olaylar iletilir; iptal edilen iş geç sonuç yayınlamaz ve bekleyen işler durur", async () => {
+  const f = fixture();
+  try {
+    const abort = new AbortController();
+    const notices: string[] = [];
+    f.engine.registerAgent(new MockAgent("worker", async ({ onOutput }) => {
+      onOutput?.({ channel: "stdout", data: { type: "agent.progress", message: "processing" } });
+      await new Promise((resolve) => setTimeout(resolve, 25));
+      return { summary: "geç tamamlandı", facts: [{ key: "unexpected", value: "yes" }] };
+    }));
+    const unsubscribe = f.engine.subscribe((notice) => {
+      if (notice.kind === "output") {
+        notices.push(`${notice.taskId}:${notice.output.channel}`);
+        abort.abort();
+      }
+      if (notice.kind === "event") notices.push(notice.event.payload.type);
+    });
+    f.engine.addTask(f.makeTask("active", "worker"));
+    f.engine.addTask(f.makeTask("waiting", "worker", ["active"]));
+    const result = await f.engine.run("p", 1, abort.signal);
+    unsubscribe();
+    assert.deepEqual(result.tasks.map((task) => task.status), ["cancelled", "cancelled"]);
+    assert.equal(result.context.unexpected, undefined);
+    assert.ok(notices.includes("active:stdout"));
+    assert.equal(notices.filter((note) => note === "task.cancelled").length, 2);
+    assert.equal(notices.includes("task.completed"), false);
+    const restored = new Orchestrator(new Journal(f.path));
+    assert.deepEqual(restored.snapshot("p").tasks.map((task) => task.status), ["cancelled", "cancelled"]);
+    assert.throws(() => f.engine.cancelTask("active"), /iptal edilemez/);
+  } finally { f.cleanup(); }
+});
+
+test("tek görevin manuel iptali bağımlısını bloklar ve ajanı başlatmaz", async () => {
+  const f = fixture();
+  try {
+    let invoked = 0;
+    f.engine.registerAgent(new MockAgent("worker", async () => {
+      invoked++;
+      return { summary: "çalıştı" };
+    }));
+    f.engine.addTask(f.makeTask("stop", "worker"));
+    f.engine.addTask(f.makeTask("later", "worker", ["stop"]));
+    f.engine.subscribe((notice) => {
+      if (notice.kind === "event" && notice.event.payload.type === "task.started") {
+        f.engine.cancelTask("stop");
+      }
+    });
+    const result = await f.engine.run("p");
+    assert.equal(invoked, 0);
+    assert.deepEqual(result.tasks.map((task) => task.status), ["cancelled", "blocked"]);
+  } finally { f.cleanup(); }
+});

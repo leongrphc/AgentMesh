@@ -6,6 +6,7 @@ export type TaskStatus =
   | "failed"
   | "blocked"
   | "pending_review"
+  | "cancelled"
   | "needs_review";
 
 export interface AgentTask {
@@ -43,7 +44,14 @@ export interface AgentExecution {
   context: Readonly<Record<string, Fact>>;
   inbox: ReadonlyArray<AgentMessage>;
   sessionId?: string;
+  signal?: AbortSignal;
+  onOutput?: (output: AgentOutput) => void;
 }
+
+/** Transient CLI output; consumers must redact secrets before exporting logs. */
+export type AgentOutput =
+  | { channel: "stdout"; data: Record<string, unknown> }
+  | { channel: "stderr"; data: string };
 
 export interface AgentResult {
   summary: string;
@@ -82,6 +90,7 @@ export type DomainEvent =
   | { type: "task.failed"; projectId: string; taskId: string; error: string }
   | { type: "task.blocked"; projectId: string; taskId: string }
   | { type: "task.interrupted"; projectId: string; taskId: string }
+  | { type: "task.cancelled"; projectId: string; taskId: string }
   | { type: "task.retried"; projectId: string; taskId: string }
   | { type: "task.session.saved"; projectId: string; taskId: string; sessionId: string }
   | { type: "task.worktree.prepared"; projectId: string; taskId: string; path: string; branch: string }

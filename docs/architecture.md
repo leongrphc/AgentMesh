@@ -27,7 +27,7 @@ Electron Desktop (React + Monaco + xterm.js)
        Direct model API provider'ları da ayrı adapter olabilir.
 ```
 
-**MVP uygulama sırası:** çekirdek, SQLite, worktree, Codex/OpenCode CLI adaptörleri ve insan onaylı entegrasyon dalı eklendi. Sırada canlı kontrol ve desktop shell, daha sonra Claude / Antigravity ile doğrudan API sağlayıcıları var. Adaptör sınırları sağlayıcı sürümlerinden bağımsız tutulur.
+**MVP uygulama sırası:** çekirdek, SQLite, worktree, Codex/OpenCode CLI adaptörleri, insan onaylı entegrasyon dalı, canlı CLI olay aboneliği ve iptal eklendi. Sırada etkileşimli izin köprüsü ve desktop shell, daha sonra Claude / Antigravity ile doğrudan API sağlayıcıları var. Adaptör sınırları sağlayıcı sürümlerinden bağımsız tutulur.
 
 ## Neden Electron?
 
