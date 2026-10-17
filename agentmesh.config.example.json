@@ -1,0 +1,29 @@
+{
+  "projectId": "shop-mvp",
+  "repoPath": ".",
+  "maxParallel": 2,
+  "agents": [
+    { "id": "codex-backend", "provider": "codex" },
+    { "id": "opencode-frontend", "provider": "opencode" }
+  ],
+  "tasks": [
+    {
+      "id": "backend-auth",
+      "projectId": "shop-mvp",
+      "title": "Backend authentication",
+      "instruction": "src/server/ altında temel authentication endpoint'lerini geliştir ve test et.",
+      "agentId": "codex-backend",
+      "dependsOn": [],
+      "allowedPaths": ["src/server/**", "tests/server/**"]
+    },
+    {
+      "id": "frontend-login",
+      "projectId": "shop-mvp",
+      "title": "Login frontend",
+      "instruction": "src/ui/ altında login ekranı geliştir ve test et.",
+      "agentId": "opencode-frontend",
+      "dependsOn": [],
+      "allowedPaths": ["src/ui/**", "tests/ui/**"]
+    }
+  ]
+}

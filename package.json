@@ -1,0 +1,21 @@
+{
+  "name": "agentmesh-ide",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Hibrit çoklu ajan IDE'si için ilk orkestrasyon çekirdeği",
+  "scripts": {
+    "demo": "tsx src/demo.ts",
+    "live": "tsx src/cli.ts",
+    "test": "tsx --test tests/*.test.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "tsx": "^4.20.0",
+    "typescript": "^5.9.0"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}
