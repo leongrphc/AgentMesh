@@ -61,7 +61,7 @@ test("SQLite eski JSONL geçmişini taşır; proje/mesaj/context ve tek-yazar ki
   } finally { f.cleanup(); }
 });
 
-test("iki ajan ayrı Git worktree'de paralel dosya üretir, ana branch temiz kalır", async () => {
+test("iki ajan ayrı worktree'de paralel çalışır; onaylı sonuçlar integration'a girer", async () => {
   const f = repoFixture();
   const journal = new SqliteJournal(join(f.root, "agents.sqlite"));
   try {
@@ -86,12 +86,19 @@ test("iki ajan ayrı Git worktree'de paralel dosya üretir, ana branch temiz kal
     }
     engine.registerAgent(adapter("a"));
     engine.registerAgent(adapter("b"));
+    engine.registerAgent({ id: "c", provider: "test", connection: "cli", async execute({ workspaceRoot, context }) {
+      assert.equal(readFileSync(join(workspaceRoot, "src", "alpha.txt"), "utf8").replace(/\r\n/g, "\n"), "alpha\n");
+      assert.equal(readFileSync(join(workspaceRoot, "src", "beta.txt"), "utf8").replace(/\r\n/g, "\n"), "beta\n");
+      assert.equal(context["task.alpha.summary"]?.value, "alpha hazır");
+      return { summary: "bağımlı görev onaylı kodu gördü" };
+    } });
     engine.addTask(task("alpha", "a", ["src/alpha.txt"]));
     engine.addTask(task("beta", "b", ["src/beta.txt"]));
-    const result = await engine.run("p", 2);
+    engine.addTask({ ...task("followup", "c", ["src/followup.txt"]), dependsOn: ["alpha", "beta"] });
+    let result = await engine.run("p", 2);
     assert.equal(maxActive, 2);
     assert.notEqual(roots[0], roots[1]);
-    assert.ok(result.tasks.every((item) => item.status === "completed"));
+    assert.deepEqual(result.tasks.map((item) => item.status), ["pending_review", "pending_review", "pending"]);
     assert.equal(git(f.repo, "status", "--porcelain"), "");
     assert.equal(result.tasks[0]?.sessionId, "session-alpha");
     const lease = result.tasks[0]?.worktree;
@@ -101,8 +108,70 @@ test("iki ajan ayrı Git worktree'de paralel dosya üretir, ana branch temiz kal
     assert.deepEqual(inspection.violations, []);
     assert.equal(inspection.untrackedPreviews[0]?.preview, "alpha\n");
     assert.equal(manager.reopen(f.repo, lease).branch, lease.branch);
+    assert.throws(() => engine.approveTask("alpha", "incorrect-digest"), /digest/);
+    const firstDigest = result.tasks[0]?.review?.digest;
+    const secondDigest = result.tasks[1]?.review?.digest;
+    assert.ok(firstDigest && secondDigest);
+    engine.approveTask("alpha", firstDigest);
+    engine.approveTask("beta", secondDigest);
+    result = await engine.run("p", 2);
+    assert.ok(result.tasks.every((item) => item.status === "completed"), JSON.stringify(result.tasks.map(({ id, status, error }) => ({ id, status, error }))));
+    assert.equal(git(f.repo, "status", "--porcelain"), "");
+    const integration = manager.integration(f.repo);
+    assert.equal(readFileSync(join(integration.path, "src", "alpha.txt"), "utf8").replace(/\r\n/g, "\n"), "alpha\n");
+    assert.equal(readFileSync(join(integration.path, "src", "beta.txt"), "utf8").replace(/\r\n/g, "\n"), "beta\n");
     const reloaded = new Orchestrator(journal);
     assert.equal(reloaded.snapshot("p").tasks[0]?.worktree?.path, lease.path);
+  } finally { journal.close(); f.cleanup(); }
+});
+
+test("onaylanan diff değiştirilirse merge reddedilir ve inceleme açık kalır", async () => {
+  const f = repoFixture();
+  const journal = new SqliteJournal(join(f.root, "agents.sqlite"));
+  try {
+    const manager = new WorktreeManager();
+    const engine = new Orchestrator(journal, manager);
+    engine.createProject({ id: "p", workspaceRoot: f.repo });
+    engine.registerAgent({ id: "a", provider: "test", connection: "cli", async execute({ workspaceRoot }) {
+      writeFileSync(join(workspaceRoot, "src", "feature.txt"), "ilk sürüm\n");
+      return { summary: "hazır" };
+    } });
+    engine.addTask(task("feature", "a", ["src/feature.txt"]));
+    const result = (await engine.run("p")).tasks[0];
+    assert.equal(result?.status, "pending_review");
+    assert.ok(result?.worktree && result.review);
+    writeFileSync(join(result.worktree.path, "src", "feature.txt"), "değiştirilmiş\n");
+    assert.throws(() => engine.approveTask("feature", result.review!.digest), /Diff onaydan sonra değişmiş/);
+    assert.equal(engine.snapshot("p").tasks[0]?.status, "pending_review");
+    assert.equal(git(f.repo, "status", "--porcelain"), "");
+  } finally { journal.close(); f.cleanup(); }
+});
+
+test("aynı satırı değiştiren görev merge conflict üretir; integration ve main korunur", async () => {
+  const f = repoFixture();
+  const journal = new SqliteJournal(join(f.root, "agents.sqlite"));
+  try {
+    const manager = new WorktreeManager();
+    const engine = new Orchestrator(journal, manager);
+    engine.createProject({ id: "p", workspaceRoot: f.repo });
+    for (const agentId of ["first", "second"]) {
+      engine.registerAgent({ id: agentId, provider: "test", connection: "cli", async execute({ workspaceRoot }) {
+        writeFileSync(join(workspaceRoot, "src", "initial.txt"), `${agentId}\n`);
+        return { summary: `${agentId} hazır` };
+      } });
+      engine.addTask(task(agentId, agentId, ["src/initial.txt"]));
+    }
+    const pending = await engine.run("p", 2);
+    const [first, second] = pending.tasks;
+    assert.ok(first?.review && second?.review);
+    engine.approveTask(first.id, first.review.digest);
+    assert.throws(() => engine.approveTask(second.id, second.review!.digest), /conflict/);
+    // The conflict is retryable and cannot complete without an explicit resolution.
+    assert.throws(() => engine.approveTask(second.id, second.review!.digest), /conflict/);
+    assert.equal(engine.snapshot("p").tasks[1]?.status, "pending_review");
+    assert.equal(git(manager.integration(f.repo).path, "status", "--porcelain"), "");
+    assert.equal(readFileSync(join(manager.integration(f.repo).path, "src", "initial.txt"), "utf8").trim(), "first");
+    assert.equal(readFileSync(join(f.repo, "src", "initial.txt"), "utf8").trim(), "initial");
   } finally { journal.close(); f.cleanup(); }
 });
 

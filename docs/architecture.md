@@ -27,7 +27,7 @@ Electron Desktop (React + Monaco + xterm.js)
        Direct model API provider'ları da ayrı adapter olabilir.
 ```
 
-**MVP uygulama sırası:** çekirdek, SQLite, worktree ve Codex/OpenCode CLI adaptörleri eklendi. Sırada review/merge, canlı kontrol ve desktop shell, daha sonra Claude / Antigravity ile doğrudan API sağlayıcıları var. Adaptör sınırları sağlayıcı sürümlerinden bağımsız tutulur.
+**MVP uygulama sırası:** çekirdek, SQLite, worktree, Codex/OpenCode CLI adaptörleri ve insan onaylı entegrasyon dalı eklendi. Sırada canlı kontrol ve desktop shell, daha sonra Claude / Antigravity ile doğrudan API sağlayıcıları var. Adaptör sınırları sağlayıcı sürümlerinden bağımsız tutulur.
 
 ## Neden Electron?
 
@@ -47,6 +47,7 @@ Her ajan çağrısından önce Orchestrator bir **context paketi** oluşturur: p
 
 - Her görev bir proje ve belirli bir ajanla ilişkilidir; `dependsOn` başka görevlerin bitmesini şart koşar.
 - Bağımsız görevler aynı anda çalışır. Aynı dosyalara yazacak görevler **ayrı Git worktree** içinde tutulur; paralellik sadece izin verilen dosya/branch sınırları içinde açılır.
+- Dosya değiştiren görevler `pending_review` olur. SHA-256 digest ile onaylanan değişiklik görev branch'inde commit edilir ve **AgentMesh entegrasyon worktree'sine** merge edilir. Bağımlı görevler yeni kodu buradan alır. Ana dal değiştirilmez; çakışma otomatik çözülmez.
 - Değişiklikler özet, diff, test ve review aşamasından geçmeden ana dalda birleştirilmez.
 - Ajanın komut çalıştırma / ağ / dosya erişim izinleri adapter kapasitelerine göre tanımlanır. Riskli dış etkiler için kullanıcı onayı gerekir.
 - Çöken veya kesilen görev doğrudan tekrar yürütülmez. `needs_review` durumuna alınır; kullanıcı veya yönetici ajan çalışma ağacını inceleyip yeniden dener.

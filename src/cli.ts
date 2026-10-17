@@ -70,21 +70,27 @@ function orderTasks(tasks: AgentTask[]): AgentTask[] {
 
 async function main(): Promise<void> {
   const args = process.argv.slice(2);
+  const reviewing = args.includes("--review");
+  const approving = args.includes("--approve");
+  const executing = args.includes("--execute");
+  if (Number(reviewing) + Number(approving) + Number(executing) > 1) {
+    throw new Error("--review, --approve ve --execute birlikte kullanılamaz");
+  }
   const configIndex = args.indexOf("--config");
   const configArg = args[configIndex + 1];
   if (configIndex < 0 || !configArg) {
-    throw new Error("Kullanım: npm run live -- --config .\\agentmesh.config.json [--execute]");
+    throw new Error("Kullanım: npm run live -- --config .\\agentmesh.config.json [--execute | --review | --approve TASK --digest SHA256]");
   }
   const configFile = resolve(configArg);
   const config = JSON.parse(readFileSync(configFile, "utf8")) as Config;
   validate(config);
   const repoPath = isAbsolute(config.repoPath)
     ? realpathSync(config.repoPath) : realpathSync(resolve(dirname(configFile), config.repoPath));
-  if (!args.includes("--execute")) {
+  if (!executing && !reviewing && !approving) {
     console.log(JSON.stringify({
       dryRun: true, repoPath, projectId: config.projectId,
       agents: config.agents, tasks: config.tasks.map(({ id, agentId, dependsOn, allowedPaths }) => ({ id, agentId, dependsOn, allowedPaths })),
-      instruction: "Gerçek model çağrısı ve worktree açmak için --execute verin.",
+      instruction: "--execute: ajanları çalıştır, --review: diff görüntüle, --approve TASK --digest SHA256: onayla.",
     }, null, 2));
     return;
   }
@@ -104,17 +110,32 @@ async function main(): Promise<void> {
     }
     let existing;
     try { existing = engine.snapshot(config.projectId); }
-    catch { engine.createProject({ id: config.projectId, workspaceRoot: repoPath }); }
+    catch {
+      if (!executing) throw new Error("Önce --execute ile projeyi oluşturmalısınız");
+      engine.createProject({ id: config.projectId, workspaceRoot: repoPath });
+    }
     existing = engine.snapshot(config.projectId);
     if (realpathSync(existing.project.workspaceRoot).toLowerCase() !== repoPath.toLowerCase()) {
       throw new Error("Proje kimliği başka depo ile eşleşiyor");
     }
-    for (const task of orderTasks(config.tasks)) {
-      const old = existing.tasks.find((item) => item.id === task.id);
-      if (old) continue;
-      engine.addTask(task);
+    if (executing) {
+      for (const task of orderTasks(config.tasks)) {
+        const old = existing.tasks.find((item) => item.id === task.id);
+        if (old) continue;
+        engine.addTask(task);
+      }
     }
-    const snapshot = await engine.run(config.projectId, config.maxParallel ?? 2);
+    if (approving) {
+      const taskId = args[args.indexOf("--approve") + 1];
+      const digest = args[args.indexOf("--digest") + 1];
+      if (!taskId || !digest || !/^[a-f0-9]{64}$/.test(digest)) {
+        throw new Error("Onay için --approve TASK_ID --digest SHA256 gereklidir");
+      }
+      const commit = engine.approveTask(taskId, digest);
+      console.log(JSON.stringify({ approved: taskId, taskCommit: commit, instruction: "Bağımlı görevleri çalıştırmak için ayrıca --execute kullanın." }, null, 2));
+      return;
+    }
+    const snapshot = executing ? await engine.run(config.projectId, config.maxParallel ?? 2) : engine.snapshot(config.projectId);
     const reports = snapshot.tasks.map((task) => {
       const changes = task.worktree && existsSync(task.worktree.path)
         ? manager.inspect(task.worktree.path, task.allowedPaths)
@@ -123,12 +144,14 @@ async function main(): Promise<void> {
         id: task.id, agentId: task.agentId, status: task.status,
         summary: task.summary, error: task.error, sessionId: task.sessionId,
         worktree: task.worktree,
+        reviewDigest: task.review?.digest,
         changedPaths: changes?.changedPaths,
         violations: changes?.violations,
+        ...(reviewing ? { trackedDiff: changes?.trackedDiff, untrackedPreviews: changes?.untrackedPreviews } : {}),
       };
     });
-    console.log(JSON.stringify({ dbPath, reports }, null, 2));
-    if (reports.some((task) => task.status !== "completed")) process.exitCode = 1;
+    console.log(JSON.stringify({ dbPath, mode: reviewing ? "review" : "execute", reports }, null, 2));
+    if (reports.some((task) => task.status === "failed" || task.status === "blocked" || task.status === "needs_review")) process.exitCode = 1;
   } finally { journal.close(); }
 }
 

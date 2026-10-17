@@ -5,6 +5,7 @@ export type TaskStatus =
   | "completed"
   | "failed"
   | "blocked"
+  | "pending_review"
   | "needs_review";
 
 export interface AgentTask {
@@ -69,6 +70,8 @@ export interface TaskRecord extends AgentTask {
   error?: string;
   sessionId?: string;
   worktree?: { path: string; branch: string };
+  review?: { digest: string; result: AgentResult };
+  integratedCommit?: string;
 }
 
 export type DomainEvent =
@@ -82,6 +85,8 @@ export type DomainEvent =
   | { type: "task.retried"; projectId: string; taskId: string }
   | { type: "task.session.saved"; projectId: string; taskId: string; sessionId: string }
   | { type: "task.worktree.prepared"; projectId: string; taskId: string; path: string; branch: string }
+  | { type: "task.review.requested"; projectId: string; taskId: string; digest: string; result: AgentResult }
+  | { type: "task.review.approved"; projectId: string; taskId: string; digest: string; commit: string }
   | { type: "context.updated"; projectId: string; fact: Fact }
   | { type: "message.sent"; projectId: string; message: AgentMessage };
 

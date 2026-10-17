@@ -21,7 +21,8 @@
 - [x] Codex CLI JSONL adaptörü (thread başlatma, ID saklama, resume komutu).
 - [x] OpenCode CLI JSONL adaptörü (session başlatma, ID saklama, resume komutu).
 - [x] Dry-run ve açık `--execute` kapısıyla çalışan komut satırı girişi.
-- [ ] Merge/onay kuyruğu; worktree'deki değişiklikleri bağımlı görevlerin görebilmesi.
+- [x] SHA-256 diff incelemesi, kullanıcı digest onayı ve ayrı entegrasyon worktree'sine merge.
+- [x] Onaylanan kodun bağımlı görevlerde görünmesi; değişen diff ve merge çakışmalarının reddi.
 - [ ] Canlı stream/iptal, CLI izin talepleri ve log arayüzü.
 - [ ] Codex/OpenCode canlı model oturumlarının uçtan uca sınanması.
 - [ ] Ajan bağlantı durumunu/eksik kimlik doğrulamayı gösterme; gerçek ajanın yazma izinleri.
@@ -53,10 +54,10 @@ Bir kullanıcı Windows'ta depoyu seçer. `Codex-manager`, `OpenCode-frontend` v
 
 - Her sağlayıcının oturum ve abonelik sınırları farklı. Bir CLI'nin kurulu olması o sağlayıcının üçüncü taraf OAuth/login kullanımını otomatik izinli kılmaz.
 - Claude Agent SDK belgelerinde üçüncü tarafların önceden onay olmadan `claude.ai` giriş/rate limitlerini sunamayacağı belirtiliyor. İlk uyumlu yol API anahtarıdır.
-- `allowedPaths` sözleşmesini OS seviyesinde uygulama ve merge/rollback olmadan gerçek yazan ajanları otomatik açmak doğru değil.
+- `allowedPaths` işlem sonunda doğrulanıyor; OS seviyesinde dosya erişimi sınırı henüz yok. Merge çakışmalarında otomatik çözüm/rollback arayüzü de henüz yok.
 - API ajanı için güvenli tool loop gerekir; yalın metin tam IDE ajanı anlamına gelmez.
 - Model çıktıları ve 'görev tamamlandı' ifadeleri, test ve diff denetimini ikame etmez.
 
 ## İlk gerçek geliştirme kartı
 
-**Sıradaki kart `CORE-002`: Review/Merge + canlı stream.** Worktree değişikliklerini dosya bazında göster, kullanıcı onayını kaydet, merge çakışmalarını ele al ve bağımlı görevlerin onaylanan kodu görebileceği bir entegrasyon dalı oluştur. CLI olaylarını arayüze aktar ve iptali destekle. Varsayılan otomatik merge/push yapma.
+**Sıradaki kart `CORE-003`: Canlı olay akışı ve iptal.** CLI stdout/stderr olaylarını orkestratöre aktar, çalışan ajanın iptal edilmesini sağla ve izin taleplerini kullanıcıya gösterecek sözleşmeyi ekle. Entegrasyon dalının ana dala alınması ayrıca kullanıcı kararına bağlı kalır.

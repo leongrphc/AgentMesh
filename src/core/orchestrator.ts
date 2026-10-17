@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import type {
   AgentAdapter,
   AgentMessage,
+  AgentResult,
   AgentTask,
   DomainEvent,
   Fact,
@@ -83,6 +84,22 @@ export class Orchestrator {
     this.emit({ type: "task.retried", projectId: task.projectId, taskId });
   }
 
+  /** A human approval must supply the exact digest from a review preview. */
+  approveTask(taskId: string, approvedDigest: string): string {
+    const task = this.requireTask(taskId);
+    const project = this.projects.get(task.projectId);
+    if (task.status !== "pending_review" || !task.review || !task.worktree || !project || !this.worktrees) {
+      throw new Error(`Görev inceleme beklemiyor: ${taskId}`);
+    }
+    if (task.review.digest !== approvedDigest) throw new Error("Onay digest'i bekleyen inceleme ile eşleşmiyor");
+    const commit = this.worktrees.integrate(project.workspaceRoot, task.worktree, task.allowedPaths, approvedDigest, task.id);
+    this.emitBatch([
+      { type: "task.review.approved", projectId: task.projectId, taskId, digest: approvedDigest, commit },
+      ...this.resultEvents(task, task.review.result),
+    ]);
+    return commit;
+  }
+
   async run(projectId: string, maxParallel = 2): Promise<ProjectSnapshot> {
     if (!Number.isInteger(maxParallel) || maxParallel < 1) throw new Error("maxParallel >= 1 olmalı");
     if (!this.projects.has(projectId)) throw new Error(`Proje bulunamadı: ${projectId}`);
@@ -138,8 +155,26 @@ export class Orchestrator {
         if (inspection.violations.length > 0) {
           throw new Error(`İzin verilmeyen dosya değişikliği: ${inspection.violations.join(", ")}`);
         }
+        if (inspection.changedPaths.length > 0) {
+          this.emit({
+            type: "task.review.requested", projectId: task.projectId, taskId: task.id,
+            digest: inspection.digest, result: output,
+          });
+          return;
+        }
       }
-      // Task çıktıları SQLite üzerinde tek transaction olarak yayınlanır.
+      this.emitBatch(this.resultEvents(task, output));
+    } catch (error) {
+      this.emit({
+        type: "task.failed",
+        projectId: task.projectId,
+        taskId: task.id,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
+  private resultEvents(task: TaskRecord, output: AgentResult): DomainEvent[] {
       const events: DomainEvent[] = [];
       for (const fact of output.facts ?? []) {
         events.push({
@@ -177,15 +212,7 @@ export class Orchestrator {
         },
       });
       events.push({ type: "task.completed", projectId: task.projectId, taskId: task.id, summary: output.summary });
-      this.emitBatch(events);
-    } catch (error) {
-      this.emit({
-        type: "task.failed",
-        projectId: task.projectId,
-        taskId: task.id,
-        error: error instanceof Error ? error.message : String(error),
-      });
-    }
+      return events;
   }
 
   private requireTask(taskId: string): TaskRecord {
@@ -224,6 +251,7 @@ export class Orchestrator {
         task.status = "completed";
         task.summary = event.summary;
         task.error = undefined;
+        task.review = undefined;
         break;
       }
       case "task.failed": {
@@ -243,6 +271,7 @@ export class Orchestrator {
         task.status = "pending";
         task.error = undefined;
         task.summary = undefined;
+        task.review = undefined;
         break;
       }
       case "task.session.saved":
@@ -250,6 +279,16 @@ export class Orchestrator {
         break;
       case "task.worktree.prepared":
         this.requireTask(event.taskId).worktree = { path: event.path, branch: event.branch };
+        break;
+      case "task.review.requested": {
+        const task = this.requireTask(event.taskId);
+        task.status = "pending_review";
+        task.summary = event.result.summary;
+        task.review = { digest: event.digest, result: event.result };
+        break;
+      }
+      case "task.review.approved":
+        this.requireTask(event.taskId).integratedCommit = event.commit;
         break;
       case "context.updated": {
         const facts = this.facts.get(event.projectId) ?? new Map<string, Fact>();

@@ -2,7 +2,7 @@
 
 Codex, OpenCode, Claude, Antigravity ve API tabanlı modelleri bir orkestratör etrafında birleştirmeyi hedefleyen **hibrit, çoklu ajan IDE** projesi.
 
-> Durum: **MVP yerel backend prototipi**. SQLite tabanlı orkestratör, Git worktree yönetimi ve Codex/OpenCode CLI adaptörleri var. Varsayılan demo modelleri çağırmaz. Masaüstü arayüz, otomatik merge/onay kuyruğu ve diğer sağlayıcılar henüz yoktur.
+> Durum: **MVP yerel backend prototipi**. SQLite tabanlı orkestratör, Git worktree yönetimi, insan onaylı entegrasyon dalı ve Codex/OpenCode CLI adaptörleri var. Varsayılan demo modelleri çağırmaz. Masaüstü arayüz, canlı olay akışı ve diğer sağlayıcılar henüz yoktur.
 
 ## Hızlı başlangıç
 
@@ -40,9 +40,19 @@ Bu komut yalnızca **dry-run** yapar; model çağrısı ve worktree oluşturmaz.
 npm run live -- --config agentmesh.config.json --execute
 ```
 
-`--execute`, gerçek CLI çağrıları yapar; kimlik doğrulama, kullanım limiti ve olası maliyetler bağlı olduğunuz CLI hesabına aittir. OpenCode için `--auto` kullanılmaz, Codex için `workspace-write` sandbox istenir. Bu **işletim sistemi düzeyinde bir izolasyon garantisi değildir**; özellikle OpenCode tool izinleri ayrıca değerlendirilmelidir. Otomatik merge/push/deploy yapılmaz.
+`--execute`, gerçek CLI çağrıları yapar; kimlik doğrulama, kullanım limiti ve olası maliyetler bağlı olduğunuz CLI hesabına aittir. OpenCode için `--auto` kullanılmaz, Codex için `workspace-write` sandbox istenir. Bu **işletim sistemi düzeyinde bir izolasyon garantisi değildir**; özellikle OpenCode tool izinleri ayrıca değerlendirilmelidir. Otomatik push/deploy yapılmaz.
 
-Worktree'ler `.../.agentmesh-worktrees/`, SQLite ise `.../.agentmesh-data/` altında tutulur. Ana dal otomatik değiştirilmez. Görev sonuçları ortak context'e aktarılır; **bir işin branch'indeki kod diğerinin branch'ine otomatik uygulanmaz**. Review/merge akışı sonraki aşamadır.
+Dosya değiştiren görevler `pending_review` durumuna geçer. İncelenen diff'e bağlı SHA-256 değerini kullanarak açıkça onaylayın:
+
+```powershell
+npm run live -- --config agentmesh.config.json --review
+npm run live -- --config agentmesh.config.json --approve backend-auth --digest <reviewDigest>
+npm run live -- --config agentmesh.config.json --execute
+```
+
+`backend-auth` örnek bir görev ID'sidir; `--review` çıktısındaki gerçek görev ID'sini ve `reviewDigest` değerini kullanın. Son `--execute`, onaylanan koda bağımlı görevleri başlatır. Diff değişirse eski digest ile onay reddedilir. Merge çakışmaları otomatik çözülmez; görev branch'i korunur, çözüm ve yeniden deneme gerekir.
+
+Worktree'ler `.../.agentmesh-worktrees/`, SQLite ise `.../.agentmesh-data/` altında tutulur. Onaylı kod **ayrı AgentMesh entegrasyon dalına** birleştirilir; yeni bağımlı görevler bu dalı temel alır. Kullanıcının ana dalına otomatik merge yapılmaz. Dosya değiştirmeyen görev sonuçları doğrudan ortak context'e aktarılır; değişiklik yapan görevlerin sonuçları onaya kadar bekler.
 
 ## Tasarım belgeleri
 

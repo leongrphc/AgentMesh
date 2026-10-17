@@ -1,6 +1,7 @@
 node_modules/
 dist/
 .agentmesh/
+agentmesh.config.json
 *.log
 .env
 .env.*

@@ -9,6 +9,7 @@ export interface WorktreeLease {
 }
 
 export interface WorktreeInspection {
+  digest: string;
   changedPaths: string[];
   violations: string[];
   trackedDiff: string;
@@ -35,19 +36,34 @@ function shortHash(value: string): string {
 
 /** Ayrı branch/worktree üretir. Repoya otomatik merge veya force-delete yapmaz. */
 export class WorktreeManager {
+  integration(repoPath: string): WorktreeLease {
+    const root = exactRoot(repoPath);
+    const repoId = shortHash(root.toLowerCase());
+    const branch = `agentmesh/integration-${repoId.slice(0, 8)}`;
+    const path = join(dirname(root), ".agentmesh-worktrees", repoId, "integration");
+    if (existsSync(path)) return this.reopen(root, { path, branch });
+    if (git(root, "status", "--porcelain", "--untracked-files=normal").trim()) {
+      throw new Error("Entegrasyon alanını başlatmak için ana depo temiz olmalı");
+    }
+    git(root, "rev-parse", "--verify", "HEAD");
+    // Mevcut branch varsa (ör. önceki bir çalışma), onu kaldığı yerden bağla.
+    const branchExists = git(root, "branch", "--list", branch).trim().length > 0;
+    if (branchExists) git(root, "worktree", "add", path, branch);
+    else git(root, "worktree", "add", "-b", branch, path, "HEAD");
+    return { path, branch };
+  }
+
   prepare(repoPath: string, taskId: string): WorktreeLease {
     if (!taskId.trim()) throw new Error("Boş task ID");
     const root = exactRoot(repoPath);
     if (!git(root, "rev-parse", "--verify", "HEAD").trim()) throw new Error("İlk Git commit gerekli");
-    if (git(root, "status", "--porcelain", "--untracked-files=normal").trim()) {
-      throw new Error("Worktree açmadan önce ana depo temiz olmalı (commit/stash yapın)");
-    }
+    const integration = this.integration(root);
     const repoId = shortHash(root.toLowerCase());
     const taskHash = shortHash(taskId);
     const branch = `agentmesh/${repoId.slice(0, 8)}-${taskHash}`;
     const path = join(dirname(root), ".agentmesh-worktrees", repoId, taskHash);
     if (existsSync(path)) throw new Error(`Worktree zaten var: ${path}`);
-    git(root, "worktree", "add", "-b", branch, path, "HEAD");
+    git(root, "worktree", "add", "-b", branch, path, integration.branch);
     return { path, branch };
   }
 
@@ -80,10 +96,17 @@ export class WorktreeManager {
     const violations = changedPaths.filter((path) => {
       const normalized = path.replace(/\\/g, "/");
       const fullPath = resolve(root, path);
-      const symlink = existsSync(fullPath) && lstatSync(fullPath).isSymbolicLink();
-      return symlink || !patterns.some((pattern) => matchesGlob(normalized, pattern));
+      let current = root;
+      let symlink = false;
+      for (const part of normalized.split("/")) {
+        current = join(current, part);
+        if (existsSync(current) && lstatSync(current).isSymbolicLink()) symlink = true;
+      }
+      return !fullPath.startsWith(root + sep) || symlink || !patterns.some((pattern) => matchesGlob(normalized, pattern));
     });
     const trackedDiff = git(root, "diff", "--binary", "--no-ext-diff", "HEAD");
+    const digestHash = createHash("sha256").update(git(root, "rev-parse", "HEAD"))
+      .update(trackedDiff, "utf8");
     const untrackedPreviews = untracked.map((path) => {
       const full = resolve(root, path);
       if (!full.startsWith(root + sep)) throw new Error(`Geçersiz dosya yolu: ${path}`);
@@ -91,6 +114,7 @@ export class WorktreeManager {
         path, preview: "[sembolik bağlantı; açılmadı]", truncated: false, binary: true,
       };
       const contents = readFileSync(full);
+      digestHash.update(path).update(contents);
       const binary = contents.includes(0);
       const truncated = contents.length > 64 * 1024;
       return {
@@ -100,7 +124,41 @@ export class WorktreeManager {
         binary,
       };
     });
-    return { changedPaths, violations, trackedDiff, untrackedPreviews };
+    return { digest: digestHash.digest("hex"), changedPaths, violations, trackedDiff, untrackedPreviews };
+  }
+
+  /** Called only after an explicit digest-matched approval; never merges into the user's main branch. */
+  integrate(repoPath: string, lease: WorktreeLease, allowedPaths: readonly string[], approvedDigest: string, taskId: string): string {
+    const verified = this.reopen(repoPath, lease);
+    const inspection = this.inspect(verified.path, allowedPaths);
+    if (inspection.violations.length) throw new Error(`İzin dışı dosyalar: ${inspection.violations.join(", ")}`);
+    let committed = false;
+    if (!inspection.changedPaths.length) {
+      // A previous approval may have committed just before a merge conflict or interruption.
+      const message = git(verified.path, "log", "-1", "--format=%B");
+      if (!message.includes(`AgentMesh-Digest: ${approvedDigest}\n`)) throw new Error("İncelenen diff worktree'de bulunamadı");
+      committed = true;
+    } else if (inspection.digest !== approvedDigest) {
+      throw new Error("Diff onaydan sonra değişmiş; tekrar inceleyin");
+    }
+
+    const destination = this.integration(repoPath);
+    if (git(destination.path, "status", "--porcelain").trim()) {
+      throw new Error("Entegrasyon worktree temiz değil");
+    }
+    if (!committed) {
+      git(verified.path, "add", "--all");
+      git(verified.path, "-c", "user.name=AgentMesh", "-c", "user.email=agentmesh@localhost", "commit", "-m", `agentmesh: approve ${taskId}`, "-m", `AgentMesh-Digest: ${approvedDigest}`);
+    }
+    const taskCommit = git(verified.path, "rev-parse", "HEAD").trim();
+    try {
+      git(destination.path, "-c", "user.name=AgentMesh", "-c", "user.email=agentmesh@localhost", "merge", "--no-ff", "--no-edit", verified.branch);
+    } catch (error) {
+      // On conflict, leave the task branch intact and restore the integration checkout.
+      git(destination.path, "merge", "--abort");
+      throw new Error(`Entegrasyon conflict, görev branch'i korundu: ${error instanceof Error ? error.message : String(error)}`);
+    }
+    return taskCommit;
   }
 
   /** Sadece temiz worktree'yi kaldırır; branch incelenmek üzere korunur. */
