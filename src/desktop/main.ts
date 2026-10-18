@@ -8,14 +8,20 @@ import type { TaskDraft } from "./contracts.js";
 
 protocol.registerSchemesAsPrivileged([{ scheme: "agentmesh", privileges: { standard: true, secure: true, supportFetchAPI: true } }]);
 const origin = "agentmesh://desktop";
-const smoke = process.argv.includes("--smoke-test");
+const windowSmoke = process.argv.includes("--window-smoke-test");
+const smoke = process.argv.includes("--smoke-test") || windowSmoke;
+if (smoke) {
+  const smokeProfile = resolve(".agentmesh", "desktop-smoke", String(process.pid), "electron-profile");
+  mkdirSync(smokeProfile, { recursive: true });
+  app.setPath("userData", smokeProfile);
+}
 let window: BrowserWindow | undefined;
 let service: DesktopService;
 let quitting = false;
 
 async function createWindow() {
   window = new BrowserWindow({ width: 1440, height: 950, minWidth: 960, minHeight: 640,
-    show: !smoke, backgroundColor: "#17222d", title: "AgentMesh",
+    show: false, backgroundColor: "#17222d", title: "AgentMesh",
     webPreferences: { preload: join(__dirname, "preload.cjs"), nodeIntegration: false,
       contextIsolation: true, sandbox: true, webSecurity: true, webviewTag: false, backgroundThrottling: !smoke },
   });
@@ -44,6 +50,12 @@ async function createWindow() {
     })().catch((error) => console.error(safeLog(String(error)))).finally(() => { checkingClose = false; });
   });
   await window.loadURL(`${origin}/index.html`);
+  if (!smoke || windowSmoke) {
+    window.show();
+    window.focus();
+    console.log("AgentMesh penceresi açıldı");
+  }
+  if (windowSmoke && !window.isVisible()) throw new Error("Masaüstü penceresi görünür değil");
   if (smoke) {
     try {
       await window.webContents.executeJavaScript(`new Promise((resolve, reject) => {

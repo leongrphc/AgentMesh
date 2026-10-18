@@ -12,6 +12,7 @@
     "desktop:build": "node scripts/build-desktop.mjs",
     "desktop": "npm run desktop:build && node scripts/run-desktop.mjs",
     "desktop:smoke": "npm run desktop:build && node scripts/run-desktop.mjs --smoke-test",
+    "desktop:smoke:window": "npm run desktop:build && node scripts/run-desktop.mjs --window-smoke-test",
     "smoke:opencode": "tsx src/smoke-opencode.ts"
   },
   "devDependencies": {
