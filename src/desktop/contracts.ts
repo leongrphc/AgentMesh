@@ -1,4 +1,13 @@
 import type { ProjectSnapshot } from "../core/orchestrator.js";
+import type { WorktreeInspection } from "../core/worktrees.js";
+
+export interface DesktopReview {
+  taskId: string;
+  title: string;
+  inspection: WorktreeInspection;
+  canApprove: boolean;
+  expectedDigest?: string;
+}
 
 export interface DesktopState {
   snapshot: ProjectSnapshot;
@@ -15,5 +24,7 @@ export interface DesktopAPI {
   start(): Promise<void>;
   cancel(taskId?: string): Promise<void>;
   retry(taskId: string): Promise<void>;
+  review(taskId: string): Promise<DesktopReview>;
+  approve(taskId: string, digest: string): Promise<boolean>;
   subscribe(listener: (state: DesktopState) => void): () => void;
 }

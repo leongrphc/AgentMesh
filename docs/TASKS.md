@@ -35,7 +35,7 @@ Codex, OpenCode, Claude, Antigravity ve diğer API modellerini **tek IDE içinde
 - [x] JSONL stdout/stderr ve journal olaylarını canlı `subscribe()` abonelerine iletme; CLI'da `--stream`.
 - [x] `AbortSignal`, `Ctrl+C`, kalıcı `cancelled`, geç gelen çıktının görev sonucunu tamamlamasını engelleme.
 - [x] Başarısız/iptal edilmiş/engellenmiş görevi `--retry TASK` ile açıkça yeniden kuyruğa alma.
-- [x] Mock ve yerel subprocess/Git worktree testleri; son başarılı doğrulama **20/20 test**, `npm run typecheck`, desktop build ve gerçek Electron smoke başarılı.
+- [x] Mock ve yerel subprocess/Git worktree testleri; son başarılı doğrulama **21/21 test**, `npm run typecheck`, desktop build ve gerçek Electron smoke başarılı.
 
 ## Açık görevler — öncelik sırasıyla
 
@@ -58,6 +58,8 @@ Codex, OpenCode, Claude, Antigravity ve diğer API modellerini **tek IDE içinde
 - [ ] **UI-004:** Task Board: görev oluşturma, bağımlılık çizimi, paralellik limiti, durum, iptal, tekrar dene, geçmiş.
 - [x] **UI-005:** Shared Context ve ajan mesajlarını kaynak görevleriyle görünür kılma; masaüstü sekmeleri.
 - [ ] **UI-006:** Diff/test önizleme, SHA-256 onayı, merge conflict çözme/yeniden deneme ekranı.
+  - [x] Gerçek task worktree diff/yeni dosya önizlemesi, izin ihlalleri, SHA-256 digest ve uygulama içinde açık onay; değiştirilmiş diff reddi için masaüstü servis entegrasyon testi.
+  - [ ] Yapılandırılmış test raporları ve commit edilmiş merge conflict için tam diff/çözüm/yeniden deneme akışı. Mevcut ekran bu durumda CLI incelemesine yönlendirir; otomatik çözüm yapmaz.
 - [ ] **CORE-009:** Ajan çalışırken gelen mesajların canlı teslimi, inbox cursor ve idempotency.
 - [ ] **CORE-010:** İzinleri çalıştırma **öncesinde** zorlayabilecek süreç/OS sandbox politikası; `allowedPaths` şu an yalnızca çalıştırma sonrasında denetleniyor.
 - [ ] **CORE-011:** Kalıcı, sürümlü context/karar yönetimi; çakışan kararlar için doğrulama ve ilgili context paketini seçme.

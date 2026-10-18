@@ -10,7 +10,7 @@ import { MockAgent } from "../adapters/mock.js";
 import { CodexCliAdapter } from "../adapters/codex-cli.js";
 import { OpenCodeCliAdapter } from "../adapters/opencode-cli.js";
 import { safeLog } from "../core/safe-log.js";
-import type { DesktopState } from "./contracts.js";
+import type { DesktopState, DesktopReview } from "./contracts.js";
 
 export class DesktopService {
   private journal?: SqliteJournal;
@@ -126,6 +126,25 @@ export class DesktopService {
   retry(taskId: string): void {
     if (this.running) throw new Error("Yeniden denemeden önce çalışmanın bitmesini bekleyin");
     this.engine!.retryTask(this.requireTask(taskId));
+  }
+
+  review(taskId: string): DesktopReview {
+    this.requireTask(taskId);
+    const task = this.state().snapshot.tasks.find((item) => item.id === taskId)!;
+    if (task.status === "running" || !task.worktree) throw new Error("İncelenecek durdurulmuş çalışma alanı yok");
+    const manager = new WorktreeManager();
+    const lease = manager.reopen(this.config!.repoPath, task.worktree);
+    const inspection = manager.inspect(lease.path, task.allowedPaths);
+    return { taskId, title: task.title, inspection, expectedDigest: task.review?.digest,
+      canApprove: !this.running && task.status === "pending_review" && !inspection.violations.length
+        && inspection.changedPaths.length > 0 && inspection.digest === task.review?.digest };
+  }
+
+  approve(taskId: string, digest: string): void {
+    if (this.running) throw new Error("Onaydan önce aktif çalışmanın bitmesini bekleyin");
+    this.requireTask(taskId);
+    if (typeof digest !== "string" || !/^[a-f0-9]{64}$/.test(digest)) throw new Error("Geçersiz inceleme digest'i");
+    this.engine!.approveTask(taskId, digest);
   }
 
   private requireTask(taskId: string): string {

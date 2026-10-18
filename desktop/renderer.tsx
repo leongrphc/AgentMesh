@@ -1,6 +1,6 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
-import type { DesktopAPI, DesktopState } from "../src/desktop/contracts.js";
+import type { DesktopAPI, DesktopState, DesktopReview } from "../src/desktop/contracts.js";
 import type { TaskStatus } from "../src/core/contracts.js";
 import "./style.css";
 
@@ -9,12 +9,36 @@ declare global { interface Window { agentmesh: DesktopAPI } }
 const labels: Record<TaskStatus, string> = { pending: "Sırada", running: "Çalışıyor", completed: "Tamamlandı",
   failed: "Başarısız", blocked: "Engellendi", pending_review: "İnceleme bekliyor", cancelled: "İptal edildi", needs_review: "Kontrol gerekli" };
 
+function ReviewDialog({ review, onClose, onRefresh, onApprove, pending, error }: {
+  review: DesktopReview; onClose: () => void; onRefresh: () => void; onApprove: () => void; pending: boolean; error: string;
+}) {
+  const dialog = useRef<HTMLDialogElement>(null);
+  useEffect(() => { dialog.current?.showModal(); }, []);
+  const { inspection } = review;
+  return <dialog className="review-dialog" ref={dialog} onCancel={onClose} aria-labelledby="review-title">
+    <div className="review-header"><div><div className="eyebrow">DEĞİŞİKLİK İNCELEMESİ</div><h2 id="review-title">{review.title}</h2></div><button aria-label="İncelemeyi kapat" onClick={onClose}>×</button></div>
+    <div className="review-content">
+      {error && <p className="task-error" role="alert">{error}</p>}
+      <p className="review-digest">SHA-256 <code>{inspection.digest}</code></p>
+      {!!inspection.violations.length && <p className="task-error">İzin dışı dosyalar: {inspection.violations.join(", ")}</p>}
+      {!review.canApprove && <p className="review-warning">Bu görünüm onaylanamaz. Görev durumu, dosya kapsamı veya beklenen değişiklikler farklı olabilir. Değişiklikleri kontrol edip incelemeyi yenileyin. Commit edilmiş bir çakışma varsa görev branch’ini CLI üzerinden inceleyin.</p>}
+      <h3>Değişen dosyalar · {inspection.changedPaths.length}</h3>
+      <ul className="changed-files">{inspection.changedPaths.map((path) => <li key={path}><code>{path}</code></li>)}</ul>
+      {inspection.trackedDiff && <><h3>Takip edilen dosyalar</h3><pre className="diff">{inspection.trackedDiff}</pre></>}
+      {inspection.untrackedPreviews.map((file) => <section key={file.path}><h3>Yeni dosya: {file.path}</h3>{file.truncated && <p className="review-warning">Önizleme kısaltıldı. Dosyanın tamamını çalışma alanında inceleyin.</p>}{file.binary && <p className="review-warning">İkili dosya; çalışma alanında ayrıca inceleyin.</p>}<pre className="diff">{file.preview}</pre></section>)}
+      <p className="review-warning">Test kanıtı görev sonucunda yer alır; bu ekran test çalıştırmaz. Onaylanan kod ayrı entegrasyon dalına birleştirilir.</p>
+    </div>
+    <div className="review-actions"><button disabled={pending} onClick={onRefresh}>İncelemeyi yenile</button><button className="primary" disabled={pending || !review.canApprove} onClick={onApprove}>Onayla ve birleştir</button></div>
+  </dialog>;
+}
+
 function App() {
   const [state, setState] = useState<DesktopState>();
   const [error, setError] = useState("");
   const [selected, setSelected] = useState("");
   const [tab, setTab] = useState<"events" | "context" | "messages">("events");
   const [pending, setPending] = useState(false);
+  const [review, setReview] = useState<DesktopReview>();
   const api = window.agentmesh;
 
   useEffect(() => {
@@ -78,8 +102,9 @@ function App() {
           <dl><dt>Ajan</dt><dd>{task.agentId}</dd><dt>Durum</dt><dd>{labels[task.status]}</dd><dt>Dosya kapsamı</dt><dd>{task.allowedPaths.join(", ") || "Demo"}</dd></dl>
           {task.summary && <div className="result"><b>Sonuç</b><p>{task.summary}</p></div>}
           {task.error && <p className="task-error">{task.error}</p>}
-          {task.status === "pending_review" && <p className="review-note">Değişiklikler CLI üzerinden incelenip onaylanabilir. İnceleme ekranı sonraki aşamada eklenecek.</p>}
+          {task.status === "pending_review" && <p className="review-note">Bağımlı görevler değişiklikler onaylandıktan sonra başlayabilir.</p>}
           <div className="detail-actions">{["running", "pending"].includes(task.status) && <button disabled={pending} onClick={() => act(() => api.cancel(task.id))}>Görevi iptal et</button>}
+          {task.worktree && task.status !== "running" && <button disabled={pending} onClick={() => act(async () => setReview(await api.review(task.id)))}>Değişiklikleri incele</button>}
           {["failed", "cancelled", "blocked", "needs_review"].includes(task.status) && <button disabled={state.busy || pending} onClick={() => act(() => api.retry(task.id))}>Yeniden kuyruğa al</button>}</div>
         </>}</aside></div>
       </section>
@@ -94,6 +119,9 @@ function App() {
       </section>
       <footer>AgentMesh <span>Görevler · ortak context · bağımsız çalışma alanları</span></footer>
     </main>
+    {review && <ReviewDialog review={review} pending={pending} error={error} onClose={() => setReview(undefined)}
+      onRefresh={() => act(async () => setReview(await api.review(review.taskId)))}
+      onApprove={() => act(async () => { if (await api.approve(review.taskId, review.inspection.digest)) setReview(undefined); })} />}
   </div>;
 }
 

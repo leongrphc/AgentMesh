@@ -11,6 +11,8 @@ import { WorktreeManager } from "../src/core/worktrees.js";
 import { CodexCliAdapter } from "../src/adapters/codex-cli.js";
 import { OpenCodeCliAdapter } from "../src/adapters/opencode-cli.js";
 import { runJsonlProcess } from "../src/adapters/cli-process.js";
+import { DesktopService } from "../src/desktop/service.js";
+import { createHash } from "node:crypto";
 import type { AgentAdapter, AgentTask, AgentExecution, AgentResult } from "../src/core/contracts.js";
 
 function git(repo: string, ...args: string[]) {
@@ -36,6 +38,42 @@ function task(id: string, agentId: string, allowedPaths: string[]): AgentTask {
     dependsOn: [], allowedPaths,
   };
 }
+
+test("desktop reloads real worktree review, rejects stale approval and integrates exact digest", async () => {
+  const f = repoFixture();
+  const key = createHash("sha256").update(process.platform === "win32" ? f.repo.toLowerCase() : f.repo).digest("hex").slice(0, 16);
+  const journal = new SqliteJournal(join(f.root, ".agentmesh-data", key, "events.sqlite"));
+  const service = new DesktopService(join(f.root, "desktop"));
+  try {
+    const engine = new Orchestrator(journal, new WorktreeManager());
+    engine.createProject({ id: "p", workspaceRoot: f.repo });
+    engine.registerAgent({ id: "a", provider: "test", connection: "cli", async execute({ workspaceRoot }) {
+      writeFileSync(join(workspaceRoot, "src", "feature.txt"), "review me\n");
+      return { summary: "Test fixture prepared" };
+    } });
+    const definition = task("feature", "a", ["src/feature.txt"]);
+    engine.addTask(definition);
+    await engine.run("p");
+    journal.close();
+    const configPath = join(f.root, "config.json");
+    writeFileSync(configPath, JSON.stringify({ projectId: "p", repoPath: f.repo,
+      agents: [{ id: "a", provider: "codex" }], tasks: [definition] }));
+    const state = service.openConfig(configPath);
+    assert.equal(state.demo, false);
+    const review = service.review("feature");
+    assert.equal(review.canApprove, true);
+    assert.match(review.inspection.untrackedPreviews[0]!.preview, /review me/);
+    const worktree = state.snapshot.tasks[0]!.worktree!.path;
+    writeFileSync(join(worktree, "src", "feature.txt"), "changed after preview\n");
+    assert.equal(service.review("feature").canApprove, false);
+    assert.throws(() => service.approve("feature", review.inspection.digest), /değişmiş/);
+    writeFileSync(join(worktree, "src", "feature.txt"), "review me\n");
+    service.approve("feature", review.inspection.digest);
+    assert.equal(service.state().snapshot.tasks[0]?.status, "completed");
+    assert.equal(git(f.repo, "status", "--porcelain"), "");
+    assert.throws(() => service.review("outside-project"), /Geçersiz/);
+  } finally { journal.close(); await service.close(); f.cleanup(); }
+});
 
 test("SQLite eski JSONL geçmişini taşır; proje/mesaj/context ve tek-yazar kilidi kalıcıdır", () => {
   const f = repoFixture();

@@ -8,6 +8,8 @@ const api: DesktopAPI = {
   start: () => ipcRenderer.invoke("mesh:start"),
   cancel: (taskId) => ipcRenderer.invoke("mesh:cancel", taskId),
   retry: (taskId) => ipcRenderer.invoke("mesh:retry", taskId),
+  review: (taskId) => ipcRenderer.invoke("mesh:review", taskId),
+  approve: (taskId, digest) => ipcRenderer.invoke("mesh:approve", taskId, digest),
   subscribe: (listener) => {
     const handler = (_event: Electron.IpcRendererEvent, state: DesktopState) => listener(state);
     ipcRenderer.on("mesh:changed", handler);

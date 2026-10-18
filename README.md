@@ -25,6 +25,8 @@ Uygulama güvenli mock demo ile açılır. **Ajanları başlat** demo görevleri
 
 Gerçek proje için **Proje ayarlarını aç** ile `agentmesh.config.json` seçin; aşağıdaki CLI bölümündeki yapılandırma kullanılır. Gerçek çalıştırma ayrıca uygulama içinde açıkça başlatılır. Aynı proje CLI ile ortak SQLite günlüğünü kullanır; iki uygulama aynı anda yazamaz. Demo kayıtları Electron kullanıcı veri klasöründedir.
 
+Worktree oluşmuş bir görevi seçip **Değişiklikleri incele** ile diff ve yeni dosyaları görün. Bekleyen digest ile eşleşen değişiklikler **Onayla ve birleştir** ile ayrı entegrasyon dalına alınır. Ardından bağımlı görevleri başlatabilirsiniz. Diff değişmişse onay reddedilir; commit edilmiş merge conflict ve tam test raporları için şimdilik CLI incelemesi gerekir.
+
 `npm run desktop:smoke`, görünür pencere açmadan gerçek Electron renderer/preload ve dört görevli mock akışını doğrular; `dist/desktop-smoke.png` üretir. Pencere kapanırken aktif işler iptal edilir ve SQLite kapatılır.
 
 Demo, `.agentmesh/demo.sqlite` dosyasında olay geçmişini saklar. Eski `.agentmesh/demo-events.jsonl` varsa ilk açılışta SQLite'a aktarır. İkinci çalıştırmada tamamlanan görevleri yeniden çalıştırmaz. Sıfırdan denemek için (gerekirse yedekleyerek) iki dosyayı temizleyin:

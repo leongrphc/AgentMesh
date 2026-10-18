@@ -97,6 +97,22 @@ app.whenReady().then(async () => {
     if (typeof taskId !== "string") throw new Error("Geçersiz görev kimliği");
     service.retry(taskId);
   });
+  handle("mesh:review", (taskId) => {
+    if (typeof taskId !== "string") throw new Error("Geçersiz görev kimliği");
+    return service.review(taskId);
+  });
+  handle("mesh:approve", async (taskId, digest) => {
+    if (typeof taskId !== "string" || typeof digest !== "string") throw new Error("Geçersiz onay");
+    const review = service.review(taskId);
+    if (!review.canApprove || review.inspection.digest !== digest) throw new Error("Değişiklikler yeniden incelenmeli");
+    const result = await dialog.showMessageBox(window!, { type: "question", title: "Değişiklikleri onayla",
+      message: `${review.title} değişiklikleri entegrasyon dalına alınsın mı?`,
+      detail: `${review.inspection.changedPaths.length} dosya incelendi. Kullanıcının ana dalı değişmez.\nSHA-256: ${digest}`,
+      buttons: ["Vazgeç", "Onayla ve birleştir"], defaultId: 0, cancelId: 0 });
+    if (result.response !== 1) return false;
+    service.approve(taskId, digest);
+    return true;
+  });
   let updateTimer: ReturnType<typeof setTimeout> | undefined;
   service.subscribe(() => {
     if (updateTimer) return;
