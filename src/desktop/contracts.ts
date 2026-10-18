@@ -2,6 +2,8 @@ import type { ProjectSnapshot } from "../core/orchestrator.js";
 import type { WorktreeInspection } from "../core/worktrees.js";
 import type { WorkspaceEntry, WorkspaceFile } from "../core/workspace-files.js";
 import type { AgentTask } from "../core/contracts.js";
+import type { PermissionRequest, PermissionDecision } from "../core/permissions.js";
+import type { ProviderHealth } from "../adapters/provider-health.js";
 
 export type TaskDraft = Omit<AgentTask, "projectId">;
 
@@ -17,7 +19,10 @@ export interface DesktopState {
   snapshot: ProjectSnapshot;
   busy: boolean;
   demo: boolean;
-  agents: Array<{ id: string; provider: string; model?: string }>;
+  agents: Array<{ id: string; provider: string; model?: string; transport?: "exec" | "app-server"; interactivePermissions?: boolean }>;
+  permissions: PermissionRequest[];
+  health: Record<string, ProviderHealth>;
+  checkingAgents: boolean;
   maxParallel: number;
   events: Array<{ at: string; taskId?: string; text: string }>;
 }
@@ -36,5 +41,7 @@ export interface DesktopAPI {
   saveFile(taskId: string, path: string, content: string, digest: string): Promise<WorkspaceFile>;
   createTask(task: TaskDraft): Promise<void>;
   setParallelism(value: number): Promise<void>;
+  decidePermission(requestId: string, executionId: string, digest: string, decision: PermissionDecision): Promise<void>;
+  checkAgents(): Promise<void>;
   subscribe(listener: (state: DesktopState) => void): () => void;
 }

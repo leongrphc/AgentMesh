@@ -15,6 +15,8 @@ const api: DesktopAPI = {
   saveFile: (taskId, path, content, digest) => ipcRenderer.invoke("mesh:save-file", taskId, path, content, digest),
   createTask: (task) => ipcRenderer.invoke("mesh:create-task", task),
   setParallelism: (value) => ipcRenderer.invoke("mesh:parallelism", value),
+  decidePermission: (requestId, executionId, digest, decision) => ipcRenderer.invoke("mesh:permission", requestId, executionId, digest, decision),
+  checkAgents: () => ipcRenderer.invoke("mesh:check-agents"),
   subscribe: (listener) => {
     const handler = (_event: Electron.IpcRendererEvent, state: DesktopState) => listener(state);
     ipcRenderer.on("mesh:changed", handler);

@@ -1,0 +1,19 @@
+{
+  "projectId": "codex-permission-demo",
+  "repoPath": ".",
+  "maxParallel": 1,
+  "agents": [
+    { "id": "codex-worker", "provider": "codex", "transport": "app-server" }
+  ],
+  "tasks": [
+    {
+      "id": "document-project",
+      "projectId": "codex-permission-demo",
+      "title": "Proje başlangıç belgesi",
+      "instruction": "Projeyi incele ve docs/START.md içinde kısa geliştirme notları yaz. Mevcut dosyaları silme veya değiştirme. Yalnızca belirtilen belgeyi oluştur.",
+      "agentId": "codex-worker",
+      "dependsOn": [],
+      "allowedPaths": ["docs/START.md"]
+    }
+  ]
+}

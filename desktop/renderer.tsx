@@ -1,6 +1,7 @@
 import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { TaskForm, TaskGraph } from "./task-board.js";
+import { AgentCenter } from "./agent-center.js";
 import type { DesktopAPI, DesktopState, DesktopReview } from "../src/desktop/contracts.js";
 import type { TaskStatus } from "../src/core/contracts.js";
 import "./style.css";
@@ -44,6 +45,7 @@ function App() {
   const [review, setReview] = useState<DesktopReview>();
   const [editorDirty, setEditorDirty] = useState(false);
   const [creating, setCreating] = useState(false);
+  const [agentCenter, setAgentCenter] = useState(false);
   const [selectedOnly, setSelectedOnly] = useState(false);
   const api = window.agentmesh;
   useEffect(() => { document.documentElement.dataset.unsaved = String(editorDirty); }, [editorDirty]);
@@ -82,12 +84,13 @@ function App() {
       <button className="side-button" disabled={state.busy || pending} onClick={() => { if (canLeaveFile()) void act(() => api.openConfig()); }}>＋ Proje ayarlarını aç</button>
       <button className="side-button subtle" disabled={state.busy || pending} onClick={() => { if (canLeaveFile()) void act(() => api.openDemo()); }}>Demo projesine dön</button>
       <div className="side-label agents-label">AJANLAR <span>{state.agents.length}</span></div>
+      <button className="side-button" data-testid="agent-center" onClick={() => setAgentCenter(true)}>Ajan merkezini aç</button>
       <div className="agent-list">{state.agents.map((agent) => {
         const working = tasks.find((item) => item.agentId === agent.id && item.status === "running");
         const done = tasks.filter((item) => item.agentId === agent.id).every((item) => item.status === "completed");
         return <div className="agent" key={agent.id}><span className={`agent-dot ${working ? "active" : done ? "done" : ""}`} />
           <div><strong>{agent.id}</strong><small>{state.demo ? "Mock · yerel demo" : `${agent.provider}${agent.model ? ` · ${agent.model}` : " · CLI"}`}</small></div>
-          <span className="agent-state">{working ? "aktif" : done ? "bitti" : "hazır"}</span></div>;
+          <span className="agent-state">{working ? state.permissions.some((request) => request.taskId === working.id) ? "izin bekliyor" : "aktif" : done ? "bitti" : "hazır"}</span></div>;
       })}</div>
       <div className="sidebar-foot"><span className="local-dot" /> Yerel çalışma alanı<small>{state.demo ? "Demo model çağrısı yapmaz." : "Kodlar ayrı worktree’lerde işlenir."}</small></div>
     </aside>
@@ -98,6 +101,10 @@ function App() {
         <div className="run-actions"><button disabled={!state.busy || pending} onClick={() => act(() => api.cancel())}>Durdur</button><button className="primary" data-testid="start" disabled={state.busy || !ready || pending} onClick={() => { if (editorDirty) setError("Başlatmadan önce dosya değişikliklerini kaydedin veya dosyayı yeniden açın."); else void act(() => api.start()); }}>{state.busy ? "Çalışıyor…" : "▶ Ajanları başlat"}</button></div>
       </section>
       {error && <div role="alert" className="error"><span>{error}</span><button aria-label="Hatayı kapat" onClick={() => setError("")}>×</button></div>}
+      {!!state.permissions.length && <section className="permission-panel" aria-label="Bekleyen izinler"><h2>Ajan kararı bekliyor <span>{state.permissions.length}</span></h2>
+        {state.permissions.map((request) => <article key={request.id}><div className="permission-title"><b>{request.taskId}</b><span>{request.provider} · {request.kind === "command" ? "Komut izni" : "Dosya izni"} · {new Date(request.expiresAt).toLocaleTimeString("tr-TR")} tarihine kadar</span></div>
+          <pre>{request.description}</pre><div className="permission-actions"><small>Hassas değerler maskelenmiş olabilir. Karar yalnızca bu istek için geçerlidir.</small><button disabled={pending} onClick={() => act(() => api.decidePermission(request.id, request.executionId, request.digest, "deny"))}>Reddet</button><button className="primary" disabled={pending} onClick={() => act(() => api.decidePermission(request.id, request.executionId, request.digest, "allow_once"))}>Bir kez izin ver</button></div>
+        </article>)}</section>}
       <div className="project-strip"><span className={`status-light ${state.busy ? "on" : ""}`} /><strong>{state.busy ? `${active} ajan çalışıyor` : "Çalışma alanı hazır"}</strong><span className="repo-path" title={project.workspaceRoot}>{project.workspaceRoot}</span><span>{completed} / {tasks.length} tamamlandı</span><progress value={completed} max={tasks.length || 1} aria-label="Tamamlanan görevler" /></div>
       <section className="task-section">
         <div className="section-heading"><h2>Görev akışı <span>{tasks.length}</span></h2><div className="board-controls"><label>Paralel ajan <select aria-label="Paralel ajan sayısı" value={state.maxParallel} disabled={state.busy || pending} onChange={(event) => act(() => api.setParallelism(Number(event.target.value)))}>{Array.from({ length: 8 }, (_, i) => <option value={i + 1} key={i + 1}>{i + 1}</option>)}</select></label><button data-testid="create-task" disabled={state.busy || pending} onClick={() => setCreating(true)}>＋ Görev ekle</button></div></div>
@@ -108,7 +115,7 @@ function App() {
           {tasks.map((item) => <button className={`task-row ${task?.id === item.id ? "selected" : ""}`} key={item.id} onClick={() => { if (item.id === task?.id || canLeaveFile()) setSelected(item.id); }}>
             <span className={`task-symbol ${item.status}`}>{item.status === "completed" ? "✓" : item.status === "running" ? "◉" : "◇"}</span>
             <span className="task-title"><strong>{item.title}</strong><small>{item.agentId} <span>·</span> {item.dependsOn.length ? `Sonra: ${item.dependsOn.join(", ")}` : "Bağımsız görev"}</small></span>
-            <span className={`status ${item.status}`}>{labels[item.status]}</span>
+            <span className={`status ${item.status}`}>{state.permissions.some((request) => request.taskId === item.id) ? "İzin bekliyor" : labels[item.status]}</span>
           </button>)}
         </div><aside className="task-detail">{task && <><div className="eyebrow">SEÇİLİ GÖREV</div><h3>{task.title}</h3><code>{task.id}</code><p>{task.instruction}</p>
           <dl><dt>Ajan</dt><dd>{task.agentId}</dd><dt>Durum</dt><dd>{labels[task.status]}</dd><dt>Dosya kapsamı</dt><dd>{task.allowedPaths.join(", ") || "Demo"}</dd></dl>
@@ -136,6 +143,7 @@ function App() {
       onRefresh={() => act(async () => setReview(await api.review(review.taskId, true)))}
       onApprove={() => act(async () => { if (await api.approve(review.taskId, review.inspection.digest)) setReview(undefined); })} />}
     {creating && <TaskForm state={state} onClose={() => setCreating(false)} onCreate={async (draft) => { await api.createTask(draft); setState(await api.state()); }} />}
+    {agentCenter && <AgentCenter state={state} api={api} onClose={() => setAgentCenter(false)} />}
   </div>;
 }
 

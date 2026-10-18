@@ -7,20 +7,24 @@ import { Orchestrator } from "../core/orchestrator.js";
 import { WorktreeManager } from "../core/worktrees.js";
 import { validate, orderTasks, type Config } from "../core/config.js";
 import { MockAgent } from "../adapters/mock.js";
-import { CodexCliAdapter } from "../adapters/codex-cli.js";
-import { OpenCodeCliAdapter } from "../adapters/opencode-cli.js";
+import { configuredAdapter } from "../adapters/registry.js";
+import type { PermissionDecision } from "../core/permissions.js";
+import { probeCodex, probeOpenCode, type ProviderHealth } from "../adapters/provider-health.js";
 import { safeLog } from "../core/safe-log.js";
 import { listWorkspace, readWorkspaceFile, saveWorkspaceFile } from "../core/workspace-files.js";
 import type { DesktopState, DesktopReview, TaskDraft } from "./contracts.js";
 
 export class DesktopService {
   private journal?: SqliteJournal;
+  private journalPath?: string;
   private engine?: Orchestrator;
   private config?: Config;
   private demo = true;
   private running?: Promise<void>;
   private abort?: AbortController;
   private events: DesktopState["events"] = [];
+  private health: Record<string, ProviderHealth> = {};
+  private healthAbort?: AbortController;
   private readonly listeners = new Set<(state: DesktopState) => void>();
 
   constructor(private readonly dataRoot: string) {}
@@ -33,7 +37,10 @@ export class DesktopService {
   state(): DesktopState {
     if (!this.engine || !this.config) throw new Error("Önce proje açın");
     return structuredClone({ snapshot: this.engine.snapshot(this.config.projectId), busy: !!this.running,
-      demo: this.demo, agents: this.config.agents, events: this.events,
+      demo: this.demo, agents: this.config.agents.map((agent) => ({ ...agent,
+        interactivePermissions: this.demo || (agent.provider === "codex" && agent.transport === "app-server") })),
+      permissions: this.engine.pendingPermissions(this.config.projectId), events: this.events,
+      health: this.health, checkingAgents: !!this.healthAbort,
       maxParallel: this.engine.snapshot(this.config.projectId).project.maxParallel ?? this.config.maxParallel ?? 2 });
   }
 
@@ -67,21 +74,26 @@ export class DesktopService {
 
   private open(config: Config, path: string, demo: boolean): DesktopState {
     if (this.running) throw new Error("Proje değiştirmeden önce çalışan görevleri durdurun");
-    this.journal?.close();
-    this.engine = undefined;
-    this.config = undefined;
-    const journal = new SqliteJournal(path);
+    this.healthAbort?.abort(); this.healthAbort = undefined; this.health = {};
+    const normalized = process.platform === "win32" ? resolve(path).toLowerCase() : resolve(path);
+    const reused = this.journalPath === normalized && this.journal;
+    const journal = reused || new SqliteJournal(path);
     try {
       const engine = new Orchestrator(journal, new WorktreeManager());
       for (const agent of config.agents) {
         engine.registerAgent(demo ? new MockAgent(agent.id, async (input) => {
           input.onOutput?.({ channel: "stdout", data: { text: `${input.task.title} başladı` } });
+          let permissionNote = "";
+          if (input.task.id === "plan" && input.requestPermission) {
+            const decision = await input.requestPermission({ provider: "mock", sessionId: "demo-session", nativeRequestId: "demo-command",
+              kind: "command", description: "Demo: npm test için izin akışını dene. Gerçek komut çalıştırılmayacak." });
+            permissionNote = decision === "allow_once" ? " Demo izni verildi; gerçek komut çalıştırılmadı." : " Demo izni reddedildi; gerçek komut çalıştırılmadı.";
+          }
           await delay(1000, undefined, { signal: input.signal });
-          return { summary: `${input.task.title} tamamlandı (demo).`,
+          return { summary: `${input.task.title} tamamlandı (demo).${permissionNote}`,
             facts: [{ key: `${input.task.id}.result`, value: "Demo doğrulaması başarılı" }],
             messages: [{ to: "*", kind: "handoff", body: `${input.task.title} sonucu hazır.` }] };
-        }) : agent.provider === "codex" ? new CodexCliAdapter(agent.id, { model: agent.model })
-          : new OpenCodeCliAdapter(agent.id, { model: agent.model }));
+        }) : configuredAdapter(agent));
       }
       let existing;
       try { existing = engine.snapshot(config.projectId); }
@@ -91,7 +103,9 @@ export class DesktopService {
       }
       const tasks = engine.snapshot(config.projectId).tasks;
       for (const task of orderTasks(config.tasks)) if (!tasks.some((old) => old.id === task.id)) engine.addTask(task);
+      if (!reused) this.journal?.close();
       this.journal = journal;
+      this.journalPath = normalized;
       this.engine = engine;
       this.config = config;
       this.demo = demo;
@@ -111,12 +125,13 @@ export class DesktopService {
       });
       this.publish();
       return this.state();
-    } catch (error) { journal.close(); throw error; }
+    } catch (error) { if (!reused) journal.close(); throw error; }
   }
 
   start(): void {
     if (this.running) throw new Error("Görevler zaten çalışıyor");
     if (!this.engine || !this.config) throw new Error("Önce proje açın");
+    this.healthAbort?.abort(); this.healthAbort = undefined;
     this.abort = new AbortController();
     // Defer execution so busy is visible before the first synchronous domain event.
     this.running = Promise.resolve().then(() => this.engine!.run(this.config!.projectId,
@@ -148,6 +163,26 @@ export class DesktopService {
   setParallelism(value: number): void {
     if (this.running) throw new Error("Paralelliği değiştirmeden önce çalışmayı durdurun");
     this.engine!.setParallelism(this.config!.projectId, value);
+  }
+
+  decidePermission(requestId: string, executionId: string, digest: string, decision: PermissionDecision): void {
+    if (!this.config || !this.engine) throw new Error("Önce proje açın");
+    this.engine.decidePermission(this.config.projectId, requestId, executionId, digest, decision);
+  }
+
+  async checkAgents(): Promise<void> {
+    if (this.running || this.healthAbort) throw new Error("Bağlantı kontrolünden önce aktif işlemi bitirin");
+    const state = this.state();
+    const abort = new AbortController(); this.healthAbort = abort; this.publish();
+    try {
+      const probes = new Map<string, Promise<ProviderHealth>>();
+      for (const agent of state.agents) if (!probes.has(agent.provider)) probes.set(agent.provider,
+        state.demo ? Promise.resolve({ status: "configured", checkedAt: new Date().toISOString(), detail: "Yerel mock ajan; model veya CLI çağrısı yapılmaz." })
+          : agent.provider === "codex" ? probeCodex(state.snapshot.project.workspaceRoot, abort.signal)
+          : probeOpenCode(state.snapshot.project.workspaceRoot, abort.signal));
+      const results = await Promise.all(state.agents.map(async (agent) => [agent.id, await probes.get(agent.provider)!] as const));
+      if (this.healthAbort === abort && !abort.signal.aborted) this.health = Object.fromEntries(results);
+    } finally { if (this.healthAbort === abort) { this.healthAbort = undefined; this.publish(); } }
   }
 
   review(taskId: string, refresh = false): DesktopReview {
@@ -214,5 +249,8 @@ export class DesktopService {
     }
   }
 
-  async close() { this.abort?.abort(); await this.running; this.journal?.close(); }
+  async close() {
+    this.healthAbort?.abort(); this.healthAbort = undefined; this.abort?.abort(); await this.running;
+    this.journal?.close(); this.journal = undefined; this.journalPath = undefined;
+  }
 }

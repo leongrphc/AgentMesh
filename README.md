@@ -6,7 +6,7 @@ Codex, OpenCode, Claude, Antigravity ve API tabanlı modelleri bir orkestratör 
 
 ## Hızlı başlangıç
 
-Windows / PowerShell, Node.js 22+:
+Windows / PowerShell, Node.js 22.12+:
 
 ```powershell
 npm install
@@ -22,6 +22,10 @@ npm run desktop
 ```
 
 Uygulama güvenli mock demo ile açılır. **Ajanları başlat** demo görevlerini bağımlılık sırasıyla çalıştırır. Görev seçerek iptal edebilir veya başarısız/iptal edilmiş görevi yeniden kuyruğa alabilirsiniz. Yeniden kuyruğa alma kendiliğinden çalıştırmaz.
+
+Demo ilk plan görevinde sahte bir araç izni isteyerek karar panelini de gösterir. İzin vermek veya reddetmek gerçek komut çalıştırmaz. Gerçek Codex araç izinleri için ajan ayarına `"transport": "app-server"` ekleyin veya `agentmesh.app-server.example.json` örneğini kişisel config'inize uyarlayın. Bu transport masaüstünden çalıştırılır; `exec` varsayılanı aynı kalır. Yalnızca tek isteklik komut/kapsam içi dosya izinleri sunulur; ek network/filesystem ve oturum genelindeki izinler reddedilir. [İzin protokolü](docs/permissions.md).
+
+**Ajan merkezi** sağlayıcı, bağlantı yöntemi, model/rol ve araç izni desteğini gösterir. **Bağlantıları kontrol et** model çağırmadan Codex hesap kaydını ve OpenCode sürümünü kontrol eder. Kimlik veya token UI'a aktarılmaz; bu sonuç model erişimi/kota garantisi değildir. OpenCode exec transportunda giriş durumu henüz doğrulanmıyor.
 
 **Görev ekle** ile ajan, talimat, dosya kapsamı ve bağımlılıklar tanımlanır. Bağımlılık çizimi seçili göreve geçiş sağlar. **Paralel ajan** ayarı 1–8 aralığındadır; görevler ve ayar yeniden açıldığında korunur. CLI'de config içindeki açık `maxParallel` değeri önceliklidir; belirtilmemişse kalıcı proje ayarı kullanılır. Olay paneli son 200 olayı yeniden yükler; ham CLI çıktıları kalıcı geçmişe yazılmaz.
 

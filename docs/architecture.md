@@ -75,7 +75,7 @@ API anahtarları SQLite içine düz metin koyulmaz; masaüstü işletim sistemi 
 
 | Sağlayıcı | Gerçek entegrasyon yolu | Kritik not |
 | --- | --- | --- |
-| Codex | `@openai/codex-sdk`; thread başlatma/sürdürme, olay akışı | SDK, yerel CLI'yi çalıştırır; native oturum ID ayrı saklanır. Kimlik doğrulama yöntemi sağlayıcı ayarlarına bağlıdır. |
+| Codex | `exec --json` veya `app-server` stdio JSON-RPC (uygulandı); SDK ileride alternatif | App Server thread/turn ve tek isteklik komut/dosya onayı sağlar. Native oturum ID ayrı saklanır; kimlik doğrulama sağlayıcı ayarlarına bağlıdır. |
 | OpenCode | `@opencode-ai/sdk`, `opencode serve`, gerektiğinde ACP | Server `127.0.0.1` üzerinde açılır, auth/sürüm kontrolü ve proje dizini eşleştirmesi gerekir. |
 | Claude | Claude Agent SDK / doğrudan Claude API | **Üçüncü taraf ürünlerde claude.ai giriş/abonelik kullanımına Anthropic'in önceden onay verilmedikçe izin vermediği belgeleniyor.** Uyumlu API anahtarı bağlantısı varsayılandır. |
 | Antigravity | Python `google-antigravity` SDK için yerel sidecar | SDK Python tabanlıdır; Gemini API anahtarı veya desteklenen kurumsal kimlik doğrulaması gerekir. |

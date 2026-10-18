@@ -1,0 +1,91 @@
+import { isAbsolute, matchesGlob, relative, resolve, sep } from "node:path";
+import type { AgentAdapter, AgentExecution, AgentResult } from "../core/contracts.js";
+import { buildPrompt } from "./cli-process.js";
+import { JsonlRpcClient, record, type RpcOptions, type RpcRecord } from "./jsonl-rpc.js";
+
+type ClientFactory = (options: Omit<RpcOptions, "executable" | "args">) => JsonlRpcClient;
+
+export class CodexAppServerAdapter implements AgentAdapter {
+  readonly provider = "codex";
+  readonly connection = "cli" as const;
+  readonly interactivePermissions = true;
+  constructor(readonly id: string, private readonly options: { executable?: string; model?: string; clientFactory?: ClientFactory } = {}) {}
+
+  async execute(input: AgentExecution): Promise<AgentResult> {
+    let threadId = input.sessionId, turnId: string | undefined, summary = "";
+    const files = new Map<string, string[]>();
+    let finish!: () => void, fail!: (error: Error) => void;
+    const completion = new Promise<void>((resolve, reject) => { finish = resolve; fail = reject; });
+    // A server can fail during initialize before execution starts waiting for completion.
+    void completion.catch(() => {});
+    const isScoped = (params: RpcRecord) => !!turnId && params.threadId === threadId && params.turnId === turnId;
+    const within = (path: string) => {
+      const delta = relative(resolve(input.workspaceRoot), resolve(input.workspaceRoot, path));
+      return delta !== ".." && !delta.startsWith(`..${sep}`) && !isAbsolute(delta);
+    };
+    const factory: ClientFactory = this.options.clientFactory ?? ((options) => new JsonlRpcClient({ ...options,
+      executable: this.options.executable ?? (process.platform === "win32" ? "codex.exe" : "codex"), args: ["app-server"] }));
+    const client = factory({ cwd: input.workspaceRoot, signal: input.signal, onOutput: input.onOutput,
+      onExit: fail,
+      onNotification: (method, params) => {
+        if (method === "turn/started" && params.threadId === threadId && typeof record(params.turn).id === "string") turnId = record(params.turn).id as string;
+        if (!isScoped(params)) {
+          if (method !== "turn/completed" || params.threadId !== threadId || record(params.turn).id !== turnId || !turnId) return;
+        }
+        const item = record(params.item);
+        if (method === "item/started" && item.type === "fileChange" && typeof item.id === "string") {
+          const changes = Array.isArray(item.changes) ? item.changes.map(record) : [];
+          if (changes.length && changes.every((change) => typeof change.path === "string")) files.set(item.id, changes.map((change) => change.path as string));
+        }
+        if (method === "item/completed" && item.type === "agentMessage" && typeof item.text === "string") summary = item.text;
+        if (method === "turn/completed") {
+          const turn = record(params.turn);
+          if (turn.status === "completed") finish();
+          else fail(new Error(`Codex turu tamamlanmadı: ${String(turn.status)}`));
+        }
+      },
+      onRequest: async (method, params, id) => {
+        if (method === "item/permissions/requestApproval") return { permissions: {}, scope: "turn" };
+        if (!["item/commandExecution/requestApproval", "item/fileChange/requestApproval"].includes(method)) throw new Error("Desteklenmeyen sunucu isteği");
+        if (!isScoped(params) || !input.requestPermission || params.additionalPermissions || params.networkApprovalContext) return { decision: "decline" };
+        let description: string, kind: "command" | "file";
+        if (method === "item/commandExecution/requestApproval") {
+          if (typeof params.command !== "string" || typeof params.cwd !== "string" || !within(params.cwd)) return { decision: "decline" };
+          kind = "command";
+          description = `${params.command}\nÇalışma dizini: ${params.cwd}`;
+        } else {
+          const paths = typeof params.itemId === "string" ? files.get(params.itemId) : undefined;
+          // grantRoot can authorize a session-wide write scope; v1 only grants once.
+          if (!paths?.length || params.grantRoot != null
+            || paths.some((path) => !within(path) || !input.task.allowedPaths.some((pattern) => matchesGlob(relative(input.workspaceRoot, resolve(input.workspaceRoot, path)).replace(/\\/g, "/"), pattern.replace(/\\/g, "/"))))) return { decision: "decline" };
+          kind = "file"; description = `Dosya değişiklikleri:\n${paths.join("\n")}`;
+        }
+        if (typeof params.reason === "string") description += `\nGerekçe: ${params.reason}`;
+        if (Array.isArray(params.availableDecisions) && !params.availableDecisions.includes("accept")) return { decision: "decline" };
+        const decision = await input.requestPermission({ provider: "codex", sessionId: threadId!,
+          nativeRequestId: JSON.stringify([turnId, id]), kind, description });
+        return { decision: decision === "allow_once" && !input.signal?.aborted ? "accept" : "decline" };
+      },
+    });
+    try {
+      await client.request("initialize", { clientInfo: { name: "agentmesh", title: "AgentMesh IDE", version: "0.1.0" } });
+      client.notify("initialized");
+      const params: RpcRecord = { cwd: input.workspaceRoot, approvalPolicy: "on-request", sandbox: "workspaceWrite",
+        approvalsReviewer: "user", ...(this.options.model ? { model: this.options.model } : {}) };
+      if (input.sessionId) params.threadId = input.sessionId;
+      const thread = await client.request(input.sessionId ? "thread/resume" : "thread/start", params);
+      threadId = typeof record(thread.thread).id === "string" ? record(thread.thread).id as string : undefined;
+      if (!threadId) throw new Error("Codex thread kimliği dönmedi");
+      if (input.sessionId && threadId !== input.sessionId) throw new Error("Codex resume farklı thread döndürdü");
+      const started = await client.request("turn/start", { threadId, input: [{ type: "text", text: buildPrompt(input) }],
+        cwd: input.workspaceRoot, approvalPolicy: "on-request", approvalsReviewer: "user",
+        sandboxPolicy: { type: "workspaceWrite", writableRoots: [input.workspaceRoot], networkAccess: false } });
+      const returnedId = record(started.turn).id;
+      if (typeof returnedId !== "string" || (turnId && turnId !== returnedId)) throw new Error("Codex turn kimliği eşleşmedi");
+      turnId = returnedId;
+      await completion;
+      if (!summary.trim()) throw new Error("Codex turunda ajan sonucu bulunamadı");
+      return { sessionId: threadId, summary: summary.trim() };
+    } finally { await client.close(); }
+  }
+}

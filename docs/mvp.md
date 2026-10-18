@@ -26,6 +26,8 @@
 - [x] CLI stdout/stderr olaylarını canlı abonelere aktarma; `AbortSignal` / `Ctrl+C` iptali ve kalıcı `cancelled` durumu.
 - [x] Hata/iptal sonrası görev için `--retry TASK` komutuyla açıkça yeniden kuyruğa alma.
 - [ ] CLI izin talepleri için etkileşimli onay köprüsü; tasarım docs/permissions.md içinde, çift yönlü transport açık.
+  - [x] Codex App Server, kapsamlı izin kuyruğu, masaüstü karar paneli ve sahte süreç/gerçek Electron testleri.
+  - [ ] OpenCode Server izinleri ve gerçek hesaplı model/araç smoke doğrulaması.
 - [x] Filtrelenmiş ve sınırlı CLI tanılama çıktısı; serbest metin içermeyen güvenli destek raporu, masaüstünde kalıcı olay geçmişi.
 - [ ] Codex/OpenCode canlı model oturumlarının uçtan uca sınanması.
 - [ ] Ajan bağlantı durumunu/eksik kimlik doğrulamayı gösterme; gerçek ajanın yazma izinleri.
@@ -37,6 +39,8 @@
 - [x] Config ile proje seçimi, görev worktree dosya ağacı ve kapsam/digest kontrollü Monaco editör.
 - [ ] Terminal sekmesi / PTY yaşam döngüsü.
 - [ ] Agent Center (ajan seçme, role bağlama, bağlantı sağlığı).
+  - [x] Config'teki ajanların model/rol/transport/yetenek görünümü; Codex modelsiz hesap kaydı kontrolü ve OpenCode sürüm kontrolü.
+  - [ ] UI'dan ajan ekleme/ayar düzenleme ve OpenCode Server auth kontrolü.
 - [x] Task Board (görev oluşturma, bağımlılık çizimi, kalıcı paralellik, durum, iptal/tekrar dene, son 200 olay).
 - [x] Shared Context ve ajan mesajları için kaynak görevleri gösteren masaüstü görünümü; çalışma sırasında canlı ajan teslimi ayrıca CORE-009.
 - [ ] Diff/test önizleme; onaylı merge.

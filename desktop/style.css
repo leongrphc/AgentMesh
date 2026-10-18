@@ -77,3 +77,23 @@
 .dependency-options small { display: block; font-size: 10px; margin-top: 4px; }
 .history-filter { display: flex; align-items: center; gap: 6px; font-size: 10px; color: var(--muted); }
 .history-filter input { accent-color: var(--teal); }
+.permission-panel { margin-bottom: 20px; border: 1px solid #927d55; background: #30312b; border-radius: 7px; padding: 18px; }
+.permission-panel>h2 { color: var(--gold); margin-bottom: 16px; }
+.permission-panel article + article { margin-top: 18px; border-top: 1px solid #665d45; padding-top: 18px; }
+.permission-title { display: flex; gap: 15px; align-items: center; font-size: 12px; }
+.permission-title span { font-size: 10px; color: var(--gold); }
+.permission-panel pre { background: #15232e; padding: 14px; border-radius: 4px; font: 12px/1.7 Consolas, monospace; white-space: pre-wrap; overflow-wrap: anywhere; max-height: 220px; overflow: auto; }
+.permission-actions { display: flex; gap: 9px; align-items: center; font-size: 11px; }
+.permission-actions small { flex: 1; font-size: 10px; line-height: 1.6; }
+.agent-center { max-width: 780px; }
+.agent-center-intro { font-size: 12px; line-height: 1.8; color: var(--muted); margin-bottom: 22px; }
+.agent-card { border: 1px solid var(--line); border-radius: 6px; padding: 17px; margin-bottom: 15px; }
+.agent-card-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.agent-card-header h3 { margin: 0; font-size: 14px; }
+.agent-card dl { grid-template-columns: 100px minmax(0,1fr); margin: 17px 0; }
+.agent-card p { font-size: 11px; line-height: 1.8; color: #bccbd6; margin-bottom: 10px; }
+.agent-card small { font-size: 10px; }
+.health-status { font-size: 10px; padding: 5px 8px; border-radius: 4px; background: #75899a22; color: var(--muted); }
+.health-status.configured { background: #78d2c615; color: var(--teal); }
+.health-status.needs_login { background: #dfbe8515; color: var(--gold); }
+.health-status.unavailable { background: #f0a9a315; color: #f0a9a3; }

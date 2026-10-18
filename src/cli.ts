@@ -4,8 +4,7 @@ import { dirname, isAbsolute, join, resolve } from "node:path";
 import { SqliteJournal } from "./core/sqlite-journal.js";
 import { Orchestrator } from "./core/orchestrator.js";
 import { WorktreeManager } from "./core/worktrees.js";
-import { CodexCliAdapter } from "./adapters/codex-cli.js";
-import { OpenCodeCliAdapter } from "./adapters/opencode-cli.js";
+import { configuredAdapter } from "./adapters/registry.js";
 import { validate, orderTasks, type Config } from "./core/config.js";
 import { diagnosticReport } from "./core/diagnostics.js";
 import { safeLog } from "./core/safe-log.js";
@@ -30,6 +29,9 @@ async function main(): Promise<void> {
   const configFile = resolve(configArg);
   const config = JSON.parse(readFileSync(configFile, "utf8")) as Config;
   validate(config);
+  if (executing && config.agents.some((agent) => agent.transport === "app-server")) {
+    throw new Error("App Server izin kararları için bu config'i masaüstü uygulamasında açın; CLI yalnızca exec transport çalıştırır");
+  }
   const repoPath = isAbsolute(config.repoPath)
     ? realpathSync(config.repoPath) : realpathSync(resolve(dirname(configFile), config.repoPath));
   if (!executing && !reviewing && !approving && !retrying && !diagnostics) {
@@ -60,9 +62,7 @@ async function main(): Promise<void> {
       console.log(JSON.stringify(notice));
     });
     for (const agent of config.agents) {
-      engine.registerAgent(agent.provider === "codex"
-        ? new CodexCliAdapter(agent.id, { model: agent.model })
-        : new OpenCodeCliAdapter(agent.id, { model: agent.model }));
+      engine.registerAgent(configuredAdapter(agent));
     }
     let existing;
     try { existing = engine.snapshot(config.projectId); }

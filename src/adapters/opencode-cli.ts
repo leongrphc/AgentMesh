@@ -3,7 +3,7 @@ import { join } from "node:path";
 import type { AgentAdapter, AgentExecution, AgentResult } from "../core/contracts.js";
 import { buildPrompt, parseAgentEvents, runJsonlProcess, type ProcessRunner } from "./cli-process.js";
 
-function defaultOpenCodeCommand(): string {
+export function defaultOpenCodeCommand(): string {
   if (process.platform !== "win32") return "opencode";
   const installed = join(process.env.APPDATA ?? "", "npm", "node_modules", "opencode-ai", "bin", "opencode.exe");
   return existsSync(installed) ? installed : "opencode.exe";

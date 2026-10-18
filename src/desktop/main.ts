@@ -73,6 +73,15 @@ async function createWindow() {
       })`);
       await window.webContents.executeJavaScript(`document.querySelector('[data-testid="start"]').click()`);
       await window.webContents.executeJavaScript(`new Promise((resolve, reject) => {
+        const timeout = setTimeout(() => reject(new Error('İzin paneli açılmadı')), 10000);
+        const check = setInterval(() => {
+          const deny = [...document.querySelectorAll('.permission-panel button')].find((button) => button.textContent === 'Reddet');
+          if (deny) { clearInterval(check); clearTimeout(timeout); resolve(true); }
+        }, 50);
+      })`);
+      writeFileSync(resolve("dist", "desktop-permission.png"), (await window.capturePage()).toPNG());
+      await window.webContents.executeJavaScript(`[...document.querySelectorAll('.permission-panel button')].find((button) => button.textContent === 'Reddet').click()`);
+      await window.webContents.executeJavaScript(`new Promise((resolve, reject) => {
         const timeout = setTimeout(() => reject(new Error('Demo ekranı tamamlanmadı')), 15000);
         const check = setInterval(() => { if (document.querySelectorAll('.task-row .status.completed').length === 4
           && document.querySelector('[data-testid="start"]').textContent.includes('Ajanları başlat')) {
@@ -114,6 +123,22 @@ async function createWindow() {
       writeFileSync(join(root, "desktop-smoke.png"), (await window.capturePage()).toPNG());
       await window.webContents.executeJavaScript(`document.querySelector('.file-workspace').scrollIntoView()`);
       writeFileSync(join(root, "desktop-editor.png"), (await window.capturePage()).toPNG());
+      await window.webContents.executeJavaScript(`document.querySelector('[data-testid="agent-center"]').click()`);
+      await window.webContents.executeJavaScript(`new Promise((resolve, reject) => {
+        const timeout = setTimeout(() => reject(new Error('Ajan merkezi açılmadı')), 5000);
+        const check = setInterval(() => {
+          const button = document.querySelector('[data-testid="check-agents"]');
+          if (button) { button.click(); clearInterval(check); clearTimeout(timeout); resolve(true); }
+        }, 50);
+      })`);
+      await window.webContents.executeJavaScript(`new Promise((resolve, reject) => {
+        const timeout = setTimeout(() => reject(new Error('Ajan bağlantı sonucu gösterilmedi')), 5000);
+        const check = setInterval(() => { if (document.querySelectorAll('.health-status.configured').length === 4) {
+          clearInterval(check); clearTimeout(timeout); resolve(true);
+        } }, 50);
+      })`);
+      writeFileSync(join(root, "desktop-agents.png"), (await window.capturePage()).toPNG());
+      await window.webContents.executeJavaScript(`document.querySelector('[aria-label="Ajan merkezini kapat"]').click()`);
       console.log("Desktop smoke başarılı: sandbox, preload, React ve demo görevleri doğrulandı");
       app.quit();
     } catch (error) {
@@ -147,6 +172,7 @@ app.whenReady().then(async () => {
     });
   }
   handle("mesh:state", () => service.state());
+  handle("mesh:check-agents", () => service.checkAgents());
   handle("mesh:demo", () => service.openDemo());
   handle("mesh:open", async () => {
     if (service.state().busy) throw new Error("Proje açmadan önce çalışmayı durdurun");
@@ -204,6 +230,19 @@ app.whenReady().then(async () => {
   handle("mesh:parallelism", (value) => {
     if (typeof value !== "number") throw new Error("Geçersiz paralellik");
     service.setParallelism(value);
+  });
+  handle("mesh:permission", async (requestId, executionId, digest, decision) => {
+    if ([requestId, executionId, digest].some((value) => typeof value !== "string") || !["allow_once", "deny"].includes(String(decision))) throw new Error("Geçersiz izin kararı");
+    const request = service.state().permissions.find((item) => item.id === requestId && item.executionId === executionId && item.digest === digest);
+    if (!request) throw new Error("İzin isteği artık geçerli değil");
+    if (decision === "allow_once") {
+      const result = await dialog.showMessageBox(window!, { type: "question", title: "Ajan izni",
+        message: `${request.taskId}: bu işleme bir kez izin verilsin mi?`,
+        detail: `${request.description}\n\nHassas değerler maskelenmiş olabilir. Kalıcı veya oturum genelinde izin verilmez.`,
+        buttons: ["Vazgeç", "Bir kez izin ver"], defaultId: 0, cancelId: 0 });
+      if (result.response !== 1) return;
+    }
+    service.decidePermission(requestId as string, executionId as string, digest as string, decision as "allow_once" | "deny");
   });
   let updateTimer: ReturnType<typeof setTimeout> | undefined;
   service.subscribe(() => {

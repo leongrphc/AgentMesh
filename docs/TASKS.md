@@ -35,15 +35,15 @@ Codex, OpenCode, Claude, Antigravity ve diğer API modellerini **tek IDE içinde
 - [x] JSONL stdout/stderr ve journal olaylarını canlı `subscribe()` abonelerine iletme; CLI'da `--stream`.
 - [x] `AbortSignal`, `Ctrl+C`, kalıcı `cancelled`, geç gelen çıktının görev sonucunu tamamlamasını engelleme.
 - [x] Başarısız/iptal edilmiş/engellenmiş görevi `--retry TASK` ile açıkça yeniden kuyruğa alma.
-- [x] Mock ve yerel subprocess/Git worktree testleri; son başarılı doğrulama **22/22 test**, `npm run typecheck`, desktop build ve gerçek Electron/Monaco smoke başarılı.
+- [x] Mock ve yerel subprocess/Git worktree testleri; son başarılı doğrulama **32/32 test**, `npm run typecheck`, desktop build ve gerçek Electron/Monaco/izin paneli smoke başarılı.
 
 ## Açık görevler — öncelik sırasıyla
 
 ### P0 — Öncelikli işler
 
-- [ ] **CORE-004 / İzin köprüsü:** Codex/OpenCode adaptörlerindeki desteklenen izin isteme biçimlerini araştır, yetkileri normalize eden bir `permission.requested` → kullanıcı kararı → sonuç protokolü tasarla. Otomatik yetki yükseltme olmasın. Araştırma ve protokol taslağı: [permissions.md](permissions.md). Çift yönlü transport uygulaması ve testler henüz açık.
+- [ ] **CORE-004 / İzin köprüsü:** Normalize izin protokolü ve Codex App Server uygulandı; OpenCode Server kısmı açık. Otomatik yetki yükseltme yok. Davranış ve doğrulama: [permissions.md](permissions.md).
   - [x] Çalıştırma/proje/digest kapsamlı izin kuyruğu; tek kullanımlık karar, 120 saniye timeout, iptal/kopma/restart reddi, komut metni saklamayan audit olayları. Mevcut tek yönlü CLI'ler interaktif izin desteğini false bildirir.
-  - [ ] Codex çift yönlü App Server transport, masaüstü karar paneli ve süreç protokol testleri.
+  - [x] Codex çift yönlü App Server transport, masaüstü karar paneli ve süreç protokol testleri. Yanlış thread/turn, session grant, ek izin, iptal/kopma ve bozuk/büyük RPC mesajı reddi testleri; gerçek Electron demo izin reddi smoke testi.
   - [ ] OpenCode Server sürüm/şema kontrolü ve izin köprüsü; gerçek hesapla smoke doğrulaması ayrıca CORE-008.
 - [x] **CORE-005 / Güvenli log:** Ham stdout/stderr filtreleme, çıktı sınırları ve ayrı görüntüleme/kayıt politikaları. [Gizlilik politikası](log-privacy.md); filtre bilinen sır ve e-posta biçimlerini tanır.
   - [x] Orkestratör canlı çıktı sınırında anahtar/token/e-posta maskeleme, görüntüleme (8192 karakter) ve kalıcı hata (2048 karakter) politikaları; sızıntı/kalıcılık testleri.
@@ -52,12 +52,15 @@ Codex, OpenCode, Claude, Antigravity ve diğer API modellerini **tek IDE içinde
 - [x] **CORE-006 / Desktop iskeleti:** Electron main + sandbox preload / doğrulanan IPC + React/Vite renderer; nodeIntegration kapalı, contextIsolation açık; snapshot ve olay aboneliği için dar API, özel yerel protocol ve CSP. `npm run desktop`, `npm run desktop:smoke`.
 - [x] **CORE-007 / İlk arayüz:** Config dosyasıyla proje seçimi, görev listesi/detayı, ajan durumu, canlı olay paneli. Başlat/iptal/yeniden kuyruğa al backend'e bağlı. Varsayılan kalıcı mock demo, gerçek CLI çalıştırma için uygulama içinde açık başlatma kararı.
 - [ ] **CORE-008 / Gerçek CLI smoke testleri:** Kimliği doğrulanmış Codex ve OpenCode ile küçük, ayrı ve güvenli test reposunda uçtan uca çalışmayı onay ve maliyet sınırlarına dikkat ederek doğrula; session/resume ve izin davranışlarını kaydet. Bu testler **henüz yapılmadı**.
+  - [x] Modelsiz yerel bağlantı kontrolü: Codex 0.159.2 App Server initialize/account-read ve OpenCode 1.19.3 sürümü doğrulandı. Hesap kaydı kontrolü model erişimi veya kota testi değildir.
 
 ### P1 — IDE'nin kullanılabilir hale gelmesi
 
 - [x] **UI-001:** Klasör bazlı dosya ağacı ve yerel Monaco editör; seçili görevin worktree'si, henüz worktree yoksa salt okunur proje kökü. Kaydetme yalnızca durdurulmuş görev worktree'sinde, allowedPaths ve içerik digest kontrolüyle. UTF-8/1 MiB sınırı, path traversal/symlink engeli, kaydedilmemiş değişiklik koruması ve gerçek Electron dosya açma smoke testi.
 - [ ] **UI-002:** Terminal sekmeleri (PTY) ve süreç yaşam döngüsü.
 - [ ] **UI-003:** Agent Center: provider, CLI/SDK/API bağlantısı, model/rol, bağlantı sağlığı ve giriş eksikliği.
+  - [x] Config'teki CLI ajanları için provider/transport/model/rol/izin yeteneği görünümü, açık bağlantı kontrolü, Codex hesap kaydı/giriş gerekliliği, OpenCode sürümü; model veya token refresh çağrısı yok. Sağlık sonucu kimlik/token içermez.
+  - [ ] UI'dan ajan ekleme/model/rol ayarı, SDK/API bağlantıları ve OpenCode Server üzerinden güvenilir auth durumu.
 - [x] **UI-004:** Task Board: görev oluşturma, bağımlılık çizimi (100 göreve kadar SVG; büyük projelerde liste), kalıcı 1–8 paralellik limiti, durum, iptal, tekrar dene, son 200 olay ve seçili görev filtresi. Oluşturulan görevler/paralellik SQLite replay ile korunur; gerçek Electron form smoke testi eklendi.
 - [x] **UI-005:** Shared Context ve ajan mesajlarını kaynak görevleriyle görünür kılma; masaüstü sekmeleri.
 - [ ] **UI-006:** Diff/test önizleme, SHA-256 onayı, merge conflict çözme/yeniden deneme ekranı.
@@ -85,7 +88,7 @@ Codex, OpenCode, Claude, Antigravity ve diğer API modellerini **tek IDE içinde
 
 1. `D:\WebGpt` içinde `git status --short` ve `git log -5 --oneline` ile durumu kontrol et.
 2. `npm install` (gerekiyorsa), ardından `npm run typecheck` ve `npm test` çalıştır.
-3. **CORE-004** için [permissions.md](permissions.md) taslağından çift yönlü transport ve izin yaşam döngüsüne devam et. Mevcut tek yönlü CLI adaptörlerini etkileşimli izin destekliyormuş gibi göstermeme sınırını koru.
+3. **CORE-004** için [permissions.md](permissions.md) üzerinden OpenCode Server şema/izin bağlantısına devam et. Codex App Server kuyruğu ve masaüstü karar paneli var; varsayılan exec adaptörleri interaktif izin desteklemez.
 4. Masaüstü, güvenli log, Monaco ve Task Board tamamlandı. Sırada izin köprüsü, terminal (UI-002), sağlayıcı sağlığı (UI-003), config uyumu (CORE-013) ve UI-006 çakışma çözümünün kalan kısmı var.
 5. **Her tamamlanan geliştirmeyi ayrı Git commit'iyle kaydet.** Commit'ten önce ilgili testleri çalıştır; `docs/TASKS.md` kutularını güncelle. Kullanıcı istemedikçe otomatik push/deploy/ana dal dışı entegrasyon merge'i yapma.
 
@@ -122,7 +125,7 @@ npm run live -- --config agentmesh.config.example.json
 - Grafik masaüstü kabuğu, Monaco editör ve Task Board var; terminal henüz yok. Editör mevcut dosyaları düzenler; yeni dosya/klasör oluşturma ve dosya izleyicisi henüz yok.
 - Codex/OpenCode CLI komutları ve sahte süreç akışları test edildi; gerçek ücretli/oturum açılmış model çalıştırması doğrulanmadı.
 - OpenCode için OS seviyesinde izolasyon kanıtlanmadı; mevcut `allowedPaths` denetimi işlem sonrasındadır.
-- CLI izin/araç onayı köprüsü, chunk güvenli tam log filtrelemesi, gerçek zamanlı *ajanlar arası* mesaj teslimi eksik.
+- Codex App Server için araç onayı köprüsü var; OpenCode izin köprüsü ve gerçek zamanlı *ajanlar arası* mesaj teslimi eksik. Log filtresi bilinen biçimleri tanır; keyfi kişisel veri için garanti vermez.
 - Git merge conflict otomatik çözülmüyor; korunmuş görev branch'i manuel inceleme gerektiriyor.
 - Claude, Antigravity ve doğrudan API sağlayıcıları hedef kapsamda; henüz çalışan adaptörleri yok.
 - Native provider sohbetleri tek bir birleşik konuşma geçmişi değildir; paylaşılan veri yapılandırılmış görev/context/mesaj kayıtlarıdır.

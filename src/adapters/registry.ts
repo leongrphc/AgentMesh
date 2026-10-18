@@ -1,0 +1,12 @@
+import type { Config } from "../core/config.js";
+import type { AgentAdapter } from "../core/contracts.js";
+import { CodexCliAdapter } from "./codex-cli.js";
+import { CodexAppServerAdapter } from "./codex-app-server.js";
+import { OpenCodeCliAdapter } from "./opencode-cli.js";
+
+export function configuredAdapter(agent: Config["agents"][number]): AgentAdapter {
+  if (agent.provider === "codex") return agent.transport === "app-server"
+    ? new CodexAppServerAdapter(agent.id, { model: agent.model })
+    : new CodexCliAdapter(agent.id, { model: agent.model });
+  return new OpenCodeCliAdapter(agent.id, { model: agent.model });
+}
