@@ -206,7 +206,7 @@ export class Orchestrator {
           kind: "output", projectId: task.projectId, taskId: task.id,
           output: event.channel === "stderr"
             ? { channel: "stderr", data: safeLog(event.data) }
-            : { channel: "stdout", data: { text: safeLog(JSON.stringify(event.data)) } },
+            : { channel: "stdout", data: { text: safeLog(typeof event.data.text === "string" ? event.data.text : JSON.stringify(event.data)) } },
         }),
       });
       if (controller.signal.aborted || this.requireTask(task.id).status === "cancelled") return;

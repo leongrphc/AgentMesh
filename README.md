@@ -2,7 +2,7 @@
 
 Codex, OpenCode, Claude, Antigravity ve API tabanlı modelleri bir orkestratör etrafında birleştirmeyi hedefleyen **hibrit, çoklu ajan IDE** projesi.
 
-> Durum: **MVP yerel backend prototipi**. SQLite tabanlı orkestratör, Git worktree yönetimi, insan onaylı entegrasyon dalı ve Codex/OpenCode CLI adaptörleri var. Varsayılan demo modelleri çağırmaz. Masaüstü arayüz, canlı olay akışı ve diğer sağlayıcılar henüz yoktur.
+> Durum: **MVP masaüstü prototipi**. Electron/React arayüzünde proje seçimi, görevler, ajan durumları, canlı olaylar ve ortak context/mesajlar var. SQLite orkestratör, Git worktree ve Codex/OpenCode CLI adaptörleriyle çalışır. Varsayılan demo modelleri çağırmaz; dosya editörü ve terminal henüz yoktur.
 
 ## Hızlı başlangıç
 
@@ -14,6 +14,18 @@ npm run typecheck
 npm test
 npm run demo
 ```
+
+## Masaüstü uygulama
+
+```powershell
+npm run desktop
+```
+
+Uygulama güvenli mock demo ile açılır. **Ajanları başlat** demo görevlerini bağımlılık sırasıyla çalıştırır. Görev seçerek iptal edebilir veya başarısız/iptal edilmiş görevi yeniden kuyruğa alabilirsiniz. Yeniden kuyruğa alma kendiliğinden çalıştırmaz.
+
+Gerçek proje için **Proje ayarlarını aç** ile `agentmesh.config.json` seçin; aşağıdaki CLI bölümündeki yapılandırma kullanılır. Gerçek çalıştırma ayrıca uygulama içinde açıkça başlatılır. Aynı proje CLI ile ortak SQLite günlüğünü kullanır; iki uygulama aynı anda yazamaz. Demo kayıtları Electron kullanıcı veri klasöründedir.
+
+`npm run desktop:smoke`, görünür pencere açmadan gerçek Electron renderer/preload ve dört görevli mock akışını doğrular; `dist/desktop-smoke.png` üretir. Pencere kapanırken aktif işler iptal edilir ve SQLite kapatılır.
 
 Demo, `.agentmesh/demo.sqlite` dosyasında olay geçmişini saklar. Eski `.agentmesh/demo-events.jsonl` varsa ilk açılışta SQLite'a aktarır. İkinci çalıştırmada tamamlanan görevleri yeniden çalıştırmaz. Sıfırdan denemek için (gerekirse yedekleyerek) iki dosyayı temizleyin:
 

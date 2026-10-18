@@ -4,7 +4,7 @@
 **Çalışma alanı:** `D:\WebGpt`  
 **Dal:** `main`  
 **Karar:** C — Hibrit (CLI/SDK + doğrudan API)  
-**Durum:** Çalışan yerel orkestrasyon MVP'si; masaüstü IDE henüz kurulmadı.
+**Durum:** Yerel orkestrasyon MVP'si ve çalışan Electron/React masaüstü kabuğu; görev yönetimi, ajan durumları, context/mesajlar ve canlı olaylar mevcut.
 
 Bu dosya, yarın kaldığımız yerden devam etmek için tek kontrol listesidir. Mimari detaylar `docs/architecture.md`, protokol `docs/agent-protocol.md`, ilk kapsam `docs/mvp.md` içinde.
 
@@ -35,7 +35,7 @@ Codex, OpenCode, Claude, Antigravity ve diğer API modellerini **tek IDE içinde
 - [x] JSONL stdout/stderr ve journal olaylarını canlı `subscribe()` abonelerine iletme; CLI'da `--stream`.
 - [x] `AbortSignal`, `Ctrl+C`, kalıcı `cancelled`, geç gelen çıktının görev sonucunu tamamlamasını engelleme.
 - [x] Başarısız/iptal edilmiş/engellenmiş görevi `--retry TASK` ile açıkça yeniden kuyruğa alma.
-- [x] Mock ve yerel subprocess/Git worktree testleri; son başarılı doğrulama **18/18 test**, `npm run typecheck` başarılı.
+- [x] Mock ve yerel subprocess/Git worktree testleri; son başarılı doğrulama **20/20 test**, `npm run typecheck`, desktop build ve gerçek Electron smoke başarılı.
 
 ## Açık görevler — öncelik sırasıyla
 
@@ -46,8 +46,8 @@ Codex, OpenCode, Claude, Antigravity ve diğer API modellerini **tek IDE içinde
   - [x] Orkestratör canlı çıktı sınırında anahtar/token/e-posta maskeleme, görüntüleme (8192 karakter) ve kalıcı hata (2048 karakter) politikaları; sızıntı/kalıcılık testleri.
   - [x] Süreç okuyucusunda chunk sınırlarını aşan sırlar için tamponlama, JSONL satır/toplam byte sınırı ve flood testleri. Varsayılan satır 1 MiB, stdout/stderr toplamı 16 MiB; aşımda süreç durur. JSONL canlı, stderr süreç kapanışında filtrelenir. Ham sonuç olayları dahili kalır; mevcut filtre keyfi kişisel veriyi tanıma garantisi vermez.
   - [x] Sonuç özeti/context/mesajlar ve eski journal kayıtları için ayrı gizlilik politikası; `--diagnostics` ile serbest metin içermeyen, salt olay sayıları dışa aktarımı ve kaynak veriyi koruma testi.
-- [ ] **CORE-006 / Desktop iskeleti:** Electron main + güvenli preload / IPC + React/Vite renderer; nodeIntegration kapalı, contextIsolation açık; orkestratör snapshot ve olay aboneliği için dar API.
-- [ ] **CORE-007 / İlk arayüz:** Proje seçimi, görev listesi, ajan durumu ve canlı olay paneli. Başlat/iptal/yeniden dene aksiyonları backend'e bağlansın.
+- [x] **CORE-006 / Desktop iskeleti:** Electron main + sandbox preload / doğrulanan IPC + React/Vite renderer; nodeIntegration kapalı, contextIsolation açık; snapshot ve olay aboneliği için dar API, özel yerel protocol ve CSP. `npm run desktop`, `npm run desktop:smoke`.
+- [x] **CORE-007 / İlk arayüz:** Config dosyasıyla proje seçimi, görev listesi/detayı, ajan durumu, canlı olay paneli. Başlat/iptal/yeniden kuyruğa al backend'e bağlı. Varsayılan kalıcı mock demo, gerçek CLI çalıştırma için uygulama içinde açık başlatma kararı.
 - [ ] **CORE-008 / Gerçek CLI smoke testleri:** Kimliği doğrulanmış Codex ve OpenCode ile küçük, ayrı ve güvenli test reposunda uçtan uca çalışmayı onay ve maliyet sınırlarına dikkat ederek doğrula; session/resume ve izin davranışlarını kaydet. Bu testler **henüz yapılmadı**.
 
 ### P1 — IDE'nin kullanılabilir hale gelmesi
@@ -56,7 +56,7 @@ Codex, OpenCode, Claude, Antigravity ve diğer API modellerini **tek IDE içinde
 - [ ] **UI-002:** Terminal sekmeleri (PTY) ve süreç yaşam döngüsü.
 - [ ] **UI-003:** Agent Center: provider, CLI/SDK/API bağlantısı, model/rol, bağlantı sağlığı ve giriş eksikliği.
 - [ ] **UI-004:** Task Board: görev oluşturma, bağımlılık çizimi, paralellik limiti, durum, iptal, tekrar dene, geçmiş.
-- [ ] **UI-005:** Shared Context ve ajan mesajlarını kaynak görevleriyle görünür kılma.
+- [x] **UI-005:** Shared Context ve ajan mesajlarını kaynak görevleriyle görünür kılma; masaüstü sekmeleri.
 - [ ] **UI-006:** Diff/test önizleme, SHA-256 onayı, merge conflict çözme/yeniden deneme ekranı.
 - [ ] **CORE-009:** Ajan çalışırken gelen mesajların canlı teslimi, inbox cursor ve idempotency.
 - [ ] **CORE-010:** İzinleri çalıştırma **öncesinde** zorlayabilecek süreç/OS sandbox politikası; `allowedPaths` şu an yalnızca çalıştırma sonrasında denetleniyor.
@@ -112,7 +112,7 @@ npm run live -- --config agentmesh.config.example.json
 
 ## Bilinen sınırlar / tamamlandı sanılmaması gerekenler
 
-- Henüz **grafik IDE yok**; ürün şu anda Node/TypeScript backend ve CLI.
+- Grafik masaüstü kabuğu var; dosya editörü, terminal ve tam Task Board henüz yok.
 - Codex/OpenCode CLI komutları ve sahte süreç akışları test edildi; gerçek ücretli/oturum açılmış model çalıştırması doğrulanmadı.
 - OpenCode için OS seviyesinde izolasyon kanıtlanmadı; mevcut `allowedPaths` denetimi işlem sonrasındadır.
 - CLI izin/araç onayı köprüsü, chunk güvenli tam log filtrelemesi, gerçek zamanlı *ajanlar arası* mesaj teslimi eksik.
