@@ -45,9 +45,10 @@ export interface AgentExecution {
   context: Readonly<Record<string, Fact>>;
   inbox: ReadonlyArray<AgentMessage>;
   sessionId?: string;
+  onSession?: (sessionId: string) => void;
   signal?: AbortSignal;
   onOutput?: (output: AgentOutput) => void;
-  requestPermission?: (proposal: PermissionProposal) => Promise<PermissionDecision>;
+  requestPermission?: (proposal: PermissionProposal, signal?: AbortSignal) => Promise<PermissionDecision>;
 }
 
 /** Transient CLI output; consumers must redact secrets before exporting logs. */

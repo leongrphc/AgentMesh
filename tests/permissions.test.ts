@@ -70,3 +70,47 @@ test("restart denies historical pending permissions and preserves interrupted ta
     assert.equal(store.all().filter((event) => event.payload.type === "permission.resolved").length, 1);
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
+
+test("native permission withdrawal denies only that prompt, preserving the running task", async () => {
+  const root = mkdtempSync(join(tmpdir(), "mesh-withdraw-"));
+  try {
+    const store = new Journal(join(root, "events.jsonl"));
+    const engine = new Orchestrator(store);
+    engine.createProject({ id: "p", workspaceRoot: root });
+    engine.registerAgent({ id: "a", provider: "test", connection: "mock", async execute(input) {
+      input.onSession?.("early-session");
+      const native = new AbortController();
+      const decision = input.requestPermission!(proposal, native.signal);
+      native.abort();
+      assert.equal(await decision, "deny");
+      assert.equal(input.signal?.aborted, false);
+      return { summary: "continued safely", sessionId: "early-session" };
+    } });
+    engine.addTask({ id: "t", projectId: "p", agentId: "a", title: "test", instruction: "test", dependsOn: [], allowedPaths: [] });
+    const result = await engine.run("p");
+    assert.equal(result.tasks[0]?.status, "completed");
+    assert.equal(result.tasks[0]?.sessionId, "early-session");
+    assert.equal(engine.pendingPermissions("p").length, 0);
+    assert.equal(store.all().filter((event) => event.payload.type === "task.session.saved").length, 1);
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
+test("early session identity survives a failed execution and is supplied on explicit retry", async () => {
+  const root = mkdtempSync(join(tmpdir(), "mesh-early-session-"));
+  try {
+    const store = new Journal(join(root, "events.jsonl"));
+    const engine = new Orchestrator(store);
+    engine.createProject({ id: "p", workspaceRoot: root });
+    engine.registerAgent({ id: "a", provider: "test", connection: "mock", async execute(input) {
+      input.onSession?.("native-session"); throw new Error("Disconnected");
+    } });
+    engine.addTask({ id: "t", projectId: "p", agentId: "a", title: "test", instruction: "test", dependsOn: [], allowedPaths: [] });
+    assert.equal((await engine.run("p")).tasks[0]?.status, "failed");
+    const restored = new Orchestrator(store);
+    restored.registerAgent({ id: "a", provider: "test", connection: "mock", async execute(input) {
+      assert.equal(input.sessionId, "native-session"); return { summary: "resumed" };
+    } });
+    restored.retryTask("t");
+    assert.equal((await restored.run("p")).tasks[0]?.status, "completed");
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});

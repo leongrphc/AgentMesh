@@ -241,10 +241,17 @@ export class Orchestrator {
         inbox: snapshot.messages.filter((message) => message.to === task.agentId || message.to === "*"),
         sessionId: task.sessionId,
         signal: controller.signal,
-        requestPermission: (proposal) => {
+        onSession: (sessionId) => {
+          if (!controller || controller.signal.aborted || this.controllers.get(task.id) !== controller
+            || this.requireTask(task.id).status !== "running") return;
+          if (typeof sessionId !== "string" || !sessionId || sessionId.length > 256) throw new Error("Geçersiz ajan oturumu");
+          if (this.requireTask(task.id).sessionId !== sessionId) this.emit({ type: "task.session.saved", projectId: task.projectId, taskId: task.id, sessionId });
+        },
+        requestPermission: (proposal, signal) => {
           if (!controller || controller.signal.aborted || this.controllers.get(task.id) !== controller
             || this.requireTask(task.id).status !== "running") return Promise.resolve("deny");
-          return this.permissions.request({ projectId: task.projectId, taskId: task.id, executionId }, proposal, controller.signal);
+          return this.permissions.request({ projectId: task.projectId, taskId: task.id, executionId }, proposal,
+            signal ? AbortSignal.any([controller.signal, signal]) : controller.signal);
         },
         onOutput: (event) => this.notify({
           kind: "output", projectId: task.projectId, taskId: task.id,
@@ -254,7 +261,7 @@ export class Orchestrator {
         }),
       });
       if (controller.signal.aborted || this.requireTask(task.id).status === "cancelled") return;
-      if (output.sessionId) this.emit({
+      if (output.sessionId && this.requireTask(task.id).sessionId !== output.sessionId) this.emit({
         type: "task.session.saved", projectId: task.projectId, taskId: task.id, sessionId: output.sessionId,
       });
       if (adapter.connection !== "mock") {

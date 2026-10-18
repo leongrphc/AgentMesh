@@ -77,6 +77,7 @@ export class CodexAppServerAdapter implements AgentAdapter {
       threadId = typeof record(thread.thread).id === "string" ? record(thread.thread).id as string : undefined;
       if (!threadId) throw new Error("Codex thread kimliği dönmedi");
       if (input.sessionId && threadId !== input.sessionId) throw new Error("Codex resume farklı thread döndürdü");
+      input.onSession?.(threadId);
       const started = await client.request("turn/start", { threadId, input: [{ type: "text", text: buildPrompt(input) }],
         cwd: input.workspaceRoot, approvalPolicy: "on-request", approvalsReviewer: "user",
         sandboxPolicy: { type: "workspaceWrite", writableRoots: [input.workspaceRoot], networkAccess: false } });
