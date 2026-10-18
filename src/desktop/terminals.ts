@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { fork, type ChildProcess } from "node:child_process";
 import { join } from "node:path";
+import { defaultOpenCodeCommand } from "../adapters/opencode-cli.js";
 
 export interface TerminalInfo { id: string; taskId: string; cwd: string; exitCode?: number }
 export interface TerminalOutput { data: string; offset: number; truncated: boolean; exitCode?: number }
@@ -12,7 +13,7 @@ export class Terminals {
   private readonly sessions = new Map<string, Session>();
   get count() { return this.sessions.size; }
   get active() { return [...this.sessions.values()].some((s) => s.info.exitCode === undefined); }
-  async open(taskId: string, cwd: string, cols: number, rows: number): Promise<TerminalInfo> {
+  async open(taskId: string, cwd: string, cols: number, rows: number, nativeOpenCode?: { model?: string }): Promise<TerminalInfo> {
     this.dimensions(cols, rows);
     if (this.sessions.size >= 4) throw new Error("En fazla dört terminal açılabilir");
     const child = fork(join(import.meta.dirname ?? __dirname, "terminal-host.cjs"), [], {
@@ -41,7 +42,7 @@ export class Terminals {
           if (error) reject(error); else resolve();
         };
         child.on("message", message); child.once("exit", exit); child.once("error", finish);
-        child.send({ type: "start", cwd, cols, rows }, (error) => { if (error) finish(error); });
+        child.send({ type: "start", cwd, cols, rows, ...(nativeOpenCode ? { executable: defaultOpenCodeCommand(), args: [...(nativeOpenCode.model ? ["--model", nativeOpenCode.model] : []), cwd] } : {}) }, (error) => { if (error) finish(error); });
       });
       return { ...s.info };
     } catch (error) { child.kill(); await done; this.sessions.delete(s.info.id); throw error; }

@@ -6,18 +6,22 @@ import { CodexAppServerAdapter } from "./codex-app-server.js";
 import { OpenCodeServerClient } from "./opencode-server-client.js";
 import { record } from "./jsonl-rpc.js";
 import { safeLog } from "../core/safe-log.js";
+import { sendOpenCodeCliMessage } from "./opencode-message.js";
+import type { ProcessRunner } from "./cli-process.js";
 
-export interface ProviderMessageInput { provider: "codex" | "opencode"; message: string; model?: string }
-export interface ProviderMessageResult { provider: string; model?: string; response: string; elapsedMs: number; checkedAt: string }
+export interface ProviderMessageInput { provider: "codex" | "opencode"; message: string; model?: string; transport?: "exec" | "server" }
+export interface ProviderMessageResult { provider: string; model?: string; transport?: "exec" | "server"; response: string; elapsedMs: number; checkedAt: string }
 interface MessageDependencies {
   codex?: (input: ProviderMessageInput, cwd: string, signal: AbortSignal) => Promise<string>;
   openCode?: (cwd: string, signal: AbortSignal) => Promise<Pick<OpenCodeServerClient, "request" | "close">>;
+  cliRunner?: ProcessRunner;
 }
 
 export function validateProviderMessage(input: ProviderMessageInput) {
   if (!input || !["codex", "opencode"].includes(input.provider) || typeof input.message !== "string" || !input.message.trim() || input.message.length > 2000
     || (input.model !== undefined && (typeof input.model !== "string" || input.model.length > 200 || !input.model.trim()))) throw new Error("Sağlayıcı ve 1–2000 karakterlik mesaj gerekli");
   if (input.provider === "opencode" && input.model && !/^[^/\s]+\/[^\s]+$/.test(input.model)) throw new Error("OpenCode modeli provider/model biçiminde olmalı");
+  if (input.transport !== undefined && (input.provider !== "opencode" || !["exec", "server"].includes(input.transport))) throw new Error("Geçersiz mesaj bağlantısı");
 }
 
 /** One independent model request, in an owned temporary directory, outside the project. */
@@ -38,6 +42,8 @@ export async function sendProviderMessage(input: ProviderMessageInput, signal?: 
         });
         response = result.summary;
       }
+    } else if (input.transport !== "server") {
+      response = await sendOpenCodeCliMessage(input, cwd, bounded, dependencies.cliRunner);
     } else {
       const server = dependencies.openCode ? await dependencies.openCode(cwd, bounded) : await OpenCodeServerClient.start({ cwd, signal: bounded, timeoutMs: 90000 });
       let sessionId: string | undefined;
@@ -76,7 +82,7 @@ export async function sendProviderMessage(input: ProviderMessageInput, signal?: 
       }
     }
     if (!response.trim()) throw new Error("Sağlayıcı boş yanıt döndürdü");
-    return { provider: input.provider, model: input.model, response: safeLog(response), elapsedMs: Date.now() - started, checkedAt: new Date().toISOString() };
+    return { provider: input.provider, model: input.model, ...(input.provider === "opencode" ? { transport: input.transport ?? "exec" } : {}), response: safeLog(response), elapsedMs: Date.now() - started, checkedAt: new Date().toISOString() };
   } catch (error) {
     if (bounded.aborted) throw new Error(signal?.aborted ? "Mesaj testi iptal edildi" : "Mesaj testi 90 saniyede tamamlanmadı");
     throw new Error(safeLog(error instanceof Error ? error.message : String(error), "storage"));

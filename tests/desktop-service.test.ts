@@ -78,11 +78,13 @@ test("desktop message tests serialize, cancel before model access and do not per
   try {
     service.openDemo();
     const before = service.state().events.length;
+    await assert.rejects(service.openProviderTerminal("invalid-model"), /provider\/model/);
     const pending = service.testProvider({ provider: "codex", message: "private greeting" });
     assert.equal(service.state().testingProvider, "codex");
     assert.throws(() => service.testProvider({ provider: "codex", message: "duplicate" }), /aktif işlemi/);
     assert.throws(() => service.openDemo(), /mesaj testini/);
     assert.throws(() => service.start(), /mesaj testini/);
+    await assert.rejects(service.openProviderTerminal("opencode/space-bunny-free"), /aktif işlemi/);
     service.cancelProviderTest();
     await assert.rejects(pending, /iptal/);
     assert.equal(service.state().testingProvider, undefined);

@@ -2,6 +2,7 @@ import { contextBridge, ipcRenderer } from "electron";
 import type { DesktopAPI, DesktopState } from "./contracts.js";
 
 const api: DesktopAPI = {
+  openProviderTerminal: (model) => ipcRenderer.invoke("mesh:provider-terminal", model),
   testProvider: (input) => ipcRenderer.invoke("mesh:test-provider", input),
   cancelProviderTest: () => ipcRenderer.invoke("mesh:cancel-provider-test"),
   terminalOpen: (taskId, cols, rows) => ipcRenderer.invoke("mesh:terminal-open", taskId, cols, rows),

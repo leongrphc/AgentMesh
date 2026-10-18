@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { dirname, resolve, join, matchesGlob } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { SqliteJournal } from "../core/sqlite-journal.js";
@@ -18,6 +19,24 @@ import { sendProviderMessage, validateProviderMessage, type ProviderMessageInput
 
 export class DesktopService {
   readonly terminals = new Terminals();
+  private readonly providerTerminalRoots = new Map<string, string>();
+
+  async openProviderTerminal(model?: string) {
+    if (this.running || this.healthAbort || this.messageAbort) throw new Error("Önce aktif işlemi bitirin");
+    validateProviderMessage({ provider: "opencode", message: "native terminal", model });
+    const root = mkdtempSync(join(tmpdir(), "agentmesh-opencode-tui-"));
+    try {
+      const info = await this.terminals.open("OpenCode", root, 100, 28, { model });
+      this.providerTerminalRoots.set(info.id, root);
+      return info;
+    } catch (error) { rmSync(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }); throw error; }
+  }
+
+  async closeTerminal(id: string) {
+    await this.terminals.close(id);
+    const root = this.providerTerminalRoots.get(id);
+    if (root) { rmSync(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }); this.providerTerminalRoots.delete(id); }
+  }
 
   openTerminal(taskId: string, cols: number, rows: number) {
     const { root, writable } = this.workspace(taskId);
@@ -291,6 +310,8 @@ export class DesktopService {
   async close() {
     this.messageAbort?.abort(); await this.messageRun?.catch(() => {});
     await this.terminals.closeAll();
+    for (const root of this.providerTerminalRoots.values()) rmSync(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+    this.providerTerminalRoots.clear();
     this.healthAbort?.abort(); this.healthAbort = undefined; this.abort?.abort(); await this.running;
     this.journal?.close(); this.journal = undefined; this.journalPath = undefined;
   }

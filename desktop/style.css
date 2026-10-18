@@ -115,3 +115,11 @@
 .provider-test-result { margin-top: 18px; border-top: 1px solid var(--line); padding-top: 14px; }
 .provider-test-result p { margin-top: 12px; font-size: 12px; }
 .provider-test-result pre { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 260px; overflow: auto; font: 13px/1.7 Consolas,monospace; color: var(--teal); }
+.provider-tui { margin-top: 16px; }
+.provider-tui .terminal-screen { height: 460px; margin-top: 10px; }
+.agent-center.native-mode { max-width: 1180px; width: 96vw; }
+.native-mode .agent-center-intro,.native-mode .provider-test>form,.native-mode .provider-test>p,.native-mode .agent-card,.native-mode .review-actions { display: none; }
+.native-mode .review-content { max-height: 76vh; padding: 12px; }
+.native-mode .provider-test { margin: 0; padding: 12px; }
+.native-mode .provider-test>h3 { margin-top: 0; }
+.native-mode .terminal-screen { height: min(58vh, 540px); }

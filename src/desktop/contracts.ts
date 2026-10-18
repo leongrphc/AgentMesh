@@ -31,6 +31,7 @@ export interface DesktopState {
 }
 
 export interface DesktopAPI {
+  openProviderTerminal(model?: string): Promise<TerminalInfo>;
   testProvider(input: ProviderMessageInput): Promise<ProviderMessageResult>;
   cancelProviderTest(): Promise<void>;
   terminalOpen(taskId: string, cols: number, rows: number): Promise<TerminalInfo>;

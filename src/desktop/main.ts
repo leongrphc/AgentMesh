@@ -10,7 +10,8 @@ import type { ProviderMessageInput } from "../adapters/provider-message.js";
 protocol.registerSchemesAsPrivileged([{ scheme: "agentmesh", privileges: { standard: true, secure: true, supportFetchAPI: true } }]);
 const origin = "agentmesh://desktop";
 const windowSmoke = process.argv.includes("--window-smoke-test");
-const smoke = process.argv.includes("--smoke-test") || windowSmoke;
+const nativeTuiSmoke = process.argv.includes("--opencode-tui-smoke-test");
+const smoke = process.argv.includes("--smoke-test") || windowSmoke || nativeTuiSmoke;
 if (smoke) {
   const smokeProfile = resolve(".agentmesh", "desktop-smoke", String(process.pid), "electron-profile");
   mkdirSync(smokeProfile, { recursive: true });
@@ -195,6 +196,36 @@ async function createWindow() {
         }
         throw new Error('Mesaj testi IPC veya hata görünümü doğrulanamadı');
       })()`);
+      if (nativeTuiSmoke) {
+        await window.webContents.executeJavaScript(`(async () => {
+          const select = document.querySelector('[aria-label="Test sağlayıcısı"]');
+          select.value = 'opencode'; select.dispatchEvent(new Event('change', {bubbles:true}));
+          await new Promise(r => setTimeout(r, 100));
+          if (document.querySelector('[aria-label="Test modeli"]').value !== 'opencode/space-bunny-free') throw new Error('Free model varsayılanı yanlış');
+          document.querySelector('[data-testid="send-provider-message"]').click();
+          for (let i = 0; i < 600; i++) {
+            const terminal = document.querySelector('[data-native-terminal-id]');
+            if (terminal && document.querySelector('.provider-tui .xterm')) {
+              const output = await window.agentmesh.terminalRead(terminal.dataset.nativeTerminalId, 0);
+              if (output.data.includes('Space Bunny Free') && Number(terminal.querySelector('.terminal-screen').dataset.outputOffset) >= output.data.indexOf('Space Bunny Free') + 16) {
+                terminal.scrollIntoView(); await new Promise(r => setTimeout(r, 600)); return;
+              }
+            }
+            await new Promise(r => setTimeout(r, 100));
+          }
+          throw new Error('Native OpenCode TUI açılmadı');
+        })()`);
+        window.webContents.debugger.attach("1.3");
+        try {
+          const screenshot = await window.webContents.debugger.sendCommand("Page.captureScreenshot", { format: "png" });
+          writeFileSync(join(root, "desktop-opencode-tui.png"), Buffer.from(screenshot.data, "base64"));
+        } finally { window.webContents.debugger.detach(); }
+        await window.webContents.executeJavaScript(`(async () => {
+          document.querySelector('[data-testid="close-native-opencode"]').click();
+          for(let i=0;i<150;i++) { if (!document.querySelector('[data-native-terminal-id]')) return; await new Promise(r=>setTimeout(r,100)); }
+          throw new Error('Native OpenCode kapanmadı');
+        })()`);
+      }
       await window.webContents.executeJavaScript(`document.querySelector('[aria-label="Ajan merkezini kapat"]').click()`);
       console.log("Desktop smoke başarılı: sandbox, preload, Monaco, gerçek PTY ve demo görevleri doğrulandı");
       app.quit();
@@ -229,6 +260,7 @@ app.whenReady().then(async () => {
     });
   }
   handle("mesh:state", () => service.state());
+  handle("mesh:provider-terminal", (model) => service.openProviderTerminal(model as string | undefined));
   handle("mesh:test-provider", (input) => {
     if (smoke) throw new Error("Smoke testinde gerçek model çağrısı kapalı");
     return service.testProvider(input as ProviderMessageInput);
@@ -238,7 +270,7 @@ app.whenReady().then(async () => {
   handle("mesh:terminal-read", (id, offset) => service.terminals.read(id as string, offset as number));
   handle("mesh:terminal-write", (id, data) => service.terminals.write(id as string, data as string));
   handle("mesh:terminal-resize", (id, cols, rows) => service.terminals.resize(id as string, cols as number, rows as number));
-  handle("mesh:terminal-close", (id) => service.terminals.close(id as string));
+  handle("mesh:terminal-close", (id) => service.closeTerminal(id as string));
   handle("mesh:check-agents", () => service.checkAgents());
   handle("mesh:demo", () => service.openDemo());
   handle("mesh:open", async () => {

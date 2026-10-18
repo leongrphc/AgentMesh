@@ -6,6 +6,7 @@ export interface ProcessSpec {
   executable: string;
   args: string[];
   cwd: string;
+  env?: NodeJS.ProcessEnv;
   stdin?: string;
   timeoutMs?: number;
   maxLineBytes?: number;
@@ -31,7 +32,7 @@ export const runJsonlProcess: ProcessRunner = async (spec) => {
     }
   }
   const child = spawn(spec.executable, spec.args, {
-    cwd: spec.cwd, stdio: ["pipe", "pipe", "pipe"], shell: false, windowsHide: true,
+    cwd: spec.cwd, env: spec.env, stdio: ["pipe", "pipe", "pipe"], shell: false, windowsHide: true,
   });
   const events: Record<string, unknown>[] = [];
   let stderr = "";
@@ -113,7 +114,9 @@ export const runJsonlProcess: ProcessRunner = async (spec) => {
   if (parseError) throw parseError;
   if (aborted) throw new Error("CLI işlemi iptal edildi");
   if (timedOut) throw new Error("CLI zaman aşımı");
-  if (exitCode !== 0) throw new Error(`CLI hata kodu ${exitCode}: ${safeLog(stderr || rawOutput, "storage")}`);
+  const eventError = events.filter((event) => event.type === "error").map((event) => nested(nested(event.error, "data"), "message"))
+    .find((message) => typeof message === "string") as string | undefined;
+  if (exitCode !== 0) throw new Error(`CLI hata kodu ${exitCode}: ${safeLog(stderr || eventError || rawOutput, "storage")}`);
   return { events, stderr };
 };
 

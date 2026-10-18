@@ -11,7 +11,7 @@ process.on("message", (message) => {
   try {
     if (message.type === "start" && !pty) {
       const win = process.platform === "win32";
-      pty = spawn(win ? process.env.ComSpec || "cmd.exe" : "/bin/sh", win ? ["/d", "/q"] : [], {
+      pty = spawn(message.executable || (win ? process.env.ComSpec || "cmd.exe" : "/bin/sh"), message.executable ? message.args : win ? ["/d", "/q"] : [], {
         cwd: message.cwd, cols: message.cols, rows: message.rows,
         name: "xterm-256color", env: { ...process.env, ELECTRON_RUN_AS_NODE: undefined, TERM: "xterm-256color" },
       });

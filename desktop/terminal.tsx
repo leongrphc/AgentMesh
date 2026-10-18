@@ -5,7 +5,7 @@ import type { DesktopAPI } from "../src/desktop/contracts.js";
 import type { TerminalInfo } from "../src/desktop/terminals.js";
 import "@xterm/xterm/css/xterm.css";
 
-function TerminalView({ info, api, visible }: { info: TerminalInfo; api: DesktopAPI; visible: boolean }) {
+export function TerminalView({ info, api, visible, autoFocus = false }: { info: TerminalInfo; api: DesktopAPI; visible: boolean; autoFocus?: boolean }) {
   const host = useRef<HTMLDivElement>(null);
   const fitRef = useRef<FitAddon>(undefined);
   const [error, setError] = useState("");
@@ -14,6 +14,7 @@ function TerminalView({ info, api, visible }: { info: TerminalInfo; api: Desktop
       theme: { background: "#121d27", foreground: "#d8e4ee", cursor: "#78d2c6" }, allowProposedApi: false });
     const fit = new FitAddon(); fitRef.current = fit;
     terminal.loadAddon(fit); terminal.open(host.current!);
+    if (autoFocus) terminal.focus();
     let live = true, offset = 0;
     let timer: ReturnType<typeof setTimeout>;
     const fail = (e: unknown) => { if (live) setError(String(e)); };
@@ -34,6 +35,7 @@ function TerminalView({ info, api, visible }: { info: TerminalInfo; api: Desktop
         if (result.truncated) terminal.write("\r\n[Eski çıktı tampon sınırını aştı]\r\n");
         if (result.data) await new Promise<void>((resolve) => terminal.write(result.data, resolve));
         offset = result.offset;
+        if (host.current) host.current.dataset.outputOffset = String(offset);
         if (!live) return;
         if (result.exitCode !== undefined) {
           terminal.write(`\r\n[Süreç sonlandı: ${result.exitCode}]\r\n`);
@@ -43,7 +45,7 @@ function TerminalView({ info, api, visible }: { info: TerminalInfo; api: Desktop
     }
     void poll();
     return () => { live = false; clearTimeout(timer); observer.disconnect(); input.dispose(); resize.dispose(); terminal.dispose(); fitRef.current = undefined; };
-  }, [api, info.id]);
+  }, [api, info.id, autoFocus]);
   useEffect(() => { if (visible) fitRef.current?.fit(); }, [visible]);
   return <div hidden={!visible}><div className="terminal-screen" ref={host} />{error && <p role="alert" className="task-error">{error}</p>}</div>;
 }
