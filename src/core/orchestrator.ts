@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { safeLog } from "./safe-log.js";
 import type {
   AgentAdapter,
   AgentMessage,
@@ -201,7 +202,12 @@ export class Orchestrator {
         inbox: snapshot.messages.filter((message) => message.to === task.agentId || message.to === "*"),
         sessionId: task.sessionId,
         signal: controller.signal,
-        onOutput: (event) => this.notify({ kind: "output", projectId: task.projectId, taskId: task.id, output: event }),
+        onOutput: (event) => this.notify({
+          kind: "output", projectId: task.projectId, taskId: task.id,
+          output: event.channel === "stderr"
+            ? { channel: "stderr", data: safeLog(event.data) }
+            : { channel: "stdout", data: { text: safeLog(JSON.stringify(event.data)) } },
+        }),
       });
       if (controller.signal.aborted || this.requireTask(task.id).status === "cancelled") return;
       if (output.sessionId) this.emit({
@@ -227,7 +233,7 @@ export class Orchestrator {
         type: "task.failed",
         projectId: task.projectId,
         taskId: task.id,
-        error: error instanceof Error ? error.message : String(error),
+        error: safeLog(error instanceof Error ? error.message : String(error), "storage"),
       });
     } finally {
       this.controllers.delete(task.id);
