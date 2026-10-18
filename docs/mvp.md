@@ -38,7 +38,7 @@
 
 - [x] Electron + React temel uygulama; doğrulanan IPC, sandbox ve güvenli preload API.
 - [x] Config ile proje seçimi, görev worktree dosya ağacı ve kapsam/digest kontrollü Monaco editör.
-- [ ] Terminal sekmesi / PTY yaşam döngüsü.
+- [x] Görev worktree'sine bağlı dört PTY terminal sekmesi; boyutlandırma, geçici çıktı ve sahipli yardımcı süreç kapanışı.
 - [ ] Agent Center (ajan seçme, role bağlama, bağlantı sağlığı).
   - [x] Config'teki ajanların model/rol/transport/yetenek görünümü; Codex modelsiz hesap kaydı kontrolü, OpenCode exec sürümü veya Server sağlayıcı bağlantı bildirimi.
   - [ ] UI'dan ajan ekleme/ayar düzenleme; gerçek model erişimi/kota ayrıca CORE-008.
@@ -71,4 +71,4 @@ Bir kullanıcı Windows'ta depoyu seçer. `Codex-manager`, `OpenCode-frontend` v
 
 ## İlk gerçek geliştirme kartı
 
-**Sıradaki işler:** Terminal (UI-002), UI'dan ajan ayarları (UI-003), config uyumu (CORE-013) ve merge conflict ekranı (UI-006). Desktop shell, log filtrelemesi, dosya editörü, Task Board ve Codex/OpenCode Server izin köprüleri tamamlandı. Gerçek hesaplı model/araç smoke testleri CORE-008 altında hâlâ açık. Entegrasyon dalının ana dala alınması ayrıca kullanıcı kararına bağlı kalır.
+**Sıradaki işler:** UI'dan ajan ayarları (UI-003), config uyumu (CORE-013) ve merge conflict ekranı (UI-006). Desktop shell, log filtrelemesi, dosya editörü, PTY terminalleri, Task Board ve Codex/OpenCode Server izin köprüleri tamamlandı. Gerçek hesaplı model/araç smoke testleri CORE-008 altında hâlâ açık. Entegrasyon dalının ana dala alınması ayrıca kullanıcı kararına bağlı kalır.

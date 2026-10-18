@@ -71,6 +71,39 @@ async function createWindow() {
           }
         }, 50);
       })`);
+      await window.webContents.executeJavaScript(`(async () => {
+        async function waitFor(check, label) {
+          for (let i = 0; i < 200; i++) { if (await check()) return; await new Promise(r => setTimeout(r, 50)); }
+          throw new Error(label);
+        }
+        await waitFor(() => document.querySelector('[data-testid="terminal-open"]'), 'Terminal paneli açılmadı');
+        document.querySelector('[data-testid="terminal-open"]').click();
+        await waitFor(() => document.querySelector('[data-terminal-id]') && document.querySelector('.xterm'), 'PTY veya xterm açılmadı');
+        const id = document.querySelector('[data-terminal-id]').dataset.terminalId;
+        await window.agentmesh.terminalResize(id, 105, 28);
+        await window.agentmesh.terminalWrite(id, 'echo DESKTOP_PTY_OK> terminal-smoke.txt\\r');
+        await window.agentmesh.terminalWrite(id, ${JSON.stringify(process.platform === "win32" ? "type terminal-smoke.txt\r" : "cat terminal-smoke.txt\r")});
+        await waitFor(async () => (await window.agentmesh.terminalRead(id, 0)).data.includes('DESKTOP_PTY_OK'), 'PTY çıktısı alınmadı');
+        document.querySelector('.terminal-panel').scrollIntoView();
+        await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+      })()`);
+      const terminalBounds = await window.webContents.executeJavaScript(`(() => {
+        const r = document.querySelector('.terminal-panel').getBoundingClientRect();
+        return { x: r.x + scrollX, y: r.y + scrollY, width: r.width, height: r.height, scale: 1 };
+      })()`);
+      window.webContents.debugger.attach("1.3");
+      try {
+        const screenshot = await window.webContents.debugger.sendCommand("Page.captureScreenshot", { format: "png", captureBeyondViewport: true, clip: terminalBounds });
+        writeFileSync(resolve("dist", "desktop-terminal.png"), Buffer.from(screenshot.data, "base64"));
+      } finally { window.webContents.debugger.detach(); }
+      await window.webContents.executeJavaScript(`(async () => {
+        document.querySelector('[data-testid="terminal-close"]').click();
+        for (let i = 0; i < 200; i++) {
+          if (!document.querySelector('[data-terminal-id]')) return;
+          await new Promise(r => setTimeout(r, 50));
+        }
+        throw new Error('Terminal kapatılamadı');
+      })()`);
       await window.webContents.executeJavaScript(`document.querySelector('[data-testid="start"]').click()`);
       await window.webContents.executeJavaScript(`new Promise((resolve, reject) => {
         const timeout = setTimeout(() => reject(new Error('İzin paneli açılmadı')), 10000);
@@ -139,7 +172,7 @@ async function createWindow() {
       })`);
       writeFileSync(join(root, "desktop-agents.png"), (await window.capturePage()).toPNG());
       await window.webContents.executeJavaScript(`document.querySelector('[aria-label="Ajan merkezini kapat"]').click()`);
-      console.log("Desktop smoke başarılı: sandbox, preload, React ve demo görevleri doğrulandı");
+      console.log("Desktop smoke başarılı: sandbox, preload, Monaco, gerçek PTY ve demo görevleri doğrulandı");
       app.quit();
     } catch (error) {
       console.error(error);
@@ -172,6 +205,11 @@ app.whenReady().then(async () => {
     });
   }
   handle("mesh:state", () => service.state());
+  handle("mesh:terminal-open", (taskId, cols, rows) => service.openTerminal(taskId as string, cols as number, rows as number));
+  handle("mesh:terminal-read", (id, offset) => service.terminals.read(id as string, offset as number));
+  handle("mesh:terminal-write", (id, data) => service.terminals.write(id as string, data as string));
+  handle("mesh:terminal-resize", (id, cols, rows) => service.terminals.resize(id as string, cols as number, rows as number));
+  handle("mesh:terminal-close", (id) => service.terminals.close(id as string));
   handle("mesh:check-agents", () => service.checkAgents());
   handle("mesh:demo", () => service.openDemo());
   handle("mesh:open", async () => {

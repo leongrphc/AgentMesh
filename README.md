@@ -2,7 +2,7 @@
 
 Codex, OpenCode, Claude, Antigravity ve API tabanlı modelleri bir orkestratör etrafında birleştirmeyi hedefleyen **hibrit, çoklu ajan IDE** projesi.
 
-> Durum: **MVP masaüstü prototipi**. Electron/React arayüzünde proje seçimi, görevler, ajan durumları, canlı olaylar, Monaco dosya editörü ve ortak context/mesajlar var. SQLite orkestratör, Git worktree ve Codex/OpenCode CLI adaptörleriyle çalışır. Varsayılan demo modelleri çağırmaz; terminal henüz yoktur.
+> Durum: **MVP masaüstü prototipi**. Electron/React arayüzünde proje seçimi, görevler, ajan durumları, canlı olaylar, Monaco dosya editörü, görev PTY terminalleri ve ortak context/mesajlar var. SQLite orkestratör, Git worktree ve Codex/OpenCode CLI adaptörleriyle çalışır. Varsayılan demo modelleri çağırmaz.
 
 ## Hızlı başlangıç
 
@@ -39,7 +39,9 @@ Worktree oluşmuş bir görevi seçip **Değişiklikleri incele** ile diff ve ye
 
 **Dosyalar** bölümü seçili görevin çalışma alanını gösterir. Worktree henüz oluşmamışsa proje kökü salt okunur açılır. Durdurulmuş görev worktree'sindeki kapsam içi UTF-8 dosyaları (en fazla 1 MiB) düzenlenebilir; disk üzerinde değişmiş dosyanın üzerine eski içerik yazılmaz. Kaydettikten sonra **İncelemeyi yenile** yeni digest üretir; onay ayrıca gerekir. Monaco/worker dosyaları yerel paket içindedir; CDN kullanılmaz. DOMPurify bağımlılığı audit düzeltmesi için `overrides` ile güncel yama sürümüne alınır.
 
-`npm run desktop:smoke`, görünür pencere açmadan gerçek Electron renderer/preload, Monaco'da dosya açma, dört görevli demo ve formdan bağımlı beşinci görevi ekleyip çalıştırmayı doğrular; `dist/desktop-smoke.png` ve `dist/desktop-editor.png` üretir. Pencere kapanırken kaydedilmemiş değişiklikler kontrol edilir, aktif işler iptal edilir ve SQLite kapatılır.
+**Terminal** bölümünde durdurulmuş görev worktree’sinde en fazla dört kabuk açabilirsiniz. Komutlar kullanıcı hesabınızın yetkileriyle çalışır; ajan dosya kapsamı uygulanmaz. Ajan başlatma veya onaydan önce terminal süreçlerini, proje değiştirmeden önce tüm sekmeleri kapatın. Terminal çıktısı journal'a kaydedilmez. [Kapsam ve yaşam döngüsü](docs/terminals.md).
+
+`npm run desktop:smoke`, görünür pencere açmadan gerçek Electron renderer/preload, Monaco'da dosya açma, PTY açma/komut/çıktı/boyutlandırma/kapatma, dört görevli demo ve formdan bağımlı beşinci görevi ekleyip çalıştırmayı doğrular; `dist/desktop-smoke.png`, `dist/desktop-editor.png` ve `dist/desktop-terminal.png` üretir. Pencere kapanırken kaydedilmemiş değişiklikler kontrol edilir, aktif işler ve terminaller kapatılır, SQLite kapatılır.
 
 Demo, `.agentmesh/demo.sqlite` dosyasında olay geçmişini saklar. Eski `.agentmesh/demo-events.jsonl` varsa ilk açılışta SQLite'a aktarır. İkinci çalıştırmada tamamlanan görevleri yeniden çalıştırmaz. Sıfırdan denemek için (gerekirse yedekleyerek) iki dosyayı temizleyin:
 

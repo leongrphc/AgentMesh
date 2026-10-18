@@ -4,6 +4,7 @@ import type { WorkspaceEntry, WorkspaceFile } from "../core/workspace-files.js";
 import type { AgentTask } from "../core/contracts.js";
 import type { PermissionRequest, PermissionDecision } from "../core/permissions.js";
 import type { ProviderHealth } from "../adapters/provider-health.js";
+import type { TerminalInfo, TerminalOutput } from "./terminals.js";
 
 export type TaskDraft = Omit<AgentTask, "projectId">;
 
@@ -28,6 +29,11 @@ export interface DesktopState {
 }
 
 export interface DesktopAPI {
+  terminalOpen(taskId: string, cols: number, rows: number): Promise<TerminalInfo>;
+  terminalRead(id: string, offset: number): Promise<TerminalOutput>;
+  terminalWrite(id: string, data: string): Promise<void>;
+  terminalResize(id: string, cols: number, rows: number): Promise<void>;
+  terminalClose(id: string): Promise<void>;
   state(): Promise<DesktopState>;
   openConfig(): Promise<DesktopState>;
   openDemo(): Promise<DesktopState>;

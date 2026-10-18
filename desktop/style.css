@@ -98,3 +98,10 @@
 .health-status.needs_login { background: #dfbe8515; color: var(--gold); }
 .health-status.needs_setup { background: #dfbe8515; color: var(--gold); }
 .health-status.unavailable { background: #f0a9a315; color: #f0a9a3; }
+.terminal-panel { margin-top: 24px; padding: 18px; border: 1px solid #344554; border-radius: 10px; background: #17222d; }
+.terminal-note { color: #a9bac8; font-size: 12px; line-height: 1.6; max-width: 900px; }
+.terminal-tabs { display: flex; gap: 8px; margin-bottom: 8px; }
+.terminal-tabs>div { display: flex; }
+.terminal-tabs [aria-selected="true"] { color: #78d2c6; border-color: #78d2c6; }
+.terminal-screen { height: 320px; padding: 8px; background: #121d27; }
+.terminal-cwd { display: block; padding-top: 10px; color: #a9bac8; overflow-wrap: anywhere; font-size: 12px; }

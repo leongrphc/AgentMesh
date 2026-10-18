@@ -2,6 +2,11 @@ import { contextBridge, ipcRenderer } from "electron";
 import type { DesktopAPI, DesktopState } from "./contracts.js";
 
 const api: DesktopAPI = {
+  terminalOpen: (taskId, cols, rows) => ipcRenderer.invoke("mesh:terminal-open", taskId, cols, rows),
+  terminalRead: (id, offset) => ipcRenderer.invoke("mesh:terminal-read", id, offset),
+  terminalWrite: (id, data) => ipcRenderer.invoke("mesh:terminal-write", id, data),
+  terminalResize: (id, cols, rows) => ipcRenderer.invoke("mesh:terminal-resize", id, cols, rows),
+  terminalClose: (id) => ipcRenderer.invoke("mesh:terminal-close", id),
   state: () => ipcRenderer.invoke("mesh:state"),
   openConfig: () => ipcRenderer.invoke("mesh:open"),
   openDemo: () => ipcRenderer.invoke("mesh:demo"),

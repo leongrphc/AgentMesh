@@ -27,7 +27,7 @@ Electron Desktop (React + Monaco + xterm.js)
        Direct model API provider'ları da ayrı adapter olabilir.
 ```
 
-**MVP uygulama sırası:** çekirdek, SQLite, worktree, Codex/OpenCode CLI adaptörleri, insan onaylı entegrasyon dalı, canlı CLI olay aboneliği ve iptal eklendi. Electron/React kabuğu, dar preload/IPC, Monaco dosya editörü, Task Board ve diff onayı da çalışır. Codex App Server ve OpenCode Server izin köprüleri ile modelsiz bağlantı kontrolleri var. Sırada terminal ve ajan ayarları; daha sonra Claude / Antigravity ile doğrudan API sağlayıcıları var. Adaptör sınırları sağlayıcı sürümlerinden bağımsız tutulur.
+**MVP uygulama sırası:** çekirdek, SQLite, worktree, Codex/OpenCode CLI adaptörleri, insan onaylı entegrasyon dalı, canlı CLI olay aboneliği ve iptal eklendi. Electron/React kabuğu, dar preload/IPC, Monaco dosya editörü, PTY terminalleri, Task Board ve diff onayı da çalışır. Codex App Server ve OpenCode Server izin köprüleri ile modelsiz bağlantı kontrolleri var. Sırada ajan ayarları; daha sonra Claude / Antigravity ile doğrudan API sağlayıcıları var. Adaptör sınırları sağlayıcı sürümlerinden bağımsız tutulur.
 
 ## Neden Electron?
 
@@ -98,7 +98,7 @@ packages/
   shared-context/      # Paketleme, seçme, kaynak, arama
 ```
 
-Bu bir **hedef yapı**dır; şu an `src/core`, `src/adapters`, `src/desktop` ve `desktop` (renderer) altında geliştirme sürer. `scripts/build-desktop.mjs` main/preload için esbuild, renderer için Vite kullanır. Üretim renderer'ı özel yerel protokol üzerinden yüklenir; Node erişimi yoktur. Main süreç IPC kaynağı ve argümanlarını doğrular. Görev/paralellik ayarları journal'dan replay edilir; UI olay paneli son 200 olayı tutar. Terminal henüz bağlanmadı.
+Bu bir **hedef yapı**dır; şu an `src/core`, `src/adapters`, `src/desktop` ve `desktop` (renderer) altında geliştirme sürer. `scripts/build-desktop.mjs` main/preload için esbuild, renderer için Vite kullanır. Üretim renderer'ı özel yerel protokol üzerinden yüklenir; Node erişimi yoktur. Main süreç IPC kaynağı ve argümanlarını doğrular. Görev/paralellik ayarları journal'dan replay edilir; UI olay paneli son 200 olayı tutar. Terminal sekmeleri doğrulanmış görev worktree'sinde ayrı sahipli PTY yardımcı süreçlerine bağlanır; geçici çıktı ve kapanış politikası [terminals.md](terminals.md) içinde.
 
 ## Referanslar (18 Ekim 2026 itibarıyla)
 

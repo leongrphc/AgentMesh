@@ -13,8 +13,20 @@ import { probeCodex, probeOpenCode, probeOpenCodeServer, type ProviderHealth } f
 import { safeLog } from "../core/safe-log.js";
 import { listWorkspace, readWorkspaceFile, saveWorkspaceFile } from "../core/workspace-files.js";
 import type { DesktopState, DesktopReview, TaskDraft } from "./contracts.js";
+import { Terminals } from "./terminals.js";
 
 export class DesktopService {
+  readonly terminals = new Terminals();
+
+  openTerminal(taskId: string, cols: number, rows: number) {
+    const { root, writable } = this.workspace(taskId);
+    if (!writable && !(this.demo && !this.running)) throw new Error("Terminal için durdurulmuş görev worktree’si gerekli");
+    return this.terminals.open(taskId, root, cols, rows);
+  }
+
+  private requireClosedTerminals() {
+    if (this.terminals.active) throw new Error("Önce açık terminal süreçlerini kapatın");
+  }
   private journal?: SqliteJournal;
   private journalPath?: string;
   private engine?: Orchestrator;
@@ -74,6 +86,7 @@ export class DesktopService {
 
   private open(config: Config, path: string, demo: boolean): DesktopState {
     if (this.running) throw new Error("Proje değiştirmeden önce çalışan görevleri durdurun");
+    if (this.terminals.count) throw new Error("Proje değiştirmeden önce terminal sekmelerini kapatın");
     this.healthAbort?.abort(); this.healthAbort = undefined; this.health = {};
     const normalized = process.platform === "win32" ? resolve(path).toLowerCase() : resolve(path);
     const reused = this.journalPath === normalized && this.journal;
@@ -129,6 +142,7 @@ export class DesktopService {
   }
 
   start(): void {
+    this.requireClosedTerminals();
     if (this.running) throw new Error("Görevler zaten çalışıyor");
     if (!this.engine || !this.config) throw new Error("Önce proje açın");
     this.healthAbort?.abort(); this.healthAbort = undefined;
@@ -147,6 +161,7 @@ export class DesktopService {
   }
 
   retry(taskId: string): void {
+    this.requireClosedTerminals();
     if (this.running) throw new Error("Yeniden denemeden önce çalışmanın bitmesini bekleyin");
     this.engine!.retryTask(this.requireTask(taskId));
   }
@@ -190,6 +205,7 @@ export class DesktopService {
   review(taskId: string, refresh = false): DesktopReview {
     this.requireTask(taskId);
     if (refresh) {
+      this.requireClosedTerminals();
       if (this.running) throw new Error("İncelemeyi yenilemeden önce çalışmayı durdurun");
       this.engine!.refreshReview(taskId);
     }
@@ -199,11 +215,12 @@ export class DesktopService {
     const lease = manager.reopen(this.config!.repoPath, task.worktree);
     const inspection = manager.inspect(lease.path, task.allowedPaths);
     return { taskId, title: task.title, inspection, expectedDigest: task.review?.digest,
-      canApprove: !this.running && task.status === "pending_review" && !inspection.violations.length
+      canApprove: !this.running && !this.terminals.active && task.status === "pending_review" && !inspection.violations.length
         && inspection.changedPaths.length > 0 && inspection.digest === task.review?.digest };
   }
 
   approve(taskId: string, digest: string): void {
+    this.requireClosedTerminals();
     if (this.running) throw new Error("Onaydan önce aktif çalışmanın bitmesini bekleyin");
     this.requireTask(taskId);
     if (typeof digest !== "string" || !/^[a-f0-9]{64}$/.test(digest)) throw new Error("Geçersiz inceleme digest'i");
@@ -252,6 +269,7 @@ export class DesktopService {
   }
 
   async close() {
+    await this.terminals.closeAll();
     this.healthAbort?.abort(); this.healthAbort = undefined; this.abort?.abort(); await this.running;
     this.journal?.close(); this.journal = undefined; this.journalPath = undefined;
   }

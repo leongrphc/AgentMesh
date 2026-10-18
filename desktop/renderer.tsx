@@ -7,6 +7,7 @@ import type { TaskStatus } from "../src/core/contracts.js";
 import "./style.css";
 
 const FileEditor = lazy(() => import("./editor.js").then((module) => ({ default: module.FileEditor })));
+const TerminalPanel = lazy(() => import("./terminal.js").then((module) => ({ default: module.TerminalPanel })));
 
 declare global { interface Window { agentmesh: DesktopAPI } }
 
@@ -128,6 +129,8 @@ function App() {
         </>}</aside></div>
       </section>
       {task && <Suspense fallback={<p className="empty">Editör hazırlanıyor…</p>}><FileEditor key={`${project.id}:${project.workspaceRoot}:${task.id}:${task.worktree?.path ?? "repo"}`} taskId={task.id} api={api} busy={state.busy} onDirty={setEditorDirty} /></Suspense>}
+      <Suspense fallback={<p className="empty">Terminal hazırlanıyor…</p>}><TerminalPanel key={`${project.id}:${project.workspaceRoot}`} api={api} taskId={task?.id} busy={state.busy}
+        available={state.demo || !!task?.worktree && !["running", "completed"].includes(task.status)} /></Suspense>
       <section className="activity"><div className="activity-header"><div role="tablist" aria-label="Proje kayıtları">{([
         ["events", "Canlı olaylar", state.events.length], ["context", "Ortak context", Object.keys(context).length], ["messages", "Mesajlar", messages.length],
       ] as const).map(([id, label, count]) => <button key={id} role="tab" aria-selected={tab === id} aria-controls={`panel-${id}`} id={`tab-${id}`} onClick={() => setTab(id)}>{label} <span>{count}</span></button>)}</div><label className="history-filter"><input type="checkbox" checked={selectedOnly} onChange={(event) => setSelectedOnly(event.target.checked)} />Seçili görev</label><small><span className="local-dot" /> {state.busy ? "Canlı" : "Son 200 olay"}</small></div>

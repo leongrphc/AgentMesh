@@ -35,7 +35,7 @@ Codex, OpenCode, Claude, Antigravity ve diğer API modellerini **tek IDE içinde
 - [x] JSONL stdout/stderr ve journal olaylarını canlı `subscribe()` abonelerine iletme; CLI'da `--stream`.
 - [x] `AbortSignal`, `Ctrl+C`, kalıcı `cancelled`, geç gelen çıktının görev sonucunu tamamlamasını engelleme.
 - [x] Başarısız/iptal edilmiş/engellenmiş görevi `--retry TASK` ile açıkça yeniden kuyruğa alma.
-- [x] Mock ve yerel subprocess/Git worktree testleri; son başarılı doğrulama **42/42 test**, `npm run typecheck`, desktop build, Electron/Monaco/izin paneli smoke ve modelsiz yerel OpenCode Server protokol smoke başarılı.
+- [x] Mock ve yerel subprocess/Git worktree testleri; son başarılı doğrulama **44/44 test**, `npm run typecheck`, desktop build, Electron/Monaco/PTY/izin paneli smoke ve modelsiz yerel OpenCode Server protokol smoke başarılı.
 
 ## Açık görevler — öncelik sırasıyla
 
@@ -60,7 +60,7 @@ Codex, OpenCode, Claude, Antigravity ve diğer API modellerini **tek IDE içinde
 ### P1 — IDE'nin kullanılabilir hale gelmesi
 
 - [x] **UI-001:** Klasör bazlı dosya ağacı ve yerel Monaco editör; seçili görevin worktree'si, henüz worktree yoksa salt okunur proje kökü. Kaydetme yalnızca durdurulmuş görev worktree'sinde, allowedPaths ve içerik digest kontrolüyle. UTF-8/1 MiB sınırı, path traversal/symlink engeli, kaydedilmemiş değişiklik koruması ve gerçek Electron dosya açma smoke testi.
-- [ ] **UI-002:** Terminal sekmeleri (PTY) ve süreç yaşam döngüsü.
+- [x] **UI-002:** xterm.js + node-pty ile en fazla dört görev terminali, boyutlandırma, çıktı/çıkış durumu ve açık kapatma. CWD main süreçte doğrulanan durdurulmuş worktree; demo kendi dizininde çalışır. Açık süreçler ajan başlatma/retry/onayını, tüm sekmeler proje değişimini engeller. Her PTY ayrı sahipli yardımcı süreçte; kapanış beklenir. 128 Ki karakter geçici çıktı tamponu, IPC geri basıncı, journal'a ham terminal çıktısı yazmama. Gerçek Node/Electron PTY, alt süreç kapanışı ve sınır testleri; [terminal kapsamı](terminals.md). Genel OS/ayrık süreç ağacı izolasyonu CORE-010 altında açık.
 - [ ] **UI-003:** Agent Center: provider, CLI/SDK/API bağlantısı, model/rol, bağlantı sağlığı ve giriş eksikliği.
   - [x] Config'teki CLI ajanları için provider/transport/model/rol/izin yeteneği görünümü, açık bağlantı kontrolü, Codex hesap kaydı/giriş gerekliliği; OpenCode exec sürümü veya Server bağlı sağlayıcı bildirimi. Kontrol generation göndermez; sonuç kimlik/token içermez. Transport/model kombinasyonları ayrı kontrol edilir.
   - [ ] UI'dan ajan ekleme/model/rol ayarı ve SDK/API bağlantıları. Gerçek model erişimi/token geçerliliği CORE-008 altında doğrulanacak.
@@ -92,7 +92,7 @@ Codex, OpenCode, Claude, Antigravity ve diğer API modellerini **tek IDE içinde
 1. `D:\WebGpt` içinde `git status --short` ve `git log -5 --oneline` ile durumu kontrol et.
 2. `npm install` (gerekiyorsa), ardından `npm run typecheck` ve `npm test` çalıştır.
 3. Codex App Server ve OpenCode Server köprüleri tamamlandı; [permissions.md](permissions.md) desteklenen kapsamları açıklar. Varsayılan exec adaptörleri interaktif izin desteklemez. Modelsiz yerel kontrol: `npm run smoke:opencode`.
-4. Sırada terminal (UI-002), UI'dan ajan ayarları (UI-003), config uyumu (CORE-013) ve UI-006 çakışma çözümünün kalan kısmı var. Gerçek model/araç smoke'ları (CORE-008) hâlâ açık.
+4. Terminal (UI-002) tamamlandı. Sırada UI'dan ajan ayarları (UI-003), config uyumu (CORE-013) ve UI-006 çakışma çözümünün kalan kısmı var. Gerçek model/araç smoke'ları (CORE-008) hâlâ açık.
 5. **Her tamamlanan geliştirmeyi ayrı Git commit'iyle kaydet.** Commit'ten önce ilgili testleri çalıştır; `docs/TASKS.md` kutularını güncelle. Kullanıcı istemedikçe otomatik push/deploy/ana dal dışı entegrasyon merge'i yapma.
 
 ### Faydalı komutlar
@@ -125,7 +125,7 @@ npm run live -- --config agentmesh.config.example.json
 
 ## Bilinen sınırlar / tamamlandı sanılmaması gerekenler
 
-- Grafik masaüstü kabuğu, Monaco editör ve Task Board var; terminal henüz yok. Editör mevcut dosyaları düzenler; yeni dosya/klasör oluşturma ve dosya izleyicisi henüz yok.
+- Grafik masaüstü kabuğu, Monaco editör, Task Board ve görev PTY terminalleri var. Editör mevcut dosyaları düzenler; yeni dosya/klasör oluşturma ve dosya izleyicisi henüz yok.
 - Codex/OpenCode CLI komutları ve sahte süreç akışları test edildi; gerçek ücretli/oturum açılmış model çalıştırması doğrulanmadı.
 - OpenCode için OS seviyesinde izolasyon kanıtlanmadı; mevcut `allowedPaths` denetimi işlem sonrasındadır.
 - Codex App Server ve OpenCode Server için araç onayı köprüleri var; gerçek zamanlı *ajanlar arası* mesaj teslimi eksik. OpenCode Server şu an 1.19.x v1 şemasına bağlıdır ve yalnızca bash/read/edit kapsamlarını sunar. Log filtresi bilinen biçimleri tanır; keyfi kişisel veri için garanti vermez.

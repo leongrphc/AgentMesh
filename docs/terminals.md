@@ -1,0 +1,15 @@
+# Görev terminalleri
+
+Terminal bölümü seçili görevin **durdurulmuş, tamamlanmamış worktree’sinde** kullanıcı kabuğu açar. Henüz worktree oluşmadıysa gerçek proje kökünde kabuk açılmaz. Demo, kendi demo dizininde terminal açabilir; terminalde yazılan komutlar gerçektir. Windows kabuğu `cmd.exe /d /q` (ComSpec); diğer platformlarda `/bin/sh` kullanılır. Windows üzerinde Node ve Electron ile doğrulandı; diğer platformların kabul testleri henüz yapılmadı.
+
+En fazla dört sekme açılır. Görev seçimi değiştirilince diğer görevlerin terminalleri açık kalır; sekme üzerindeki görev kimliği ve alttaki dizin hangi çalışma alanında olduğunuzu gösterir. Sekmeler arasında çıktı korunur, panel boyutu PTY’ye aktarılır. `exit` sonrasında çıkış kodu gösterilir ve girdi kapanır. × düğmesi kabuğu durdurup yardımcı sürecin kapanışını bekler. Uygulama kapanışı da tüm terminalleri kapatır.
+
+Aktif terminal süreçleri varken ajan başlatma, retry, inceleme yenileme ve birleştirme reddedilir. Böylece aynı worktree’de kullanıcı komutu ile ajan veya Git entegrasyonu eşzamanlı çalışmaz. Proje değiştirmek için sonlanmış olanlar dahil bütün terminal sekmelerini kapatın. Açık terminaldeki değişiklikleri incelemek için terminali kapatıp dosyaları yeniden açın; onaydan önce inceleme digest’ini yenileyin.
+
+Renderer doğrudan Node, süreç veya keyfi çalışma dizini erişimi almaz. Main, görevin mevcut projeye ait olduğunu ve Git worktree kimliğini yeniden doğrular. Yalnızca terminal açma/okuma/girdi/boyut/kapatma IPC metotları sunulur. Her PTY ayrı Node yardımcı sürecinde çalışır; native ConPTY iş parçacıkları ana Electron sürecinde tutulmaz. Native modül Electron paketinde dış bağımlılık olarak kalır; yardımcı dosya desktop build ile kopyalanır. Paketlenmiş dağıtım ve native modül yerleşimi RELEASE-001 kapsamında ayrıca doğrulanmalıdır.
+
+Terminal bir **kullanıcı kabuğudur**: hesabın dosya/ağ yetkileriyle çalışır; `allowedPaths` veya ajan izin paneli komutları sınırlamaz. Worktree CWD seçimi OS sandbox değildir. Normal ön plan alt sürecinin kapanışı test edilir; ayrılmış süreçler, servisler ve sağlayıcıların bütün süreç ağaçları için garanti verilmez (CORE-010).
+
+Ham ANSI çıktı SQLite, olay listesi veya diagnostics içine yazılmaz. Terminal başına son 131072 UTF-16 karakter main belleğinde tutulur; renderer 100 ms aralıkla cursor üzerinden okur. Geride kalırsa eski çıktı atılır ve uyarı gösterilir. xterm scrollback 2000 satırdır. Native çıktı kanalı dolduğunda PTY okuması duraklatılır; iletimden sonra sürdürülür. Tek girdi isteği 8192 karakterdir; uzun yapıştırmalar renderer’da sıralı parçalara ayrılır. Sekme kapatılınca tampon silinir. Terminal ekranı hassas değerleri maskelemez; kullanıcı komutlarının gerçek çıktısını gösterir.
+
+`npm test`: gerçek kabukta CWD/dosya oluşturma, boyutlandırma, doğal çıkış, aktif kapatma/ön plan alt süreci, başarısız açılış, dört sekme/çıktı sınırı ve gerçek Git worktree/onay koruması. `npm run desktop:smoke`: gerçek sandbox renderer/preload üzerinden xterm ve PTY açma, komut/girdi/çıktı, boyutlandırma ve sekme kapatma; `dist/desktop-terminal.png` önizlemesi.

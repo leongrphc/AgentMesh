@@ -64,6 +64,12 @@ test("desktop reloads real worktree review, rejects stale approval and integrate
     assert.equal(review.canApprove, true);
     assert.match(review.inspection.untrackedPreviews[0]!.preview, /review me/);
     const worktree = state.snapshot.tasks[0]!.worktree!.path;
+    const terminal = await service.openTerminal("feature", 90, 24);
+    assert.equal(terminal.cwd, worktree);
+    assert.equal(service.review("feature").canApprove, false);
+    assert.throws(() => service.approve("feature", review.inspection.digest), /terminal/);
+    assert.throws(() => service.review("feature", true), /terminal/);
+    await service.terminals.close(terminal.id);
     assert.equal(service.readFile("feature", "src/initial.txt").writable, false);
     const editable = service.readFile("feature", "src/feature.txt");
     assert.equal(editable.writable, true);
@@ -78,6 +84,7 @@ test("desktop reloads real worktree review, rejects stale approval and integrate
     assert.throws(() => service.approve("feature", review.inspection.digest), /eşleşmiyor/);
     service.approve("feature", refreshed.inspection.digest);
     assert.equal(service.state().snapshot.tasks[0]?.status, "completed");
+    assert.throws(() => service.openTerminal("feature", 80, 24), /durdurulmuş/);
     assert.throws(() => service.saveFile("feature", editable.path, "late edit", editable.digest), /durdurulmuş/);
     assert.equal(git(f.repo, "status", "--porcelain"), "");
     assert.throws(() => service.review("outside-project"), /Geçersiz/);
