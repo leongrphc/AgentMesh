@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
-import { readFileSync, realpathSync } from "node:fs";
-import { dirname, resolve, join } from "node:path";
+import { existsSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
+import { dirname, resolve, join, matchesGlob } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { SqliteJournal } from "../core/sqlite-journal.js";
 import { Orchestrator } from "../core/orchestrator.js";
@@ -10,6 +10,7 @@ import { MockAgent } from "../adapters/mock.js";
 import { CodexCliAdapter } from "../adapters/codex-cli.js";
 import { OpenCodeCliAdapter } from "../adapters/opencode-cli.js";
 import { safeLog } from "../core/safe-log.js";
+import { listWorkspace, readWorkspaceFile, saveWorkspaceFile } from "../core/workspace-files.js";
 import type { DesktopState, DesktopReview } from "./contracts.js";
 
 export class DesktopService {
@@ -36,6 +37,9 @@ export class DesktopService {
   }
 
   openDemo(): DesktopState {
+    mkdirSync(this.dataRoot, { recursive: true });
+    const sample = join(this.dataRoot, "DEMO.md");
+    if (!existsSync(sample)) writeFileSync(sample, "# AgentMesh demo\n\nGörevler bağımlılık sırasıyla çalışır. Bu demo dosya değiştirmez veya model çağırmaz.\n", "utf8");
     const projectId = "desktop-demo";
     const config: Config = {
       projectId, repoPath: this.dataRoot, maxParallel: 2,
@@ -128,8 +132,12 @@ export class DesktopService {
     this.engine!.retryTask(this.requireTask(taskId));
   }
 
-  review(taskId: string): DesktopReview {
+  review(taskId: string, refresh = false): DesktopReview {
     this.requireTask(taskId);
+    if (refresh) {
+      if (this.running) throw new Error("İncelemeyi yenilemeden önce çalışmayı durdurun");
+      this.engine!.refreshReview(taskId);
+    }
     const task = this.state().snapshot.tasks.find((item) => item.id === taskId)!;
     if (task.status === "running" || !task.worktree) throw new Error("İncelenecek durdurulmuş çalışma alanı yok");
     const manager = new WorktreeManager();
@@ -145,6 +153,34 @@ export class DesktopService {
     this.requireTask(taskId);
     if (typeof digest !== "string" || !/^[a-f0-9]{64}$/.test(digest)) throw new Error("Geçersiz inceleme digest'i");
     this.engine!.approveTask(taskId, digest);
+  }
+
+  private workspace(taskId: string) {
+    this.requireTask(taskId);
+    const task = this.state().snapshot.tasks.find((item) => item.id === taskId)!;
+    const root = task.worktree ? new WorktreeManager().reopen(this.config!.repoPath, task.worktree).path : this.config!.repoPath;
+    const writable = !!task.worktree && !this.running && !["running", "completed"].includes(task.status);
+    return { root, task, writable };
+  }
+
+  files(taskId: string, path = "") {
+    const { root } = this.workspace(taskId);
+    return { root, entries: listWorkspace(root, path) };
+  }
+
+  readFile(taskId: string, path: string) {
+    const { root, writable, task } = this.workspace(taskId);
+    const file = readWorkspaceFile(root, path);
+    return { ...file, writable: writable && task.allowedPaths.some((pattern) => {
+      // Save rechecks the same policy before touching disk.
+      return matchesGlob(path.replace(/\\/g, "/"), pattern.replace(/\\/g, "/"));
+    }) };
+  }
+
+  saveFile(taskId: string, path: string, content: string, digest: string) {
+    const { root, writable, task } = this.workspace(taskId);
+    if (!writable) throw new Error("Yalnızca durdurulmuş görev worktree'si düzenlenebilir");
+    return saveWorkspaceFile(root, path, content, digest, task.allowedPaths);
   }
 
   private requireTask(taskId: string): string {

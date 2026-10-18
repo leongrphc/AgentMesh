@@ -1,5 +1,6 @@
 import type { ProjectSnapshot } from "../core/orchestrator.js";
 import type { WorktreeInspection } from "../core/worktrees.js";
+import type { WorkspaceEntry, WorkspaceFile } from "../core/workspace-files.js";
 
 export interface DesktopReview {
   taskId: string;
@@ -24,7 +25,10 @@ export interface DesktopAPI {
   start(): Promise<void>;
   cancel(taskId?: string): Promise<void>;
   retry(taskId: string): Promise<void>;
-  review(taskId: string): Promise<DesktopReview>;
+  review(taskId: string, refresh?: boolean): Promise<DesktopReview>;
   approve(taskId: string, digest: string): Promise<boolean>;
+  files(taskId: string, path?: string): Promise<{ root: string; entries: WorkspaceEntry[] }>;
+  readFile(taskId: string, path: string): Promise<WorkspaceFile>;
+  saveFile(taskId: string, path: string, content: string, digest: string): Promise<WorkspaceFile>;
   subscribe(listener: (state: DesktopState) => void): () => void;
 }

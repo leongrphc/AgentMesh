@@ -64,12 +64,21 @@ test("desktop reloads real worktree review, rejects stale approval and integrate
     assert.equal(review.canApprove, true);
     assert.match(review.inspection.untrackedPreviews[0]!.preview, /review me/);
     const worktree = state.snapshot.tasks[0]!.worktree!.path;
+    assert.equal(service.readFile("feature", "src/initial.txt").writable, false);
+    const editable = service.readFile("feature", "src/feature.txt");
+    assert.equal(editable.writable, true);
+    assert.throws(() => service.saveFile("feature", "src/initial.txt", "forbidden", editable.digest), /kapsamı dışında/);
+    assert.throws(() => service.saveFile("feature", "src/feature.txt", "stale", "wrong-digest"), /disk üzerinde değişti/);
     writeFileSync(join(worktree, "src", "feature.txt"), "changed after preview\n");
     assert.equal(service.review("feature").canApprove, false);
     assert.throws(() => service.approve("feature", review.inspection.digest), /değişmiş/);
-    writeFileSync(join(worktree, "src", "feature.txt"), "review me\n");
-    service.approve("feature", review.inspection.digest);
+    const refreshed = service.review("feature", true);
+    assert.equal(refreshed.canApprove, true);
+    assert.notEqual(refreshed.inspection.digest, review.inspection.digest);
+    assert.throws(() => service.approve("feature", review.inspection.digest), /eşleşmiyor/);
+    service.approve("feature", refreshed.inspection.digest);
     assert.equal(service.state().snapshot.tasks[0]?.status, "completed");
+    assert.throws(() => service.saveFile("feature", editable.path, "late edit", editable.digest), /durdurulmuş/);
     assert.equal(git(f.repo, "status", "--porcelain"), "");
     assert.throws(() => service.review("outside-project"), /Geçersiz/);
   } finally { journal.close(); await service.close(); f.cleanup(); }

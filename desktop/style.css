@@ -28,3 +28,24 @@
 .diff { padding: 15px; background: #101d27; color: #c1d6d8; border: 1px solid var(--line); font: 11px/1.8 Consolas, monospace; overflow: auto; white-space: pre; }
 .review-actions { justify-content: flex-end; border-top: 1px solid var(--line); font-size: 12px; }
 .detail-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.file-workspace { margin-top: 26px; border: 1px solid var(--line); border-radius: 7px; overflow: hidden; }
+.file-heading { display: flex; align-items: center; gap: 15px; padding: 15px 18px; background: #1e2c38; border-bottom: 1px solid var(--line); }
+.file-heading code { flex: 1; min-width: 0; text-overflow: ellipsis; overflow: hidden; white-space: nowrap; font-size: 10px; color: var(--muted); }
+.file-heading>span { font-size: 10px; color: var(--gold); white-space: nowrap; }
+.file-layout { display: grid; grid-template-columns: 220px minmax(0, 1fr); }
+.file-tree { background: #172630; border-right: 1px solid var(--line); max-height: 385px; overflow: auto; }
+.file-tree>button { display: flex; gap: 10px; align-items: center; width: 100%; border: none; border-radius: 0; text-align: left; background: transparent; padding: 9px 16px; font: 11px Consolas, monospace; overflow-wrap: anywhere; }
+.file-tree>button.current-file { background: #2b4451; color: var(--teal); }
+.file-tree>button span { color: var(--gold); }
+.directory-label { display: flex; gap: 8px; padding: 10px 15px; align-items: center; justify-content: space-between; font-size: 10px; color: var(--muted); min-height: 40px; }
+.directory-label code { overflow-wrap: anywhere; }
+.directory-label button { padding: 1px 7px; }
+.file-editor { min-width: 0; background: #15232e; }
+.editor-toolbar { display: flex; justify-content: space-between; gap: 12px; align-items: center; min-height: 40px; border-bottom: 1px solid var(--line); padding: 5px 12px; }
+.editor-toolbar code { font-size: 10px; color: var(--teal); overflow-wrap: anywhere; }
+.editor-toolbar>div { display: flex; gap: 7px; }
+.editor-toolbar button { font-size: 10px; padding: 4px 9px; white-space: nowrap; }
+.monaco-host { height: 300px; }
+.editor-hint { color: var(--muted); font-size: 10px; line-height: 1.7; padding: 10px 15px; border-top: 1px solid var(--line); }
+.file-error { color: #f0a9a3; padding: 12px 18px; font-size: 12px; background: #422e35; }
+@media(max-width:780px) { .file-layout { grid-template-columns: 150px minmax(0,1fr); } }

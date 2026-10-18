@@ -1,8 +1,10 @@
-import { useEffect, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import type { DesktopAPI, DesktopState, DesktopReview } from "../src/desktop/contracts.js";
 import type { TaskStatus } from "../src/core/contracts.js";
 import "./style.css";
+
+const FileEditor = lazy(() => import("./editor.js").then((module) => ({ default: module.FileEditor })));
 
 declare global { interface Window { agentmesh: DesktopAPI } }
 
@@ -39,7 +41,9 @@ function App() {
   const [tab, setTab] = useState<"events" | "context" | "messages">("events");
   const [pending, setPending] = useState(false);
   const [review, setReview] = useState<DesktopReview>();
+  const [editorDirty, setEditorDirty] = useState(false);
   const api = window.agentmesh;
+  useEffect(() => { document.documentElement.dataset.unsaved = String(editorDirty); }, [editorDirty]);
 
   useEffect(() => {
     let live = true;
@@ -56,6 +60,10 @@ function App() {
     finally { setPending(false); }
   }
 
+  function canLeaveFile() {
+    return !editorDirty || window.confirm("Kaydedilmemiş dosya değişiklikleri silinsin mi?");
+  }
+
   if (!state) return <main className="loading"><b>AgentMesh</b><p>{error || "Çalışma alanı açılıyor…"}</p></main>;
   const { tasks, context, messages, project } = state.snapshot;
   const task = tasks.find((item) => item.id === selected) ?? tasks[0];
@@ -68,8 +76,8 @@ function App() {
       <div className="brand"><span className="brand-mark">≋</span> AgentMesh<span className="version">LOCAL / 0.1</span></div>
       <div className="side-label">ÇALIŞMA ALANI</div>
       <div className="project-name"><span className="project-icon">⌘</span><div><strong>{project.id}</strong><small>{state.demo ? "Demo projesi" : "Yerel Git projesi"}</small></div></div>
-      <button className="side-button" disabled={state.busy || pending} onClick={() => act(() => api.openConfig())}>＋ Proje ayarlarını aç</button>
-      <button className="side-button subtle" disabled={state.busy || pending} onClick={() => act(() => api.openDemo())}>Demo projesine dön</button>
+      <button className="side-button" disabled={state.busy || pending} onClick={() => { if (canLeaveFile()) void act(() => api.openConfig()); }}>＋ Proje ayarlarını aç</button>
+      <button className="side-button subtle" disabled={state.busy || pending} onClick={() => { if (canLeaveFile()) void act(() => api.openDemo()); }}>Demo projesine dön</button>
       <div className="side-label agents-label">AJANLAR <span>{state.agents.length}</span></div>
       <div className="agent-list">{state.agents.map((agent) => {
         const working = tasks.find((item) => item.agentId === agent.id && item.status === "running");
@@ -84,7 +92,7 @@ function App() {
     <main className="workspace">
       <header className="topbar"><div className="breadcrumb">Çalışma alanı <span>/</span> <b>Orkestrasyon</b></div><span className="mode-tag">{state.demo ? "DEMO" : "CLI"}</span></header>
       <section className="workspace-heading"><div><div className="eyebrow">PROJE KONTROLÜ</div><h1>Birlikte çalışan ajanlar.</h1><p>Görevleri dağıt, ilerlemeyi izle, sonuçları incele.</p></div>
-        <div className="run-actions"><button disabled={!state.busy || pending} onClick={() => act(() => api.cancel())}>Durdur</button><button className="primary" data-testid="start" disabled={state.busy || !ready || pending} onClick={() => act(() => api.start())}>{state.busy ? "Çalışıyor…" : "▶ Ajanları başlat"}</button></div>
+        <div className="run-actions"><button disabled={!state.busy || pending} onClick={() => act(() => api.cancel())}>Durdur</button><button className="primary" data-testid="start" disabled={state.busy || !ready || pending} onClick={() => { if (editorDirty) setError("Başlatmadan önce dosya değişikliklerini kaydedin veya dosyayı yeniden açın."); else void act(() => api.start()); }}>{state.busy ? "Çalışıyor…" : "▶ Ajanları başlat"}</button></div>
       </section>
       {error && <div role="alert" className="error"><span>{error}</span><button aria-label="Hatayı kapat" onClick={() => setError("")}>×</button></div>}
       <div className="project-strip"><span className={`status-light ${state.busy ? "on" : ""}`} /><strong>{state.busy ? `${active} ajan çalışıyor` : "Çalışma alanı hazır"}</strong><span className="repo-path" title={project.workspaceRoot}>{project.workspaceRoot}</span><span>{completed} / {tasks.length} tamamlandı</span><progress value={completed} max={tasks.length || 1} aria-label="Tamamlanan görevler" /></div>
@@ -93,7 +101,7 @@ function App() {
         <div className="task-layout"><div className="task-list">
           <div className="table-label"><span>GÖREV / AJAN</span><span>DURUM</span></div>
           {tasks.length === 0 && <p className="empty">Bu projede görev yok. Proje ayarlarına görev ekleyip yeniden açın.</p>}
-          {tasks.map((item) => <button className={`task-row ${task?.id === item.id ? "selected" : ""}`} key={item.id} onClick={() => setSelected(item.id)}>
+          {tasks.map((item) => <button className={`task-row ${task?.id === item.id ? "selected" : ""}`} key={item.id} onClick={() => { if (item.id === task?.id || canLeaveFile()) setSelected(item.id); }}>
             <span className={`task-symbol ${item.status}`}>{item.status === "completed" ? "✓" : item.status === "running" ? "◉" : "◇"}</span>
             <span className="task-title"><strong>{item.title}</strong><small>{item.agentId} <span>·</span> {item.dependsOn.length ? `Sonra: ${item.dependsOn.join(", ")}` : "Bağımsız görev"}</small></span>
             <span className={`status ${item.status}`}>{labels[item.status]}</span>
@@ -108,6 +116,7 @@ function App() {
           {["failed", "cancelled", "blocked", "needs_review"].includes(task.status) && <button disabled={state.busy || pending} onClick={() => act(() => api.retry(task.id))}>Yeniden kuyruğa al</button>}</div>
         </>}</aside></div>
       </section>
+      {task && <Suspense fallback={<p className="empty">Editör hazırlanıyor…</p>}><FileEditor key={`${project.id}:${project.workspaceRoot}:${task.id}:${task.worktree?.path ?? "repo"}`} taskId={task.id} api={api} busy={state.busy} onDirty={setEditorDirty} /></Suspense>}
       <section className="activity"><div className="activity-header"><div role="tablist" aria-label="Proje kayıtları">{([
         ["events", "Canlı olaylar", state.events.length], ["context", "Ortak context", Object.keys(context).length], ["messages", "Mesajlar", messages.length],
       ] as const).map(([id, label, count]) => <button key={id} role="tab" aria-selected={tab === id} aria-controls={`panel-${id}`} id={`tab-${id}`} onClick={() => setTab(id)}>{label} <span>{count}</span></button>)}</div><small><span className="local-dot" /> {state.busy ? "Canlı" : "Yerel kayıt"}</small></div>
@@ -120,7 +129,7 @@ function App() {
       <footer>AgentMesh <span>Görevler · ortak context · bağımsız çalışma alanları</span></footer>
     </main>
     {review && <ReviewDialog review={review} pending={pending} error={error} onClose={() => setReview(undefined)}
-      onRefresh={() => act(async () => setReview(await api.review(review.taskId)))}
+      onRefresh={() => act(async () => setReview(await api.review(review.taskId, true)))}
       onApprove={() => act(async () => { if (await api.approve(review.taskId, review.inspection.digest)) setReview(undefined); })} />}
   </div>;
 }

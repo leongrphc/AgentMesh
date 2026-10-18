@@ -19,7 +19,29 @@ async function createWindow() {
       contextIsolation: true, sandbox: true, webSecurity: true, webviewTag: false, backgroundThrottling: !smoke },
   });
   window.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
+  window.webContents.session.setPermissionRequestHandler((_contents, _permission, callback) => callback(false));
+  window.webContents.session.setPermissionCheckHandler(() => false);
   window.webContents.on("will-navigate", (event) => event.preventDefault());
+  const current = window;
+  let closing = false;
+  let checkingClose = false;
+  current.on("close", (event) => {
+    if (closing) return;
+    event.preventDefault();
+    if (checkingClose) return;
+    checkingClose = true;
+    void (async () => {
+      const dirty = await current.webContents.executeJavaScript(`document.documentElement.dataset.unsaved === 'true'`).catch(() => false);
+      if (dirty) {
+        const result = await dialog.showMessageBox(current, { type: "question", title: "Kaydedilmemiş değişiklikler",
+          message: "Dosya değişikliklerini kaydetmeden çıkılsın mı?", buttons: ["Çalışmaya dön", "Kaydetmeden çık"], defaultId: 0, cancelId: 0 });
+        if (result.response !== 1) return;
+      }
+      closing = true;
+      await service.close();
+      current.destroy();
+    })().catch((error) => console.error(safeLog(String(error)))).finally(() => { checkingClose = false; });
+  });
   await window.loadURL(`${origin}/index.html`);
   if (smoke) {
     try {
@@ -31,6 +53,23 @@ async function createWindow() {
       })`);
       const isolation = await window.webContents.executeJavaScript(`({ node: typeof window.require, api: typeof window.agentmesh?.start })`);
       if (isolation.node !== "undefined" || isolation.api !== "function") throw new Error("Preload izolasyonu başarısız");
+      await window.webContents.executeJavaScript(`new Promise((resolve, reject) => {
+        const timeout = setTimeout(() => reject(new Error('Monaco veya dosya ağacı açılmadı')), 10000);
+        const check = setInterval(() => {
+          const file = [...document.querySelectorAll('.file-tree>button')].find((button) => button.textContent.includes('DEMO.md'));
+          if (document.querySelector('.monaco-editor') && file) {
+            file.click(); clearInterval(check); clearTimeout(timeout); resolve(true);
+          }
+        }, 50);
+      })`);
+      await window.webContents.executeJavaScript(`new Promise((resolve, reject) => {
+        const timeout = setTimeout(() => reject(new Error('Demo dosyası editörde görüntülenmedi')), 10000);
+        const check = setInterval(() => {
+          if (document.querySelector('.view-lines')?.textContent.replace(/\u00a0/g, ' ').includes('AgentMesh demo')) {
+            clearInterval(check); clearTimeout(timeout); resolve(true);
+          }
+        }, 50);
+      })`);
       await window.webContents.executeJavaScript(`document.querySelector('[data-testid="start"]').click()`);
       await window.webContents.executeJavaScript(`new Promise((resolve, reject) => {
         const timeout = setTimeout(() => reject(new Error('Demo ekranı tamamlanmadı')), 15000);
@@ -43,9 +82,15 @@ async function createWindow() {
       const root = resolve("dist");
       mkdirSync(root, { recursive: true });
       writeFileSync(join(root, "desktop-smoke.png"), (await window.capturePage()).toPNG());
+      await window.webContents.executeJavaScript(`document.querySelector('.file-workspace').scrollIntoView()`);
+      writeFileSync(join(root, "desktop-editor.png"), (await window.capturePage()).toPNG());
       console.log("Desktop smoke başarılı: sandbox, preload, React ve demo görevleri doğrulandı");
       app.quit();
-    } catch (error) { console.error(error); await service.close(); app.exit(1); }
+    } catch (error) {
+      console.error(error);
+      writeFileSync(resolve("dist", "desktop-error.png"), (await window.capturePage()).toPNG());
+      await service.close(); app.exit(1);
+    }
   }
 }
 
@@ -97,9 +142,9 @@ app.whenReady().then(async () => {
     if (typeof taskId !== "string") throw new Error("Geçersiz görev kimliği");
     service.retry(taskId);
   });
-  handle("mesh:review", (taskId) => {
-    if (typeof taskId !== "string") throw new Error("Geçersiz görev kimliği");
-    return service.review(taskId);
+  handle("mesh:review", (taskId, refresh = false) => {
+    if (typeof taskId !== "string" || typeof refresh !== "boolean") throw new Error("Geçersiz görev kimliği");
+    return service.review(taskId, refresh);
   });
   handle("mesh:approve", async (taskId, digest) => {
     if (typeof taskId !== "string" || typeof digest !== "string") throw new Error("Geçersiz onay");
@@ -113,6 +158,18 @@ app.whenReady().then(async () => {
     service.approve(taskId, digest);
     return true;
   });
+  handle("mesh:files", (taskId, path = "") => {
+    if (typeof taskId !== "string" || typeof path !== "string") throw new Error("Geçersiz dosya isteği");
+    return service.files(taskId, path);
+  });
+  handle("mesh:read-file", (taskId, path) => {
+    if (typeof taskId !== "string" || typeof path !== "string") throw new Error("Geçersiz dosya isteği");
+    return service.readFile(taskId, path);
+  });
+  handle("mesh:save-file", (taskId, path, content, digest) => {
+    if ([taskId, path, content, digest].some((value) => typeof value !== "string")) throw new Error("Geçersiz kayıt isteği");
+    return service.saveFile(taskId as string, path as string, content as string, digest as string);
+  });
   let updateTimer: ReturnType<typeof setTimeout> | undefined;
   service.subscribe(() => {
     if (updateTimer) return;
@@ -122,15 +179,16 @@ app.whenReady().then(async () => {
     }, 50);
   });
   await createWindow();
-  window!.webContents.session.setPermissionRequestHandler((_contents, _permission, callback) => callback(false));
-  window!.webContents.session.setPermissionCheckHandler(() => false);
-  app.on("activate", () => { if (BrowserWindow.getAllWindows().length === 0) void createWindow(); });
+  app.on("activate", () => {
+    if (BrowserWindow.getAllWindows().length === 0) { service.openDemo(); void createWindow(); }
+  });
 }).catch((error) => { console.error(safeLog(String(error))); app.exit(1); });
 
 app.on("window-all-closed", () => { if (process.platform !== "darwin") app.quit(); });
 app.on("before-quit", (event) => {
   if (quitting || !service) return;
   event.preventDefault();
+  if (window && !window.isDestroyed()) { window.close(); return; }
   quitting = true;
   void service.close().finally(() => app.quit());
 });

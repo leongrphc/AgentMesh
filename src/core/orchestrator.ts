@@ -121,6 +121,21 @@ export class Orchestrator {
     this.emit({ type: "task.retried", projectId: task.projectId, taskId });
   }
 
+  /** Explicitly stages a fresh preview after human edits, without approving it. */
+  refreshReview(taskId: string): void {
+    const task = this.requireTask(taskId);
+    const project = this.projects.get(task.projectId);
+    if (task.status !== "pending_review" || !task.review || !task.worktree || !project || !this.worktrees) {
+      throw new Error("Görev inceleme beklemiyor");
+    }
+    const lease = this.worktrees.reopen(project.workspaceRoot, task.worktree);
+    const inspection = this.worktrees.inspect(lease.path, task.allowedPaths);
+    if (!inspection.changedPaths.length) throw new Error("İncelenecek değişiklik yok; commit edilmiş branch'i CLI üzerinden inceleyin");
+    if (inspection.violations.length) throw new Error(`İzin dışı dosyalar: ${inspection.violations.join(", ")}`);
+    this.emit({ type: "task.review.requested", projectId: task.projectId, taskId,
+      digest: inspection.digest, result: task.review.result });
+  }
+
   /** A human approval must supply the exact digest from a review preview. */
   approveTask(taskId: string, approvedDigest: string): string {
     const task = this.requireTask(taskId);

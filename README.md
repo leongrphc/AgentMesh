@@ -2,7 +2,7 @@
 
 Codex, OpenCode, Claude, Antigravity ve API tabanlı modelleri bir orkestratör etrafında birleştirmeyi hedefleyen **hibrit, çoklu ajan IDE** projesi.
 
-> Durum: **MVP masaüstü prototipi**. Electron/React arayüzünde proje seçimi, görevler, ajan durumları, canlı olaylar ve ortak context/mesajlar var. SQLite orkestratör, Git worktree ve Codex/OpenCode CLI adaptörleriyle çalışır. Varsayılan demo modelleri çağırmaz; dosya editörü ve terminal henüz yoktur.
+> Durum: **MVP masaüstü prototipi**. Electron/React arayüzünde proje seçimi, görevler, ajan durumları, canlı olaylar, Monaco dosya editörü ve ortak context/mesajlar var. SQLite orkestratör, Git worktree ve Codex/OpenCode CLI adaptörleriyle çalışır. Varsayılan demo modelleri çağırmaz; terminal henüz yoktur.
 
 ## Hızlı başlangıç
 
@@ -26,6 +26,8 @@ Uygulama güvenli mock demo ile açılır. **Ajanları başlat** demo görevleri
 Gerçek proje için **Proje ayarlarını aç** ile `agentmesh.config.json` seçin; aşağıdaki CLI bölümündeki yapılandırma kullanılır. Gerçek çalıştırma ayrıca uygulama içinde açıkça başlatılır. Aynı proje CLI ile ortak SQLite günlüğünü kullanır; iki uygulama aynı anda yazamaz. Demo kayıtları Electron kullanıcı veri klasöründedir.
 
 Worktree oluşmuş bir görevi seçip **Değişiklikleri incele** ile diff ve yeni dosyaları görün. Bekleyen digest ile eşleşen değişiklikler **Onayla ve birleştir** ile ayrı entegrasyon dalına alınır. Ardından bağımlı görevleri başlatabilirsiniz. Diff değişmişse onay reddedilir; commit edilmiş merge conflict ve tam test raporları için şimdilik CLI incelemesi gerekir.
+
+**Dosyalar** bölümü seçili görevin çalışma alanını gösterir. Worktree henüz oluşmamışsa proje kökü salt okunur açılır. Durdurulmuş görev worktree'sindeki kapsam içi UTF-8 dosyaları (en fazla 1 MiB) düzenlenebilir; disk üzerinde değişmiş dosyanın üzerine eski içerik yazılmaz. Kaydettikten sonra **İncelemeyi yenile** yeni digest üretir; onay ayrıca gerekir. Monaco/worker dosyaları yerel paket içindedir; CDN kullanılmaz. DOMPurify bağımlılığı audit düzeltmesi için `overrides` ile güncel yama sürümüne alınır.
 
 `npm run desktop:smoke`, görünür pencere açmadan gerçek Electron renderer/preload ve dört görevli mock akışını doğrular; `dist/desktop-smoke.png` üretir. Pencere kapanırken aktif işler iptal edilir ve SQLite kapatılır.
 
