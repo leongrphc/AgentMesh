@@ -27,7 +27,7 @@ Electron Desktop (React + Monaco + xterm.js)
        Direct model API provider'ları da ayrı adapter olabilir.
 ```
 
-**MVP uygulama sırası:** çekirdek, SQLite, worktree, Codex/OpenCode CLI adaptörleri, insan onaylı entegrasyon dalı, canlı CLI olay aboneliği ve iptal eklendi. Electron/React kabuğu, dar preload/IPC, Monaco dosya editörü, Task Board ve diff onayı da çalışır. Sırada etkileşimli izin köprüsü, terminal ve sağlayıcı sağlığı; daha sonra Claude / Antigravity ile doğrudan API sağlayıcıları var. Adaptör sınırları sağlayıcı sürümlerinden bağımsız tutulur.
+**MVP uygulama sırası:** çekirdek, SQLite, worktree, Codex/OpenCode CLI adaptörleri, insan onaylı entegrasyon dalı, canlı CLI olay aboneliği ve iptal eklendi. Electron/React kabuğu, dar preload/IPC, Monaco dosya editörü, Task Board ve diff onayı da çalışır. Codex App Server ve OpenCode Server izin köprüleri ile modelsiz bağlantı kontrolleri var. Sırada terminal ve ajan ayarları; daha sonra Claude / Antigravity ile doğrudan API sağlayıcıları var. Adaptör sınırları sağlayıcı sürümlerinden bağımsız tutulur.
 
 ## Neden Electron?
 
@@ -76,7 +76,7 @@ API anahtarları SQLite içine düz metin koyulmaz; masaüstü işletim sistemi 
 | Sağlayıcı | Gerçek entegrasyon yolu | Kritik not |
 | --- | --- | --- |
 | Codex | `exec --json` veya `app-server` stdio JSON-RPC (uygulandı); SDK ileride alternatif | App Server thread/turn ve tek isteklik komut/dosya onayı sağlar. Native oturum ID ayrı saklanır; kimlik doğrulama sağlayıcı ayarlarına bağlıdır. |
-| OpenCode | `@opencode-ai/sdk`, `opencode serve`, gerektiğinde ACP | Server `127.0.0.1` üzerinde açılır, auth/sürüm kontrolü ve proje dizini eşleştirmesi gerekir. |
+| OpenCode | `run --format json` veya sahipli `serve --pure` HTTP/SSE (uygulandı); SDK/ACP alternatif hedef | Server 1.19.x v1 şeması, rastgele Basic auth/port, loopback ve dizin kontrolü. Son deny/ask oturum bloğu ve once/reject köprüsü; gerçek model smoke ayrıca açık. |
 | Claude | Claude Agent SDK / doğrudan Claude API | **Üçüncü taraf ürünlerde claude.ai giriş/abonelik kullanımına Anthropic'in önceden onay verilmedikçe izin vermediği belgeleniyor.** Uyumlu API anahtarı bağlantısı varsayılandır. |
 | Antigravity | Python `google-antigravity` SDK için yerel sidecar | SDK Python tabanlıdır; Gemini API anahtarı veya desteklenen kurumsal kimlik doğrulaması gerekir. |
 | Diğerleri | Resmî API SDK'sı veya ACP adaptörü | Model konuşması tek başına dosya/terminal kullanan kod ajanı değildir; gereken tool-loop'u adaptör sağlamalıdır. |

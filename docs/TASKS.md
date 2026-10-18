@@ -35,17 +35,18 @@ Codex, OpenCode, Claude, Antigravity ve diğer API modellerini **tek IDE içinde
 - [x] JSONL stdout/stderr ve journal olaylarını canlı `subscribe()` abonelerine iletme; CLI'da `--stream`.
 - [x] `AbortSignal`, `Ctrl+C`, kalıcı `cancelled`, geç gelen çıktının görev sonucunu tamamlamasını engelleme.
 - [x] Başarısız/iptal edilmiş/engellenmiş görevi `--retry TASK` ile açıkça yeniden kuyruğa alma.
-- [x] Mock ve yerel subprocess/Git worktree testleri; son başarılı doğrulama **32/32 test**, `npm run typecheck`, desktop build ve gerçek Electron/Monaco/izin paneli smoke başarılı.
+- [x] Mock ve yerel subprocess/Git worktree testleri; son başarılı doğrulama **42/42 test**, `npm run typecheck`, desktop build, Electron/Monaco/izin paneli smoke ve modelsiz yerel OpenCode Server protokol smoke başarılı.
 
 ## Açık görevler — öncelik sırasıyla
 
 ### P0 — Öncelikli işler
 
-- [ ] **CORE-004 / İzin köprüsü:** Normalize izin protokolü ve Codex App Server uygulandı; OpenCode Server kısmı açık. Otomatik yetki yükseltme yok. Davranış ve doğrulama: [permissions.md](permissions.md).
+- [x] **CORE-004 / İzin köprüsü:** Normalize izin protokolü, Codex App Server ve OpenCode 1.19.x Server, masaüstü tek isteklik karar paneli uygulandı. Otomatik yetki yükseltme yok. Kapsam ve doğrulama: [permissions.md](permissions.md). Gerçek model/araç smoke doğrulaması ayrıca CORE-008.
   - [x] Çalıştırma/proje/digest kapsamlı izin kuyruğu; tek kullanımlık karar, 120 saniye timeout, iptal/kopma/restart reddi, komut metni saklamayan audit olayları. Mevcut tek yönlü CLI'ler interaktif izin desteğini false bildirir.
   - [x] Codex çift yönlü App Server transport, masaüstü karar paneli ve süreç protokol testleri. Yanlış thread/turn, session grant, ek izin, iptal/kopma ve bozuk/büyük RPC mesajı reddi testleri; gerçek Electron demo izin reddi smoke testi.
   - [x] OpenCode 1.19.x için sahipli loopback HTTP sunucusu, rastgele Basic auth, sürüm/OpenAPI/dizin kontrolü, SSE, yalnızca once/reject, değişmiş/geri çekilmiş izin reddi ve oturum politikasını resume öncesi yeniden uygulama; sahte HTTP/SSE süreç testleri.
-  - [ ] OpenCode Server config/masaüstü bağlantısı, sağlayıcı sağlık kontrolü ve modelsiz yerel session/policy/SSE smoke komutu. Gerçek model smoke doğrulaması ayrıca CORE-008.
+  - [x] `npm run smoke:opencode`: yerel 1.19.3 üzerinde auth/schema, geçici session create/read/policy update, SSE ve geçici session temizliği; model/prompt çağrısı yok. Native PATCH politikayı sona eklediği için son deny/ask bloğu doğrulanır.
+  - [x] OpenCode Server config/masaüstü bağlantısı ve sağlayıcı sağlık kontrolü. Bağlı sağlayıcı bildirimi model erişimi veya auth token geçerliliği garantisi değildir; ham sağlayıcı bilgisi renderer'a aktarılmaz.
 - [x] **CORE-005 / Güvenli log:** Ham stdout/stderr filtreleme, çıktı sınırları ve ayrı görüntüleme/kayıt politikaları. [Gizlilik politikası](log-privacy.md); filtre bilinen sır ve e-posta biçimlerini tanır.
   - [x] Orkestratör canlı çıktı sınırında anahtar/token/e-posta maskeleme, görüntüleme (8192 karakter) ve kalıcı hata (2048 karakter) politikaları; sızıntı/kalıcılık testleri.
   - [x] Süreç okuyucusunda chunk sınırlarını aşan sırlar için tamponlama, JSONL satır/toplam byte sınırı ve flood testleri. Varsayılan satır 1 MiB, stdout/stderr toplamı 16 MiB; aşımda süreç durur. JSONL canlı, stderr süreç kapanışında filtrelenir. Ham sonuç olayları dahili kalır; mevcut filtre keyfi kişisel veriyi tanıma garantisi vermez.
@@ -54,21 +55,22 @@ Codex, OpenCode, Claude, Antigravity ve diğer API modellerini **tek IDE içinde
 - [x] **CORE-007 / İlk arayüz:** Config dosyasıyla proje seçimi, görev listesi/detayı, ajan durumu, canlı olay paneli. Başlat/iptal/yeniden kuyruğa al backend'e bağlı. Varsayılan kalıcı mock demo, gerçek CLI çalıştırma için uygulama içinde açık başlatma kararı.
 - [ ] **CORE-008 / Gerçek CLI smoke testleri:** Kimliği doğrulanmış Codex ve OpenCode ile küçük, ayrı ve güvenli test reposunda uçtan uca çalışmayı onay ve maliyet sınırlarına dikkat ederek doğrula; session/resume ve izin davranışlarını kaydet. Bu testler **henüz yapılmadı**.
   - [x] Modelsiz yerel bağlantı kontrolü: Codex 0.159.2 App Server initialize/account-read ve OpenCode 1.19.3 sürümü doğrulandı. Hesap kaydı kontrolü model erişimi veya kota testi değildir.
+  - [x] OpenCode 1.19.3 gerçek yerel Server: auth/schema/dizin, session create/read/policy update, SSE ve sağlayıcı bağlantı bildirimi; hiçbir prompt veya generation gönderilmedi.
 
 ### P1 — IDE'nin kullanılabilir hale gelmesi
 
 - [x] **UI-001:** Klasör bazlı dosya ağacı ve yerel Monaco editör; seçili görevin worktree'si, henüz worktree yoksa salt okunur proje kökü. Kaydetme yalnızca durdurulmuş görev worktree'sinde, allowedPaths ve içerik digest kontrolüyle. UTF-8/1 MiB sınırı, path traversal/symlink engeli, kaydedilmemiş değişiklik koruması ve gerçek Electron dosya açma smoke testi.
 - [ ] **UI-002:** Terminal sekmeleri (PTY) ve süreç yaşam döngüsü.
 - [ ] **UI-003:** Agent Center: provider, CLI/SDK/API bağlantısı, model/rol, bağlantı sağlığı ve giriş eksikliği.
-  - [x] Config'teki CLI ajanları için provider/transport/model/rol/izin yeteneği görünümü, açık bağlantı kontrolü, Codex hesap kaydı/giriş gerekliliği, OpenCode sürümü; model veya token refresh çağrısı yok. Sağlık sonucu kimlik/token içermez.
-  - [ ] UI'dan ajan ekleme/model/rol ayarı, SDK/API bağlantıları ve OpenCode Server üzerinden güvenilir auth durumu.
+  - [x] Config'teki CLI ajanları için provider/transport/model/rol/izin yeteneği görünümü, açık bağlantı kontrolü, Codex hesap kaydı/giriş gerekliliği; OpenCode exec sürümü veya Server bağlı sağlayıcı bildirimi. Kontrol generation göndermez; sonuç kimlik/token içermez. Transport/model kombinasyonları ayrı kontrol edilir.
+  - [ ] UI'dan ajan ekleme/model/rol ayarı ve SDK/API bağlantıları. Gerçek model erişimi/token geçerliliği CORE-008 altında doğrulanacak.
 - [x] **UI-004:** Task Board: görev oluşturma, bağımlılık çizimi (100 göreve kadar SVG; büyük projelerde liste), kalıcı 1–8 paralellik limiti, durum, iptal, tekrar dene, son 200 olay ve seçili görev filtresi. Oluşturulan görevler/paralellik SQLite replay ile korunur; gerçek Electron form smoke testi eklendi.
 - [x] **UI-005:** Shared Context ve ajan mesajlarını kaynak görevleriyle görünür kılma; masaüstü sekmeleri.
 - [ ] **UI-006:** Diff/test önizleme, SHA-256 onayı, merge conflict çözme/yeniden deneme ekranı.
   - [x] Gerçek task worktree diff/yeni dosya önizlemesi, izin ihlalleri, SHA-256 digest ve uygulama içinde açık onay; değiştirilmiş diff reddi için masaüstü servis entegrasyon testi. İnsan düzenlemesi sonrası açık inceleme yenileme yeni digest'i kaydeder; eski onay geçersiz kalır.
   - [ ] Yapılandırılmış test raporları ve commit edilmiş merge conflict için tam diff/çözüm/yeniden deneme akışı. Mevcut ekran bu durumda CLI incelemesine yönlendirir; otomatik çözüm yapmaz.
 - [ ] **CORE-009:** Ajan çalışırken gelen mesajların canlı teslimi, inbox cursor ve idempotency.
-- [ ] **CORE-010:** İzinleri çalıştırma **öncesinde** zorlayabilecek süreç/OS sandbox politikası; `allowedPaths` şu an yalnızca çalıştırma sonrasında denetleniyor.
+- [ ] **CORE-010:** İzinleri çalıştırma **öncesinde** zorlayabilecek süreç/OS sandbox politikası; `allowedPaths` şu an yalnızca çalıştırma sonrasında denetleniyor. Native sağlayıcı/araç alt süreç ağacının iptal ve kapanış garantileri ayrıca sınanmalı; sahipli ana sunucuyu kapatmak tek başına OS izolasyonu değildir.
 - [ ] **CORE-011:** Kalıcı, sürümlü context/karar yönetimi; çakışan kararlar için doğrulama ve ilgili context paketini seçme.
 - [ ] **CORE-012:** Güvenli log saklama/retention, hata teşhisi, oturum sağlığı ve yeniden başlatma kurtarma senaryoları.
 - [ ] **CORE-013 / Config uyumu:** Yeniden açılan projede görev/ajan tanımları değişmişse sessizce eski tanımı kullanmak yerine farkı göster; eksik sağlayıcı eşlemesi ve aynı ID'nin farklı kapsam/talimatla kullanılması için açık güncelleme akışı.
@@ -89,8 +91,8 @@ Codex, OpenCode, Claude, Antigravity ve diğer API modellerini **tek IDE içinde
 
 1. `D:\WebGpt` içinde `git status --short` ve `git log -5 --oneline` ile durumu kontrol et.
 2. `npm install` (gerekiyorsa), ardından `npm run typecheck` ve `npm test` çalıştır.
-3. **CORE-004** için [permissions.md](permissions.md) üzerinden OpenCode Server şema/izin bağlantısına devam et. Codex App Server kuyruğu ve masaüstü karar paneli var; varsayılan exec adaptörleri interaktif izin desteklemez.
-4. Masaüstü, güvenli log, Monaco ve Task Board tamamlandı. Sırada izin köprüsü, terminal (UI-002), sağlayıcı sağlığı (UI-003), config uyumu (CORE-013) ve UI-006 çakışma çözümünün kalan kısmı var.
+3. Codex App Server ve OpenCode Server köprüleri tamamlandı; [permissions.md](permissions.md) desteklenen kapsamları açıklar. Varsayılan exec adaptörleri interaktif izin desteklemez. Modelsiz yerel kontrol: `npm run smoke:opencode`.
+4. Sırada terminal (UI-002), UI'dan ajan ayarları (UI-003), config uyumu (CORE-013) ve UI-006 çakışma çözümünün kalan kısmı var. Gerçek model/araç smoke'ları (CORE-008) hâlâ açık.
 5. **Her tamamlanan geliştirmeyi ayrı Git commit'iyle kaydet.** Commit'ten önce ilgili testleri çalıştır; `docs/TASKS.md` kutularını güncelle. Kullanıcı istemedikçe otomatik push/deploy/ana dal dışı entegrasyon merge'i yapma.
 
 ### Faydalı komutlar
@@ -126,7 +128,7 @@ npm run live -- --config agentmesh.config.example.json
 - Grafik masaüstü kabuğu, Monaco editör ve Task Board var; terminal henüz yok. Editör mevcut dosyaları düzenler; yeni dosya/klasör oluşturma ve dosya izleyicisi henüz yok.
 - Codex/OpenCode CLI komutları ve sahte süreç akışları test edildi; gerçek ücretli/oturum açılmış model çalıştırması doğrulanmadı.
 - OpenCode için OS seviyesinde izolasyon kanıtlanmadı; mevcut `allowedPaths` denetimi işlem sonrasındadır.
-- Codex App Server için araç onayı köprüsü var; OpenCode izin köprüsü ve gerçek zamanlı *ajanlar arası* mesaj teslimi eksik. Log filtresi bilinen biçimleri tanır; keyfi kişisel veri için garanti vermez.
+- Codex App Server ve OpenCode Server için araç onayı köprüleri var; gerçek zamanlı *ajanlar arası* mesaj teslimi eksik. OpenCode Server şu an 1.19.x v1 şemasına bağlıdır ve yalnızca bash/read/edit kapsamlarını sunar. Log filtresi bilinen biçimleri tanır; keyfi kişisel veri için garanti vermez.
 - Git merge conflict otomatik çözülmüyor; korunmuş görev branch'i manuel inceleme gerektiriyor.
 - Claude, Antigravity ve doğrudan API sağlayıcıları hedef kapsamda; henüz çalışan adaptörleri yok.
 - Native provider sohbetleri tek bir birleşik konuşma geçmişi değildir; paylaşılan veri yapılandırılmış görev/context/mesaj kayıtlarıdır.

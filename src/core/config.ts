@@ -4,7 +4,7 @@ export interface Config {
   projectId: string;
   repoPath: string;
   maxParallel?: number;
-  agents: Array<{ id: string; provider: "codex" | "opencode"; model?: string; transport?: "exec" | "app-server" }>;
+  agents: Array<{ id: string; provider: "codex" | "opencode"; model?: string; transport?: "exec" | "app-server" | "server" }>;
   tasks: AgentTask[];
 }
 
@@ -19,8 +19,9 @@ export function validate(config: Config): void {
   for (const agent of config.agents) {
     if (!agent || typeof agent.id !== "string" || !agent.id.trim() || !["codex", "opencode"].includes(agent.provider) || registered.has(agent.id)
       || (agent.model !== undefined && typeof agent.model !== "string")
-      || (agent.transport !== undefined && !["exec", "app-server"].includes(agent.transport))
-      || (agent.transport === "app-server" && agent.provider !== "codex")) {
+      || (agent.transport !== undefined && !["exec", "app-server", "server"].includes(agent.transport))
+      || (agent.transport === "app-server" && agent.provider !== "codex")
+      || (agent.transport === "server" && (agent.provider !== "opencode" || (agent.model !== undefined && !/^[^/\s]+\/[^\s]+$/.test(agent.model))))) {
       throw new Error(`Geçersiz veya tekrarlı ajan: ${agent?.id}`);
     }
     registered.add(agent.id);

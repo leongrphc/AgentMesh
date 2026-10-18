@@ -3,9 +3,10 @@ import { promisify } from "node:util";
 import { JsonlRpcClient, record, type RpcOptions } from "./jsonl-rpc.js";
 import { defaultOpenCodeCommand } from "./opencode-cli.js";
 import { safeLog } from "../core/safe-log.js";
+import { OpenCodeServerClient, type OpenCodeServerOptions } from "./opencode-server-client.js";
 
 export interface ProviderHealth {
-  status: "configured" | "needs_login" | "installed" | "unavailable";
+  status: "configured" | "needs_login" | "needs_setup" | "installed" | "unavailable";
   detail: string;
   checkedAt: string;
 }
@@ -46,4 +47,23 @@ export async function probeOpenCode(cwd: string, signal?: AbortSignal): Promise<
   } catch {
     return { status: "unavailable", checkedAt, detail: signal?.aborted ? "Bağlantı kontrolü iptal edildi." : "OpenCode CLI bulunamadı veya sürüm kontrolü başarısız." };
   }
+}
+
+export async function probeOpenCodeServer(cwd: string, model?: string, signal?: AbortSignal,
+  factory: (options: OpenCodeServerOptions) => Promise<OpenCodeServerClient> = OpenCodeServerClient.start): Promise<ProviderHealth> {
+  const checkedAt = new Date().toISOString();
+  let server: OpenCodeServerClient | undefined;
+  try {
+    server = await factory({ cwd, signal, timeoutMs: 30000 });
+    const providers = record(await server.request("/provider"));
+    if (!Array.isArray(providers.connected) || !providers.connected.every((entry) => typeof entry === "string")) throw new Error("Invalid provider response");
+    const provider = model?.split("/")[0];
+    const configured = provider ? providers.connected.includes(provider) : providers.connected.length > 0;
+    return { status: configured ? "configured" : "needs_setup", checkedAt,
+      detail: configured ? `OpenCode ${server.version}: sağlayıcı bağlantısı bildirildi; model erişimi ve kota sınanmadı.`
+        : `OpenCode ${server.version}: seçilen sağlayıcı için bağlantı bulunamadı; sağlayıcı ayarlarını kontrol edin.` };
+  } catch {
+    return { status: "unavailable", checkedAt, detail: signal?.aborted ? "Bağlantı kontrolü iptal edildi."
+      : "OpenCode Server bağlantısı, şeması veya çalışma dizini doğrulanamadı." };
+  } finally { await server?.close(); }
 }

@@ -25,9 +25,10 @@
 - [x] Onaylanan kodun bağımlı görevlerde görünmesi; değişen diff ve merge çakışmalarının reddi.
 - [x] CLI stdout/stderr olaylarını canlı abonelere aktarma; `AbortSignal` / `Ctrl+C` iptali ve kalıcı `cancelled` durumu.
 - [x] Hata/iptal sonrası görev için `--retry TASK` komutuyla açıkça yeniden kuyruğa alma.
-- [ ] CLI izin talepleri için etkileşimli onay köprüsü; tasarım docs/permissions.md içinde, çift yönlü transport açık.
+- [x] CLI izin talepleri için etkileşimli onay köprüsü; Codex App Server ve OpenCode 1.19.x Server, masaüstü tek isteklik karar paneli. Desteklenen kapsamlar docs/permissions.md içinde.
   - [x] Codex App Server, kapsamlı izin kuyruğu, masaüstü karar paneli ve sahte süreç/gerçek Electron testleri.
-  - [ ] OpenCode Server izinleri ve gerçek hesaplı model/araç smoke doğrulaması.
+  - [x] OpenCode Server izinleri, fake HTTP/SSE testleri ve gerçek yerel modelsiz session/policy/SSE smoke.
+  - [ ] Gerçek hesaplı model/araç smoke doğrulaması (CORE-008).
 - [x] Filtrelenmiş ve sınırlı CLI tanılama çıktısı; serbest metin içermeyen güvenli destek raporu, masaüstünde kalıcı olay geçmişi.
 - [ ] Codex/OpenCode canlı model oturumlarının uçtan uca sınanması.
 - [ ] Ajan bağlantı durumunu/eksik kimlik doğrulamayı gösterme; gerçek ajanın yazma izinleri.
@@ -39,8 +40,8 @@
 - [x] Config ile proje seçimi, görev worktree dosya ağacı ve kapsam/digest kontrollü Monaco editör.
 - [ ] Terminal sekmesi / PTY yaşam döngüsü.
 - [ ] Agent Center (ajan seçme, role bağlama, bağlantı sağlığı).
-  - [x] Config'teki ajanların model/rol/transport/yetenek görünümü; Codex modelsiz hesap kaydı kontrolü ve OpenCode sürüm kontrolü.
-  - [ ] UI'dan ajan ekleme/ayar düzenleme ve OpenCode Server auth kontrolü.
+  - [x] Config'teki ajanların model/rol/transport/yetenek görünümü; Codex modelsiz hesap kaydı kontrolü, OpenCode exec sürümü veya Server sağlayıcı bağlantı bildirimi.
+  - [ ] UI'dan ajan ekleme/ayar düzenleme; gerçek model erişimi/kota ayrıca CORE-008.
 - [x] Task Board (görev oluşturma, bağımlılık çizimi, kalıcı paralellik, durum, iptal/tekrar dene, son 200 olay).
 - [x] Shared Context ve ajan mesajları için kaynak görevleri gösteren masaüstü görünümü; çalışma sırasında canlı ajan teslimi ayrıca CORE-009.
 - [ ] Diff/test önizleme; onaylı merge.
@@ -70,4 +71,4 @@ Bir kullanıcı Windows'ta depoyu seçer. `Codex-manager`, `OpenCode-frontend` v
 
 ## İlk gerçek geliştirme kartı
 
-**Sıradaki kart `CORE-004`: Etkileşimli izin köprüsü.** Desktop shell, log filtrelemesi, dosya editörü ve Task Board tamamlandı. Çift yönlü Codex App Server / OpenCode Server transport ve kullanıcı kararı yaşam döngüsü sırada. Terminal, sağlayıcı sağlığı ve merge conflict arayüzü de açık. Entegrasyon dalının ana dala alınması ayrıca kullanıcı kararına bağlı kalır.
+**Sıradaki işler:** Terminal (UI-002), UI'dan ajan ayarları (UI-003), config uyumu (CORE-013) ve merge conflict ekranı (UI-006). Desktop shell, log filtrelemesi, dosya editörü, Task Board ve Codex/OpenCode Server izin köprüleri tamamlandı. Gerçek hesaplı model/araç smoke testleri CORE-008 altında hâlâ açık. Entegrasyon dalının ana dala alınması ayrıca kullanıcı kararına bağlı kalır.

@@ -1,10 +1,13 @@
 import assert from "node:assert/strict";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { join } from "node:path";
 import { test } from "node:test";
 import { OpenCodeServerClient, validateOpenCodeSchema } from "../src/adapters/opencode-server-client.js";
-import { OpenCodeServerAdapter } from "../src/adapters/opencode-server.js";
+import { OpenCodeServerAdapter, hasOpenCodeSessionPolicy, openCodeSessionRules } from "../src/adapters/opencode-server.js";
+import { probeOpenCodeServer } from "../src/adapters/provider-health.js";
+import { validate } from "../src/core/config.js";
+import { configuredAdapter } from "../src/adapters/registry.js";
 import type { AgentExecution } from "../src/core/contracts.js";
 
 // Extracted from local OpenCode 1.19.3 /doc, not a manually invented provider schema.
@@ -15,7 +18,7 @@ function fakeServer(mode: string, audit: string): string {
     const http=require('node:http'), fs=require('node:fs');
     const mode=${JSON.stringify(mode)}, audit=${JSON.stringify(audit)}, schema=${JSON.stringify(schema)};
     const auth='Basic '+Buffer.from(process.env.OPENCODE_SERVER_USERNAME+':'+process.env.OPENCODE_SERVER_PASSWORD).toString('base64');
-    let permission=[], pending, permissionReads=0, streams=[], messageResponse, messageBody;
+    let permission=mode==='edit'?[{permission:'*',pattern:'*',action:'allow'}]:[], pending, permissionReads=0, streams=[], messageResponse, messageBody;
     const requests=[];
     const json=(res,value,status=200)=>{res.writeHead(status,{'Content-Type':'application/json'});res.end(JSON.stringify(value))};
     const send=(type,properties)=>streams.forEach(res=>res.write('data: '+JSON.stringify({type,properties})+'\\r\\n\\r\\n'));
@@ -36,6 +39,7 @@ function fakeServer(mode: string, audit: string): string {
         if(path==='/global/health') return json(res,{healthy:true,version:mode==='bad-version'?'2.0.0':'1.19.3'});
         if(path==='/doc') return json(res,schema);
         if(path==='/path') return json(res,{directory:process.cwd()});
+        if(path==='/provider') return json(res,{all:[{id:'test',private:'provider-secret'}],default:{test:'model'},connected:mode==='no-provider'?[]:mode==='bad-provider'?'private':['test']});
         if(path==='/event') {
           res.writeHead(200,{'Content-Type':'text/event-stream'});
           res.write('data: '+JSON.stringify({type:'server.connected',properties:{}})+'\\n\\n');
@@ -48,7 +52,7 @@ function fakeServer(mode: string, audit: string): string {
           return json(res,session());
         }
         if(path==='/session/ses_test'&&req.method==='GET') return json(res,session());
-        if(path==='/session/ses_test'&&req.method==='PATCH') {permission=parsed.permission;return json(res,session())};
+        if(path==='/session/ses_test'&&req.method==='PATCH') {permission=[...permission,...parsed.permission];return json(res,session())};
         if(path==='/permission') {
           if(!pending) return json(res,[]);
           permissionReads++;
@@ -172,4 +176,30 @@ test("OpenCode cancellation stops the owned server and preserves the early sessi
     assert.equal(saved, "ses_test");
     assert.ok(!f.audit().some((request) => request.body?.reply === "once"));
   } finally { f.cleanup(); }
+});
+
+test("OpenCode provider health projects connection status without leaking provider data or calling a model", async () => {
+  for (const [mode, model, status] of [["health", "test/model", "configured"], ["health", "other/model", "needs_setup"],
+    ["no-provider", undefined, "needs_setup"], ["bad-provider", undefined, "unavailable"]] as const) {
+    const f = fixture(mode);
+    try {
+      const health = await probeOpenCodeServer(f.root, model, undefined, (options) => OpenCodeServerClient.start({ ...f.options, signal: options.signal }));
+      assert.equal(health.status, status);
+      assert.ok(!JSON.stringify(health).includes("private")); assert.ok(!JSON.stringify(health).includes("provider-secret"));
+      assert.ok(f.audit().every((request) => request.method === "GET"));
+      assert.ok(!f.audit().some((request) => request.path.includes("/session")));
+    } finally { f.cleanup(); }
+  }
+});
+
+test("OpenCode native appended policies and transport selection preserve deny-by-default semantics", () => {
+  const allow = { permission: "*", pattern: "*", action: "allow" };
+  assert.equal(hasOpenCodeSessionPolicy([allow, ...openCodeSessionRules, ...openCodeSessionRules]), true);
+  assert.equal(hasOpenCodeSessionPolicy([...openCodeSessionRules, allow]), false);
+  assert.equal(hasOpenCodeSessionPolicy(openCodeSessionRules.slice(1)), false);
+  const agent = { id: "a", provider: "opencode" as const, transport: "server" as const, model: "test/model" };
+  validate({ projectId: "p", repoPath: ".", agents: [agent], tasks: [] });
+  assert.equal(configuredAdapter(agent).interactivePermissions, true);
+  assert.throws(() => validate({ projectId: "p", repoPath: ".", agents: [{ ...agent, model: "invalid-model" }], tasks: [] }));
+  assert.throws(() => validate({ projectId: "p", repoPath: ".", agents: [{ ...agent, provider: "codex" }], tasks: [] }));
 });

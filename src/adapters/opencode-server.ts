@@ -11,6 +11,16 @@ export const openCodeSessionRules = [
   ...["bash", "edit", "read"].map((permission) => ({ permission, pattern: "*", action: "ask" })),
 ];
 
+/** Native PATCH appends rules; the final deny-all + ask block must win over every prior rule. */
+export function hasOpenCodeSessionPolicy(value: unknown): boolean {
+  return Array.isArray(value) && value.length >= openCodeSessionRules.length
+    && value.slice(-openCodeSessionRules.length).every((entry, index) => {
+      const rule = record(entry), expected = openCodeSessionRules[index]!;
+      return Object.keys(rule).every((key) => ["permission", "pattern", "action"].includes(key))
+        && rule.permission === expected.permission && rule.pattern === expected.pattern && rule.action === expected.action;
+    });
+}
+
 function canonical(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(canonical);
   if (value && typeof value === "object") return Object.fromEntries(Object.keys(value).sort().map((key) => [key, canonical(record(value)[key])]));
@@ -86,7 +96,7 @@ export class OpenCodeServerAdapter implements AgentAdapter {
       } else session = record(await server.request("/session", "POST", { title: input.task.title, permission: openCodeSessionRules }));
       if (typeof session.id !== "string" || !/^ses[\w-]{1,200}$/.test(session.id)
         || (input.sessionId && session.id !== input.sessionId) || typeof session.directory !== "string" || !server.sameDirectory(session.directory)
-        || JSON.stringify(session.permission) !== JSON.stringify(openCodeSessionRules)) throw new Error("OpenCode oturum kapsamı veya izin politikası doğrulanamadı");
+        || !hasOpenCodeSessionPolicy(session.permission)) throw new Error("OpenCode oturum kapsamı veya izin politikası doğrulanamadı");
       sessionId = session.id;
       input.onSession?.(sessionId);
       const previous = await server.request("/permission");

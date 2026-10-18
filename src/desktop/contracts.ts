@@ -19,7 +19,7 @@ export interface DesktopState {
   snapshot: ProjectSnapshot;
   busy: boolean;
   demo: boolean;
-  agents: Array<{ id: string; provider: string; model?: string; transport?: "exec" | "app-server"; interactivePermissions?: boolean }>;
+  agents: Array<{ id: string; provider: string; model?: string; transport?: "exec" | "app-server" | "server"; interactivePermissions?: boolean }>;
   permissions: PermissionRequest[];
   health: Record<string, ProviderHealth>;
   checkingAgents: boolean;

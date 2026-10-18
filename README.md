@@ -27,6 +27,10 @@ Demo ilk plan görevinde sahte bir araç izni isteyerek karar panelini de göste
 
 **Ajan merkezi** sağlayıcı, bağlantı yöntemi, model/rol ve araç izni desteğini gösterir. **Bağlantıları kontrol et** model çağırmadan Codex hesap kaydını ve OpenCode sürümünü kontrol eder. Kimlik veya token UI'a aktarılmaz; bu sonuç model erişimi/kota garantisi değildir. OpenCode exec transportunda giriş durumu henüz doğrulanmıyor.
 
+OpenCode etkileşimli izinleri için ajana `"transport": "server"` ekleyin veya `agentmesh.opencode-server.example.json` örneğini kullanın. Desteklenen sürüm ailesi **1.19.x**; her çalıştırmada `/doc` şeması ve çalışma dizini doğrulanır. Model verilirse `provider/model` biçimindedir. Sunucu yalnızca loopback üzerinde rastgele parola/portla açılır; bash/read/edit için bir kez izin verme veya reddetme sunulur. Diğer araç kapsamları kapalıdır. Ajan merkezinde Server bağlantısı seçili modelin sağlayıcı bildirimini kontrol eder; exec için sürüm kontrolü devam eder.
+
+`npm run smoke:opencode`, gerçek yerel OpenCode ile geçici session oluşturma/okuma, izin politikası güncelleme, auth ve SSE kontrolü yapar. Model veya prompt göndermez; oluşturduğu geçici session ve klasörü temizler. Gerçek model turu ve araç yürütmesi bu testin kapsamında değildir.
+
 **Görev ekle** ile ajan, talimat, dosya kapsamı ve bağımlılıklar tanımlanır. Bağımlılık çizimi seçili göreve geçiş sağlar. **Paralel ajan** ayarı 1–8 aralığındadır; görevler ve ayar yeniden açıldığında korunur. CLI'de config içindeki açık `maxParallel` değeri önceliklidir; belirtilmemişse kalıcı proje ayarı kullanılır. Olay paneli son 200 olayı yeniden yükler; ham CLI çıktıları kalıcı geçmişe yazılmaz.
 
 Gerçek proje için **Proje ayarlarını aç** ile `agentmesh.config.json` seçin; aşağıdaki CLI bölümündeki yapılandırma kullanılır. Gerçek çalıştırma ayrıca uygulama içinde açıkça başlatılır. Aynı proje CLI ile ortak SQLite günlüğünü kullanır; iki uygulama aynı anda yazamaz. Demo kayıtları Electron kullanıcı veri klasöründedir.

@@ -9,7 +9,7 @@ import { validate, orderTasks, type Config } from "../core/config.js";
 import { MockAgent } from "../adapters/mock.js";
 import { configuredAdapter } from "../adapters/registry.js";
 import type { PermissionDecision } from "../core/permissions.js";
-import { probeCodex, probeOpenCode, type ProviderHealth } from "../adapters/provider-health.js";
+import { probeCodex, probeOpenCode, probeOpenCodeServer, type ProviderHealth } from "../adapters/provider-health.js";
 import { safeLog } from "../core/safe-log.js";
 import { listWorkspace, readWorkspaceFile, saveWorkspaceFile } from "../core/workspace-files.js";
 import type { DesktopState, DesktopReview, TaskDraft } from "./contracts.js";
@@ -38,7 +38,7 @@ export class DesktopService {
     if (!this.engine || !this.config) throw new Error("Önce proje açın");
     return structuredClone({ snapshot: this.engine.snapshot(this.config.projectId), busy: !!this.running,
       demo: this.demo, agents: this.config.agents.map((agent) => ({ ...agent,
-        interactivePermissions: this.demo || (agent.provider === "codex" && agent.transport === "app-server") })),
+        interactivePermissions: this.demo || (agent.provider === "codex" && agent.transport === "app-server") || (agent.provider === "opencode" && agent.transport === "server") })),
       permissions: this.engine.pendingPermissions(this.config.projectId), events: this.events,
       health: this.health, checkingAgents: !!this.healthAbort,
       maxParallel: this.engine.snapshot(this.config.projectId).project.maxParallel ?? this.config.maxParallel ?? 2 });
@@ -176,11 +176,13 @@ export class DesktopService {
     const abort = new AbortController(); this.healthAbort = abort; this.publish();
     try {
       const probes = new Map<string, Promise<ProviderHealth>>();
-      for (const agent of state.agents) if (!probes.has(agent.provider)) probes.set(agent.provider,
+      const key = (agent: DesktopState["agents"][number]) => JSON.stringify([agent.provider, agent.transport ?? "exec", agent.model ?? ""]);
+      for (const agent of state.agents) if (!probes.has(key(agent))) probes.set(key(agent),
         state.demo ? Promise.resolve({ status: "configured", checkedAt: new Date().toISOString(), detail: "Yerel mock ajan; model veya CLI çağrısı yapılmaz." })
           : agent.provider === "codex" ? probeCodex(state.snapshot.project.workspaceRoot, abort.signal)
+          : agent.transport === "server" ? probeOpenCodeServer(state.snapshot.project.workspaceRoot, agent.model, abort.signal)
           : probeOpenCode(state.snapshot.project.workspaceRoot, abort.signal));
-      const results = await Promise.all(state.agents.map(async (agent) => [agent.id, await probes.get(agent.provider)!] as const));
+      const results = await Promise.all(state.agents.map(async (agent) => [agent.id, await probes.get(key(agent))!] as const));
       if (this.healthAbort === abort && !abort.signal.aborted) this.health = Object.fromEntries(results);
     } finally { if (this.healthAbort === abort) { this.healthAbort = undefined; this.publish(); } }
   }

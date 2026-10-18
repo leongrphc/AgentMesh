@@ -2,6 +2,8 @@ import { spawn, type ChildProcess } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import { realpathSync } from "node:fs";
 import { resolve } from "node:path";
+import { request as httpRequest } from "node:http";
+import { Readable } from "node:stream";
 import { defaultOpenCodeCommand } from "./opencode-cli.js";
 import { record } from "./jsonl-rpc.js";
 
@@ -24,9 +26,14 @@ export function validateOpenCodeSchema(value: unknown, version: unknown): void {
   const required = request.required;
   const reply = record(record(body("/permission/{requestID}/reply", "post").properties).reply);
   const replies = reply.enum;
+  const rule = record(record(types.PermissionRule).properties);
+  const actions = record(types.PermissionAction).enum;
   if (schema.openapi !== "3.1.0" || record(schema.info).title !== "opencode" || typeof version !== "string" || !/^1\.19\.\d+(?:[-+][\w.-]+)?$/.test(version)
     || !Array.isArray(required) || !["id", "sessionID", "permission", "patterns", "metadata", "always"].every((key) => required.includes(key))
     || !Array.isArray(replies) || !["once", "reject"].every((entry) => replies.includes(entry))
+    || record(rule.permission).type !== "string" || record(rule.pattern).type !== "string"
+    || record(rule.action).$ref !== "#/components/schemas/PermissionAction"
+    || !Array.isArray(actions) || !["ask", "deny"].every((entry) => actions.includes(entry))
     || record(record(body("/session", "post").properties).permission).$ref !== "#/components/schemas/PermissionRuleset"
     || record(record(body("/session/{sessionID}", "patch").properties).permission).$ref !== "#/components/schemas/PermissionRuleset"
     || !record(body("/session/{sessionID}/message", "post").properties).parts
@@ -104,13 +111,31 @@ export class OpenCodeServerClient {
     return url.href;
   }
 
+  private async localResponse(path: string, method: string, text: string | undefined, timeoutMs: number, authenticated: boolean): Promise<Response> {
+    const url = new URL(this.url(path));
+    // Native loopback HTTP avoids environment proxy routing; redirects are never followed.
+    return new Promise((done, reject) => {
+      const request = httpRequest({ hostname: "127.0.0.1", port: Number(url.port), path: url.pathname + url.search,
+        method, agent: false, signal: AbortSignal.any([this.abort.signal, AbortSignal.timeout(timeoutMs)]),
+        headers: { ...(authenticated ? { Authorization: this.auth } : {}), ...(text ? { "Content-Type": "application/json" } : {}) },
+      }, (incoming) => {
+        try {
+          const headers = new Headers();
+          for (const [key, value] of Object.entries(incoming.headers)) if (value !== undefined) headers.set(key, Array.isArray(value) ? value.join(", ") : value);
+          const status = incoming.statusCode ?? 500;
+          const empty = [204, 205, 304].includes(status);
+          done(new Response(empty ? null : Readable.toWeb(incoming) as ReadableStream<Uint8Array>, { status, headers }));
+          if (empty) incoming.resume();
+        } catch (error) { incoming.destroy(); reject(error); }
+      });
+      request.once("error", reject); request.end(text);
+    });
+  }
+
   private async response(path: string, method = "GET", body?: unknown, timeoutMs = 10000): Promise<Response> {
     const text = body === undefined ? undefined : JSON.stringify(body);
     if (text && Buffer.byteLength(text) > 1024 * 1024) throw new Error("OpenCode girdi limiti aşıldı");
-    const response = await fetch(this.url(path), { method, redirect: "error",
-      headers: { Authorization: this.auth, ...(text ? { "Content-Type": "application/json" } : {}) }, body: text,
-      signal: AbortSignal.any([this.abort.signal, AbortSignal.timeout(timeoutMs)]),
-    });
+    const response = await this.localResponse(path, method, text, timeoutMs, true);
     if (!response.ok) { await response.body?.cancel(); throw new Error(`OpenCode HTTP hatası: ${response.status}`); }
     return response;
   }
@@ -133,7 +158,7 @@ export class OpenCodeServerClient {
   }
 
   private async verify(): Promise<void> {
-    const anonymous = await fetch(`${this.base}/global/health`, { redirect: "error", signal: AbortSignal.any([this.abort.signal, AbortSignal.timeout(5000)]) });
+    const anonymous = await this.localResponse("/global/health", "GET", undefined, 5000, false);
     await anonymous.body?.cancel();
     if (anonymous.status !== 401) throw new Error("OpenCode sunucusu kimlik doğrulama zorlamıyor");
     const health = record(await this.request("/global/health"));

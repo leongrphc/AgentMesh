@@ -1,0 +1,19 @@
+{
+  "projectId": "opencode-permission-demo",
+  "repoPath": ".",
+  "maxParallel": 1,
+  "agents": [
+    { "id": "opencode-worker", "provider": "opencode", "transport": "server" }
+  ],
+  "tasks": [
+    {
+      "id": "opencode-document-project",
+      "projectId": "opencode-permission-demo",
+      "title": "Proje başlangıç belgesi",
+      "instruction": "Projeyi incele ve docs/START.md içinde kısa geliştirme notları yaz. Mevcut dosyaları silme veya değiştirme. Yalnızca belirtilen belgeyi oluştur.",
+      "agentId": "opencode-worker",
+      "dependsOn": [],
+      "allowedPaths": ["docs/START.md"]
+    }
+  ]
+}

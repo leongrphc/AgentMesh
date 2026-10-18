@@ -29,8 +29,9 @@ async function main(): Promise<void> {
   const configFile = resolve(configArg);
   const config = JSON.parse(readFileSync(configFile, "utf8")) as Config;
   validate(config);
-  if (executing && config.agents.some((agent) => agent.transport === "app-server")) {
-    throw new Error("App Server izin kararları için bu config'i masaüstü uygulamasında açın; CLI yalnızca exec transport çalıştırır");
+  const needsDesktop = config.agents.some((agent) => agent.transport && agent.transport !== "exec");
+  if (executing && needsDesktop) {
+    throw new Error("Etkileşimli izin kararları için bu config'i masaüstü uygulamasında açın; CLI yalnızca exec transport çalıştırır");
   }
   const repoPath = isAbsolute(config.repoPath)
     ? realpathSync(config.repoPath) : realpathSync(resolve(dirname(configFile), config.repoPath));
@@ -38,7 +39,9 @@ async function main(): Promise<void> {
     console.log(JSON.stringify({
       dryRun: true, repoPath, projectId: config.projectId,
       agents: config.agents, tasks: config.tasks.map(({ id, agentId, dependsOn, allowedPaths }) => ({ id, agentId, dependsOn, allowedPaths })),
-      instruction: "--execute [--stream]: ajanları çalıştır, --review: diff görüntüle, --approve TASK --digest SHA256: onayla, --retry TASK: görevi yeniden kuyruğa al.",
+      instruction: needsDesktop
+        ? "Bu config etkileşimli izin gerektirir; çalıştırmak için masaüstü uygulamasında açın. CLI --review, --approve ve --retry komutları kullanılabilir."
+        : "--execute [--stream]: ajanları çalıştır, --review: diff görüntüle, --approve TASK --digest SHA256: onayla, --retry TASK: görevi yeniden kuyruğa al.",
     }, null, 2));
     return;
   }
@@ -67,7 +70,7 @@ async function main(): Promise<void> {
     let existing;
     try { existing = engine.snapshot(config.projectId); }
     catch {
-      if (!executing) throw new Error("Önce --execute ile projeyi oluşturmalısınız");
+      if (!executing) throw new Error(needsDesktop ? "Önce bu projeyi masaüstü uygulamasında açın" : "Önce --execute ile projeyi oluşturmalısınız");
       engine.createProject({ id: config.projectId, workspaceRoot: repoPath });
     }
     existing = engine.snapshot(config.projectId);
