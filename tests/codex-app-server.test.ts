@@ -23,10 +23,19 @@ function serverScript(mode: string): string {
       if(m.method==='initialize') return send({id:m.id,result:{userAgent:'fake'}});
       if(m.method==='initialized') return;
       if(m.method==='thread/start'||m.method==='thread/resume') {
-        if(m.params.approvalPolicy!=='on-request'||m.params.approvalsReviewer!=='user'||m.params.sandbox!=='workspaceWrite') process.exit(9);
+        if(mode==='conversation') {
+          if(m.params.sandbox!=='read-only'||m.params.approvalPolicy!=='never'||m.params.ephemeral!==true||m.params.config['features.shell_tool']!==false) process.exit(9);
+          return send({id:m.id,result:{thread:{id:'thread-1'}}});
+        }
+        if(m.params.approvalPolicy!=='on-request'||m.params.approvalsReviewer!=='user'||m.params.sandbox!=='workspace-write') process.exit(9);
         return send({id:m.id,result:{thread:{id:'thread-1'}}});
       }
       if(m.method==='turn/start') {
+        if(mode==='conversation') {
+          if(m.params.input[0].text!=='test'||m.params.sandboxPolicy.type!=='readOnly'||m.params.approvalPolicy!=='never') process.exit(9);
+          send({id:m.id,result:{turn:{id:'turn-1',status:'inProgress'}}});
+          return complete('Selam!');
+        }
         if(m.params.sandboxPolicy.networkAccess!==false) process.exit(9);
         send({id:m.id,result:{turn:{id:'turn-1',status:'inProgress'}}});
         notify('turn/started',{threadId:'thread-1',turn:{id:'turn-1'}});
@@ -54,9 +63,13 @@ function serverScript(mode: string): string {
 }
 
 function adapter(mode: string) {
-  return new CodexAppServerAdapter("a", { clientFactory: (options) => new JsonlRpcClient({ ...options,
+  return new CodexAppServerAdapter("a", { conversationOnly: mode === "conversation", clientFactory: (options) => new JsonlRpcClient({ ...options,
     executable: process.execPath, args: ["-e", serverScript(mode)], timeoutMs: 5000, requestTimeoutMs: 1000 }) });
 }
+
+test("Codex message test uses ephemeral read-only thread and sends only the user message", async () => {
+  assert.equal((await adapter("conversation").execute(input())).summary, "Selam!");
+});
 
 test("Codex App Server streams while waiting, supports resume and grants only accept-once", async () => {
   let prompts = 0, streaming = false;

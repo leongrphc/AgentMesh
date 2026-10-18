@@ -14,6 +14,7 @@ import { safeLog } from "../core/safe-log.js";
 import { listWorkspace, readWorkspaceFile, saveWorkspaceFile } from "../core/workspace-files.js";
 import type { DesktopState, DesktopReview, TaskDraft } from "./contracts.js";
 import { Terminals } from "./terminals.js";
+import { sendProviderMessage, validateProviderMessage, type ProviderMessageInput, type ProviderMessageResult } from "../adapters/provider-message.js";
 
 export class DesktopService {
   readonly terminals = new Terminals();
@@ -37,6 +38,9 @@ export class DesktopService {
   private events: DesktopState["events"] = [];
   private health: Record<string, ProviderHealth> = {};
   private healthAbort?: AbortController;
+  private messageAbort?: AbortController;
+  private messageRun?: Promise<ProviderMessageResult>;
+  private testingProvider?: string;
   private readonly listeners = new Set<(state: DesktopState) => void>();
 
   constructor(private readonly dataRoot: string) {}
@@ -52,7 +56,7 @@ export class DesktopService {
       demo: this.demo, agents: this.config.agents.map((agent) => ({ ...agent,
         interactivePermissions: this.demo || (agent.provider === "codex" && agent.transport === "app-server") || (agent.provider === "opencode" && agent.transport === "server") })),
       permissions: this.engine.pendingPermissions(this.config.projectId), events: this.events,
-      health: this.health, checkingAgents: !!this.healthAbort,
+      health: this.health, checkingAgents: !!this.healthAbort, testingProvider: this.testingProvider,
       maxParallel: this.engine.snapshot(this.config.projectId).project.maxParallel ?? this.config.maxParallel ?? 2 });
   }
 
@@ -85,6 +89,7 @@ export class DesktopService {
   }
 
   private open(config: Config, path: string, demo: boolean): DesktopState {
+    if (this.messageAbort) throw new Error("Önce mesaj testini bitirin veya iptal edin");
     if (this.running) throw new Error("Proje değiştirmeden önce çalışan görevleri durdurun");
     if (this.terminals.count) throw new Error("Proje değiştirmeden önce terminal sekmelerini kapatın");
     this.healthAbort?.abort(); this.healthAbort = undefined; this.health = {};
@@ -143,6 +148,7 @@ export class DesktopService {
   }
 
   start(): void {
+    if (this.messageAbort) throw new Error("Önce mesaj testini bitirin veya iptal edin");
     this.requireClosedTerminals();
     if (this.running) throw new Error("Görevler zaten çalışıyor");
     if (!this.engine || !this.config) throw new Error("Önce proje açın");
@@ -187,7 +193,7 @@ export class DesktopService {
   }
 
   async checkAgents(): Promise<void> {
-    if (this.running || this.healthAbort) throw new Error("Bağlantı kontrolünden önce aktif işlemi bitirin");
+    if (this.running || this.healthAbort || this.messageAbort) throw new Error("Bağlantı kontrolünden önce aktif işlemi bitirin");
     const state = this.state();
     const abort = new AbortController(); this.healthAbort = abort; this.publish();
     try {
@@ -219,6 +225,19 @@ export class DesktopService {
       canApprove: !this.running && !this.terminals.active && task.status === "pending_review" && !inspection.violations.length
         && inspection.changedPaths.length > 0 && inspection.digest === task.review?.digest };
   }
+
+  testProvider(input: ProviderMessageInput): Promise<ProviderMessageResult> {
+    validateProviderMessage(input);
+    if (this.running || this.healthAbort || this.messageAbort) throw new Error("Mesaj testinden önce aktif işlemi bitirin");
+    const abort = new AbortController(); this.messageAbort = abort; this.testingProvider = input.provider;
+    this.messageRun = Promise.resolve().then(() => sendProviderMessage(input, abort.signal)).finally(() => {
+      this.messageAbort = undefined; this.messageRun = undefined; this.testingProvider = undefined; this.publish();
+    });
+    this.publish();
+    return this.messageRun;
+  }
+
+  cancelProviderTest() { this.messageAbort?.abort(); }
 
   approve(taskId: string, digest: string): void {
     this.requireClosedTerminals();
@@ -270,6 +289,7 @@ export class DesktopService {
   }
 
   async close() {
+    this.messageAbort?.abort(); await this.messageRun?.catch(() => {});
     await this.terminals.closeAll();
     this.healthAbort?.abort(); this.healthAbort = undefined; this.abort?.abort(); await this.running;
     this.journal?.close(); this.journal = undefined; this.journalPath = undefined;

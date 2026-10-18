@@ -5,6 +5,7 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { DesktopService } from "./service.js";
 import { safeLog } from "../core/safe-log.js";
 import type { TaskDraft } from "./contracts.js";
+import type { ProviderMessageInput } from "../adapters/provider-message.js";
 
 protocol.registerSchemesAsPrivileged([{ scheme: "agentmesh", privileges: { standard: true, secure: true, supportFetchAPI: true } }]);
 const origin = "agentmesh://desktop";
@@ -183,6 +184,17 @@ async function createWindow() {
         } }, 50);
       })`);
       writeFileSync(join(root, "desktop-agents.png"), (await window.capturePage()).toPNG());
+      await window.webContents.executeJavaScript(`(async () => {
+        const input = document.querySelector('[aria-label="Test mesajı"]');
+        const provider = document.querySelector('[aria-label="Test sağlayıcısı"]');
+        if (input?.value !== 'Selam' || provider?.options.length !== 2) throw new Error('Mesaj testi formu eksik');
+        document.querySelector('[data-testid="send-provider-message"]').click();
+        for (let i = 0; i < 100; i++) {
+          if (document.querySelector('.agent-center .file-error')?.textContent.includes('Smoke testinde gerçek model çağrısı kapalı')) return;
+          await new Promise(r => setTimeout(r, 50));
+        }
+        throw new Error('Mesaj testi IPC veya hata görünümü doğrulanamadı');
+      })()`);
       await window.webContents.executeJavaScript(`document.querySelector('[aria-label="Ajan merkezini kapat"]').click()`);
       console.log("Desktop smoke başarılı: sandbox, preload, Monaco, gerçek PTY ve demo görevleri doğrulandı");
       app.quit();
@@ -217,6 +229,11 @@ app.whenReady().then(async () => {
     });
   }
   handle("mesh:state", () => service.state());
+  handle("mesh:test-provider", (input) => {
+    if (smoke) throw new Error("Smoke testinde gerçek model çağrısı kapalı");
+    return service.testProvider(input as ProviderMessageInput);
+  });
+  handle("mesh:cancel-provider-test", () => service.cancelProviderTest());
   handle("mesh:terminal-open", (taskId, cols, rows) => service.openTerminal(taskId as string, cols as number, rows as number));
   handle("mesh:terminal-read", (id, offset) => service.terminals.read(id as string, offset as number));
   handle("mesh:terminal-write", (id, data) => service.terminals.write(id as string, data as string));

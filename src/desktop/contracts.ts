@@ -5,6 +5,7 @@ import type { AgentTask } from "../core/contracts.js";
 import type { PermissionRequest, PermissionDecision } from "../core/permissions.js";
 import type { ProviderHealth } from "../adapters/provider-health.js";
 import type { TerminalInfo, TerminalOutput } from "./terminals.js";
+import type { ProviderMessageInput, ProviderMessageResult } from "../adapters/provider-message.js";
 
 export type TaskDraft = Omit<AgentTask, "projectId">;
 
@@ -24,11 +25,14 @@ export interface DesktopState {
   permissions: PermissionRequest[];
   health: Record<string, ProviderHealth>;
   checkingAgents: boolean;
+  testingProvider?: string;
   maxParallel: number;
   events: Array<{ at: string; taskId?: string; text: string }>;
 }
 
 export interface DesktopAPI {
+  testProvider(input: ProviderMessageInput): Promise<ProviderMessageResult>;
+  cancelProviderTest(): Promise<void>;
   terminalOpen(taskId: string, cols: number, rows: number): Promise<TerminalInfo>;
   terminalRead(id: string, offset: number): Promise<TerminalOutput>;
   terminalWrite(id: string, data: string): Promise<void>;

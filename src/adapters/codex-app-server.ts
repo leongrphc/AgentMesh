@@ -9,7 +9,7 @@ export class CodexAppServerAdapter implements AgentAdapter {
   readonly provider = "codex";
   readonly connection = "cli" as const;
   readonly interactivePermissions = true;
-  constructor(readonly id: string, private readonly options: { executable?: string; model?: string; clientFactory?: ClientFactory } = {}) {}
+  constructor(readonly id: string, private readonly options: { executable?: string; model?: string; clientFactory?: ClientFactory; conversationOnly?: boolean } = {}) {}
 
   async execute(input: AgentExecution): Promise<AgentResult> {
     let threadId = input.sessionId, turnId: string | undefined, summary = "";
@@ -47,6 +47,7 @@ export class CodexAppServerAdapter implements AgentAdapter {
       onRequest: async (method, params, id) => {
         if (method === "item/permissions/requestApproval") return { permissions: {}, scope: "turn" };
         if (!["item/commandExecution/requestApproval", "item/fileChange/requestApproval"].includes(method)) throw new Error("Desteklenmeyen sunucu isteği");
+        if (this.options.conversationOnly) return { decision: "decline" };
         if (!isScoped(params) || !input.requestPermission || params.additionalPermissions || params.networkApprovalContext) return { decision: "decline" };
         let description: string, kind: "command" | "file";
         if (method === "item/commandExecution/requestApproval") {
@@ -70,17 +71,20 @@ export class CodexAppServerAdapter implements AgentAdapter {
     try {
       await client.request("initialize", { clientInfo: { name: "agentmesh", title: "AgentMesh IDE", version: "0.1.0" } });
       client.notify("initialized");
-      const params: RpcRecord = { cwd: input.workspaceRoot, approvalPolicy: "on-request", sandbox: "workspaceWrite",
+      const params: RpcRecord = { cwd: input.workspaceRoot, approvalPolicy: this.options.conversationOnly ? "never" : "on-request", sandbox: this.options.conversationOnly ? "read-only" : "workspace-write",
         approvalsReviewer: "user", ...(this.options.model ? { model: this.options.model } : {}) };
+      if (this.options.conversationOnly) Object.assign(params, { ephemeral: true,
+        config: { "features.shell_tool": false, "web_search": "disabled" },
+        developerInstructions: "This is a short connection test. Reply briefly in the user's language. Do not use tools, read files, or run commands." });
       if (input.sessionId) params.threadId = input.sessionId;
       const thread = await client.request(input.sessionId ? "thread/resume" : "thread/start", params);
       threadId = typeof record(thread.thread).id === "string" ? record(thread.thread).id as string : undefined;
       if (!threadId) throw new Error("Codex thread kimliği dönmedi");
       if (input.sessionId && threadId !== input.sessionId) throw new Error("Codex resume farklı thread döndürdü");
       input.onSession?.(threadId);
-      const started = await client.request("turn/start", { threadId, input: [{ type: "text", text: buildPrompt(input) }],
-        cwd: input.workspaceRoot, approvalPolicy: "on-request", approvalsReviewer: "user",
-        sandboxPolicy: { type: "workspaceWrite", writableRoots: [input.workspaceRoot], networkAccess: false } });
+      const started = await client.request("turn/start", { threadId, input: [{ type: "text", text: this.options.conversationOnly ? input.task.instruction : buildPrompt(input) }],
+        cwd: input.workspaceRoot, approvalPolicy: this.options.conversationOnly ? "never" : "on-request", approvalsReviewer: "user",
+        sandboxPolicy: this.options.conversationOnly ? { type: "readOnly" } : { type: "workspaceWrite", writableRoots: [input.workspaceRoot], networkAccess: false } });
       const returnedId = record(started.turn).id;
       if (typeof returnedId !== "string" || (turnId && turnId !== returnedId)) throw new Error("Codex turn kimliği eşleşmedi");
       turnId = returnedId;

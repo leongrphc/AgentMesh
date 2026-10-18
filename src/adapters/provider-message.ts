@@ -1,0 +1,84 @@
+import { randomBytes } from "node:crypto";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { CodexAppServerAdapter } from "./codex-app-server.js";
+import { OpenCodeServerClient } from "./opencode-server-client.js";
+import { record } from "./jsonl-rpc.js";
+import { safeLog } from "../core/safe-log.js";
+
+export interface ProviderMessageInput { provider: "codex" | "opencode"; message: string; model?: string }
+export interface ProviderMessageResult { provider: string; model?: string; response: string; elapsedMs: number; checkedAt: string }
+interface MessageDependencies {
+  codex?: (input: ProviderMessageInput, cwd: string, signal: AbortSignal) => Promise<string>;
+  openCode?: (cwd: string, signal: AbortSignal) => Promise<Pick<OpenCodeServerClient, "request" | "close">>;
+}
+
+export function validateProviderMessage(input: ProviderMessageInput) {
+  if (!input || !["codex", "opencode"].includes(input.provider) || typeof input.message !== "string" || !input.message.trim() || input.message.length > 2000
+    || (input.model !== undefined && (typeof input.model !== "string" || input.model.length > 200 || !input.model.trim()))) throw new Error("Sağlayıcı ve 1–2000 karakterlik mesaj gerekli");
+  if (input.provider === "opencode" && input.model && !/^[^/\s]+\/[^\s]+$/.test(input.model)) throw new Error("OpenCode modeli provider/model biçiminde olmalı");
+}
+
+/** One independent model request, in an owned temporary directory, outside the project. */
+export async function sendProviderMessage(input: ProviderMessageInput, signal?: AbortSignal, dependencies: MessageDependencies = {}): Promise<ProviderMessageResult> {
+  validateProviderMessage(input);
+  const cwd = mkdtempSync(join(tmpdir(), "agentmesh-message-"));
+  const started = Date.now();
+  const bounded = AbortSignal.any([AbortSignal.timeout(90000), ...(signal ? [signal] : [])]);
+  try {
+    let response: string;
+    if (input.provider === "codex") {
+      if (dependencies.codex) response = await dependencies.codex(input, cwd, bounded);
+      else {
+        const result = await new CodexAppServerAdapter("connection-test", { model: input.model, conversationOnly: true }).execute({
+          workspaceRoot: cwd, signal: bounded, context: {}, inbox: [],
+          task: { id: "connection-test", projectId: "connection-test", agentId: "connection-test", title: "Bağlantı testi",
+            instruction: input.message.trim(), dependsOn: [], allowedPaths: [] },
+        });
+        response = result.summary;
+      }
+    } else {
+      const server = dependencies.openCode ? await dependencies.openCode(cwd, bounded) : await OpenCodeServerClient.start({ cwd, signal: bounded, timeoutMs: 90000 });
+      let sessionId: string | undefined;
+      try {
+        const session = record(await server.request("/session", "POST", {
+          title: "AgentMesh connection test", permission: [{ permission: "*", pattern: "*", action: "deny" }],
+        }));
+        if (typeof session.id !== "string" || !/^ses[\w-]{1,200}$/.test(session.id)) throw new Error("OpenCode test oturumu oluşturulamadı");
+        sessionId = session.id;
+        const rules = session.permission;
+        if (!Array.isArray(rules) || rules.length !== 1 || record(rules[0]).permission !== "*" || record(rules[0]).pattern !== "*" || record(rules[0]).action !== "deny") throw new Error("OpenCode test izin politikası doğrulanamadı");
+        const messageID = `msg_${randomBytes(16).toString("hex")}`;
+        const model = input.model?.split("/");
+        const result = record(await server.request(`/session/${sessionId}/message`, "POST", {
+          messageID, agent: "build", system: "Reply briefly in the user's language. This is a connection test. Do not use tools, read files, or run commands.",
+          parts: [{ type: "text", text: input.message.trim() }],
+          ...(model ? { model: { providerID: model[0], modelID: model.slice(1).join("/") } } : {}),
+        }, 80000));
+        const info = record(result.info);
+        if (info.error) {
+          const detail = record(record(info.error).data);
+          let localService = "";
+          try {
+            const endpoint = new URL(String(record(detail.metadata).url));
+            if (["127.0.0.1", "localhost", "[::1]"].includes(endpoint.hostname)) localService = ` Yerel model servisi: ${endpoint.origin}`;
+          } catch { /* Do not expose arbitrary provider metadata or credentials. */ }
+          throw new Error(`OpenCode${typeof detail.statusCode === "number" ? ` (HTTP ${detail.statusCode})` : ""}: ${typeof detail.message === "string" ? safeLog(detail.message, "storage") : "Sağlayıcı isteği başarısız"}${localService}`);
+        }
+        if (info.role !== "assistant" || info.sessionID !== sessionId || info.parentID !== messageID
+          || typeof record(info.time).completed !== "number" || !["stop", "end_turn", "length"].includes(String(info.finish))) throw new Error("OpenCode tamamlanmış yanıt döndürmedi");
+        response = (Array.isArray(result.parts) ? result.parts.map(record) : []).filter((p) => p.type === "text" && p.sessionID === sessionId && p.messageID === info.id && !p.synthetic && !p.ignored)
+          .map((p) => typeof p.text === "string" ? p.text : "").join("\n");
+      } finally {
+        if (sessionId) await server.request(`/session/${sessionId}`, "DELETE", undefined, 1500).catch(() => {});
+        await server.close();
+      }
+    }
+    if (!response.trim()) throw new Error("Sağlayıcı boş yanıt döndürdü");
+    return { provider: input.provider, model: input.model, response: safeLog(response), elapsedMs: Date.now() - started, checkedAt: new Date().toISOString() };
+  } catch (error) {
+    if (bounded.aborted) throw new Error(signal?.aborted ? "Mesaj testi iptal edildi" : "Mesaj testi 90 saniyede tamamlanmadı");
+    throw new Error(safeLog(error instanceof Error ? error.message : String(error), "storage"));
+  } finally { rmSync(cwd, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }); }
+}

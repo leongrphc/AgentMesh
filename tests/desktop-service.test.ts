@@ -71,3 +71,24 @@ test("failed project opening preserves the previous workspace and its writable j
     assert.equal(service.state().maxParallel, 3);
   } finally { await service.close(); rmSync(root, { recursive: true, force: true }); }
 });
+
+test("desktop message tests serialize, cancel before model access and do not persist prompt text", async () => {
+  const root = mkdtempSync(join(tmpdir(), "mesh-message-service-"));
+  const service = new DesktopService(root);
+  try {
+    service.openDemo();
+    const before = service.state().events.length;
+    const pending = service.testProvider({ provider: "codex", message: "private greeting" });
+    assert.equal(service.state().testingProvider, "codex");
+    assert.throws(() => service.testProvider({ provider: "codex", message: "duplicate" }), /aktif işlemi/);
+    assert.throws(() => service.openDemo(), /mesaj testini/);
+    assert.throws(() => service.start(), /mesaj testini/);
+    service.cancelProviderTest();
+    await assert.rejects(pending, /iptal/);
+    assert.equal(service.state().testingProvider, undefined);
+    assert.equal(service.state().events.length, before);
+    await service.close(); service.openDemo();
+    assert.equal(service.state().testingProvider, undefined);
+    assert.ok(!JSON.stringify(service.state()).includes("private greeting"));
+  } finally { await service.close(); rmSync(root, { recursive: true, force: true }); }
+});
