@@ -41,7 +41,7 @@ Codex, OpenCode, Claude, Antigravity ve diğer API modellerini **tek IDE içinde
 
 ### P0 — Yarın ilk ele alınacak işler
 
-- [ ] **CORE-004 / İzin köprüsü:** Codex/OpenCode adaptörlerindeki desteklenen izin isteme biçimlerini araştır, yetkileri normalize eden bir `permission.requested` → kullanıcı kararı → sonuç protokolü tasarla. Otomatik yetki yükseltme olmasın.
+- [ ] **CORE-004 / İzin köprüsü:** Codex/OpenCode adaptörlerindeki desteklenen izin isteme biçimlerini araştır, yetkileri normalize eden bir `permission.requested` → kullanıcı kararı → sonuç protokolü tasarla. Otomatik yetki yükseltme olmasın. Araştırma ve protokol taslağı: [permissions.md](permissions.md). Çift yönlü transport uygulaması ve testler henüz açık.
 - [ ] **CORE-005 / Güvenli log:** Ham stdout/stderr içinde anahtar/token/kişisel veriyi maskeleyecek ve çıktı boyutunu sınırlayacak katman; görüntüleme ve kalıcı kayıt için farklı politikalar. Testleri ekle.
 - [ ] **CORE-006 / Desktop iskeleti:** Electron main + güvenli preload / IPC + React/Vite renderer; nodeIntegration kapalı, contextIsolation açık; orkestratör snapshot ve olay aboneliği için dar API.
 - [ ] **CORE-007 / İlk arayüz:** Proje seçimi, görev listesi, ajan durumu ve canlı olay paneli. Başlat/iptal/yeniden dene aksiyonları backend'e bağlansın.
