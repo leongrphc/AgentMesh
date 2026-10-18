@@ -1,3 +1,4 @@
+import type { PermissionDecision, PermissionProposal, PermissionSource } from "./permissions.js";
 /** Provider bağımsız dahili sözleşmeler. ACP veya MCP wire formatı değildir. */
 export type TaskStatus =
   | "pending"
@@ -46,6 +47,7 @@ export interface AgentExecution {
   sessionId?: string;
   signal?: AbortSignal;
   onOutput?: (output: AgentOutput) => void;
+  requestPermission?: (proposal: PermissionProposal) => Promise<PermissionDecision>;
 }
 
 /** Transient CLI output; consumers must redact secrets before exporting logs. */
@@ -64,6 +66,7 @@ export interface AgentAdapter {
   readonly id: string;
   readonly provider: string;
   readonly connection: "cli" | "api" | "mock";
+  readonly interactivePermissions?: boolean;
   execute(input: AgentExecution): Promise<AgentResult>;
 }
 
@@ -86,6 +89,8 @@ export interface TaskRecord extends AgentTask {
 export type DomainEvent =
   | { type: "project.created"; project: Project }
   | { type: "project.parallelism.updated"; projectId: string; maxParallel: number }
+  | { type: "permission.requested"; projectId: string; taskId: string; executionId: string; requestId: string; provider: string; kind: "command" | "file"; digest: string; expiresAt: string }
+  | { type: "permission.resolved"; projectId: string; taskId: string; executionId: string; requestId: string; decision: PermissionDecision; source: PermissionSource }
   | { type: "task.created"; task: AgentTask }
   | { type: "task.started"; projectId: string; taskId: string }
   | { type: "task.completed"; projectId: string; taskId: string; summary: string }

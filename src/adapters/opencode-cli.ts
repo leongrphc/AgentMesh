@@ -12,6 +12,7 @@ function defaultOpenCodeCommand(): string {
 export class OpenCodeCliAdapter implements AgentAdapter {
   readonly provider = "opencode";
   readonly connection = "cli" as const;
+  readonly interactivePermissions = false;
 
   constructor(
     readonly id: string,

@@ -4,6 +4,7 @@ import { buildPrompt, parseAgentEvents, runJsonlProcess, type ProcessRunner } fr
 export class CodexCliAdapter implements AgentAdapter {
   readonly provider = "codex";
   readonly connection = "cli" as const;
+  readonly interactivePermissions = false;
 
   constructor(
     readonly id: string,

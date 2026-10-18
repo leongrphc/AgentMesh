@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { safeLog } from "./safe-log.js";
+import { PermissionBroker, type PermissionDecision } from "./permissions.js";
 import type {
   AgentAdapter,
   AgentMessage,
@@ -35,9 +36,18 @@ export class Orchestrator {
   private readonly adapters = new Map<string, AgentAdapter>();
   private readonly controllers = new Map<string, AbortController>();
   private readonly subscribers = new Set<(notice: OrchestratorNotice) => void>();
+  private readonly permissions: PermissionBroker;
 
   constructor(private readonly journal: EventStore, private readonly worktrees?: WorktreeManager) {
+    this.permissions = new PermissionBroker((event) => this.emit(event));
     for (const event of journal.all()) this.apply(event.payload);
+    const unresolved = new Map<string, Extract<DomainEvent, { type: "permission.requested" }>>();
+    for (const { payload } of journal.all()) {
+      if (payload.type === "permission.requested") unresolved.set(payload.requestId, payload);
+      if (payload.type === "permission.resolved") unresolved.delete(payload.requestId);
+    }
+    for (const request of unresolved.values()) this.emit({ type: "permission.resolved", projectId: request.projectId,
+      taskId: request.taskId, executionId: request.executionId, requestId: request.requestId, decision: "deny", source: "restart" });
     // Çökme sonrası aynı komutları otomatik tekrar çalıştırmak tehlikeli olabilir.
     for (const task of this.tasks.values()) {
       if (task.status === "running") {
@@ -49,6 +59,12 @@ export class Orchestrator {
   registerAgent(adapter: AgentAdapter): void {
     if (this.adapters.has(adapter.id)) throw new Error(`Ajan zaten kayıtlı: ${adapter.id}`);
     this.adapters.set(adapter.id, adapter);
+  }
+
+  pendingPermissions(projectId: string) { return this.permissions.list(projectId); }
+
+  decidePermission(projectId: string, requestId: string, executionId: string, digest: string, decision: PermissionDecision) {
+    this.permissions.decide(projectId, requestId, executionId, digest, decision);
   }
 
   subscribe(listener: (notice: OrchestratorNotice) => void): () => void {
@@ -198,6 +214,8 @@ export class Orchestrator {
     if (!adapter) throw new Error(`Ajan kayıtlı değil: ${task.agentId}`);
     const snapshot = this.snapshot(task.projectId);
     let controller: AbortController | undefined;
+    const executionId = randomUUID();
+    let permissionEnd: "execution_ended" | "disconnect" = "execution_ended";
     try {
       let workspaceRoot = snapshot.project.workspaceRoot;
       if (adapter.connection !== "mock") {
@@ -223,6 +241,11 @@ export class Orchestrator {
         inbox: snapshot.messages.filter((message) => message.to === task.agentId || message.to === "*"),
         sessionId: task.sessionId,
         signal: controller.signal,
+        requestPermission: (proposal) => {
+          if (!controller || controller.signal.aborted || this.controllers.get(task.id) !== controller
+            || this.requireTask(task.id).status !== "running") return Promise.resolve("deny");
+          return this.permissions.request({ projectId: task.projectId, taskId: task.id, executionId }, proposal, controller.signal);
+        },
         onOutput: (event) => this.notify({
           kind: "output", projectId: task.projectId, taskId: task.id,
           output: event.channel === "stderr"
@@ -249,6 +272,7 @@ export class Orchestrator {
       }
       this.emitBatch(this.resultEvents(task, output));
     } catch (error) {
+      permissionEnd = "disconnect";
       if (this.requireTask(task.id).status === "cancelled") return;
       this.emit({
         type: "task.failed",
@@ -257,6 +281,8 @@ export class Orchestrator {
         error: safeLog(error instanceof Error ? error.message : String(error), "storage"),
       });
     } finally {
+      this.permissions.closeExecution(executionId, permissionEnd);
+      controller?.abort();
       this.controllers.delete(task.id);
     }
   }
