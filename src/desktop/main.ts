@@ -4,6 +4,7 @@ import { pathToFileURL } from "node:url";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { DesktopService } from "./service.js";
 import { safeLog } from "../core/safe-log.js";
+import type { TaskDraft } from "./contracts.js";
 
 protocol.registerSchemesAsPrivileged([{ scheme: "agentmesh", privileges: { standard: true, secure: true, supportFetchAPI: true } }]);
 const origin = "agentmesh://desktop";
@@ -79,6 +80,35 @@ async function createWindow() {
         } }, 50);
       })`);
       if (!service.state().snapshot.tasks.every((task) => task.status === "completed")) throw new Error("Demo tamamlanmadı");
+      await window.webContents.executeJavaScript(`document.querySelector('[data-testid="create-task"]').click()`);
+      await window.webContents.executeJavaScript(`new Promise((resolve, reject) => {
+        const timeout = setTimeout(() => reject(new Error('Görev formu açılmadı')), 5000);
+        const check = setInterval(() => { if (document.querySelector('.task-form form')) {
+          clearInterval(check); clearTimeout(timeout); resolve(true);
+        } }, 50);
+      })`);
+      await window.webContents.executeJavaScript(`(() => {
+        const form = document.querySelector('.task-form form');
+        form.querySelector('[name="id"]').value = 'smoke-followup';
+        form.querySelector('[name="title"]').value = 'Demo sonuçlarını doğrula';
+        form.querySelector('[name="instruction"]').value = 'Ortak context sonuçlarını kontrol et.';
+        form.querySelector('[name="dependsOn"][value="review"]').checked = true;
+        form.requestSubmit();
+      })()`);
+      await window.webContents.executeJavaScript(`new Promise((resolve, reject) => {
+        const timeout = setTimeout(() => reject(new Error('Yeni görev kaydedilmedi')), 5000);
+        const check = setInterval(() => { if (!document.querySelector('.task-form') && document.querySelectorAll('.task-row').length === 5) {
+          clearInterval(check); clearTimeout(timeout); resolve(true);
+        } }, 50);
+      })`);
+      if (!service.state().snapshot.tasks.some((task) => task.id === "smoke-followup" && task.dependsOn.includes("review"))) throw new Error("Görev bağımlılığı kaydedilmedi");
+      await window.webContents.executeJavaScript(`document.querySelector('[data-testid="start"]').click()`);
+      await window.webContents.executeJavaScript(`new Promise((resolve, reject) => {
+        const timeout = setTimeout(() => reject(new Error('Yeni görev tamamlanmadı')), 10000);
+        const check = setInterval(() => { if (document.querySelectorAll('.task-row .status.completed').length === 5) {
+          clearInterval(check); clearTimeout(timeout); resolve(true);
+        } }, 50);
+      })`);
       const root = resolve("dist");
       mkdirSync(root, { recursive: true });
       writeFileSync(join(root, "desktop-smoke.png"), (await window.capturePage()).toPNG());
@@ -169,6 +199,11 @@ app.whenReady().then(async () => {
   handle("mesh:save-file", (taskId, path, content, digest) => {
     if ([taskId, path, content, digest].some((value) => typeof value !== "string")) throw new Error("Geçersiz kayıt isteği");
     return service.saveFile(taskId as string, path as string, content as string, digest as string);
+  });
+  handle("mesh:create-task", (task) => service.createTask(task as TaskDraft));
+  handle("mesh:parallelism", (value) => {
+    if (typeof value !== "number") throw new Error("Geçersiz paralellik");
+    service.setParallelism(value);
   });
   let updateTimer: ReturnType<typeof setTimeout> | undefined;
   service.subscribe(() => {

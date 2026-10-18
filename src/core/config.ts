@@ -9,7 +9,7 @@ export interface Config {
 }
 
 export function validate(config: Config): void {
-  if (!config || !config.projectId || !config.repoPath || !Array.isArray(config.agents) || !Array.isArray(config.tasks)) {
+  if (!config || typeof config.projectId !== "string" || !config.projectId.trim() || typeof config.repoPath !== "string" || !config.repoPath.trim() || !Array.isArray(config.agents) || !Array.isArray(config.tasks)) {
     throw new Error("Config: projectId, repoPath, agents[] ve tasks[] zorunlu");
   }
   if (config.maxParallel !== undefined && (!Number.isInteger(config.maxParallel) || config.maxParallel < 1 || config.maxParallel > 8)) {
@@ -17,18 +17,20 @@ export function validate(config: Config): void {
   }
   const registered = new Set<string>();
   for (const agent of config.agents) {
-    if (!agent.id || !["codex", "opencode"].includes(agent.provider) || registered.has(agent.id)) {
-      throw new Error(`Geçersiz veya tekrarlı ajan: ${agent.id}`);
+    if (!agent || typeof agent.id !== "string" || !agent.id.trim() || !["codex", "opencode"].includes(agent.provider) || registered.has(agent.id)
+      || (agent.model !== undefined && typeof agent.model !== "string")) {
+      throw new Error(`Geçersiz veya tekrarlı ajan: ${agent?.id}`);
     }
     registered.add(agent.id);
   }
   const seen = new Set<string>();
   for (const task of config.tasks) {
-    if (!task.id || seen.has(task.id) || task.projectId !== config.projectId ||
-      !registered.has(task.agentId) || !task.title || !task.instruction ||
+    if (!task || typeof task.id !== "string" || !task.id.trim() || seen.has(task.id) || task.projectId !== config.projectId ||
+      !registered.has(task.agentId) || typeof task.title !== "string" || !task.title.trim() || typeof task.instruction !== "string" || !task.instruction.trim() ||
       !Array.isArray(task.dependsOn) || !Array.isArray(task.allowedPaths) || !task.allowedPaths.length ||
+      task.dependsOn.some((id) => typeof id !== "string") ||
       task.allowedPaths.some((pattern) => typeof pattern !== "string" || !pattern.trim())) {
-      throw new Error(`Geçersiz görev: ${task.id}`);
+      throw new Error(`Geçersiz görev: ${task?.id}`);
     }
     seen.add(task.id);
   }
@@ -59,4 +61,3 @@ export function orderTasks(tasks: AgentTask[]): AgentTask[] {
   for (const task of tasks) visit(task);
   return result;
 }
-

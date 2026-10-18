@@ -1,5 +1,6 @@
 import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
+import { TaskForm, TaskGraph } from "./task-board.js";
 import type { DesktopAPI, DesktopState, DesktopReview } from "../src/desktop/contracts.js";
 import type { TaskStatus } from "../src/core/contracts.js";
 import "./style.css";
@@ -42,6 +43,8 @@ function App() {
   const [pending, setPending] = useState(false);
   const [review, setReview] = useState<DesktopReview>();
   const [editorDirty, setEditorDirty] = useState(false);
+  const [creating, setCreating] = useState(false);
+  const [selectedOnly, setSelectedOnly] = useState(false);
   const api = window.agentmesh;
   useEffect(() => { document.documentElement.dataset.unsaved = String(editorDirty); }, [editorDirty]);
 
@@ -97,7 +100,8 @@ function App() {
       {error && <div role="alert" className="error"><span>{error}</span><button aria-label="Hatayı kapat" onClick={() => setError("")}>×</button></div>}
       <div className="project-strip"><span className={`status-light ${state.busy ? "on" : ""}`} /><strong>{state.busy ? `${active} ajan çalışıyor` : "Çalışma alanı hazır"}</strong><span className="repo-path" title={project.workspaceRoot}>{project.workspaceRoot}</span><span>{completed} / {tasks.length} tamamlandı</span><progress value={completed} max={tasks.length || 1} aria-label="Tamamlanan görevler" /></div>
       <section className="task-section">
-        <div className="section-heading"><h2>Görev akışı <span>{tasks.length}</span></h2><small>Bağımlılıklar tamamlanınca sıradaki görev başlar</small></div>
+        <div className="section-heading"><h2>Görev akışı <span>{tasks.length}</span></h2><div className="board-controls"><label>Paralel ajan <select aria-label="Paralel ajan sayısı" value={state.maxParallel} disabled={state.busy || pending} onChange={(event) => act(() => api.setParallelism(Number(event.target.value)))}>{Array.from({ length: 8 }, (_, i) => <option value={i + 1} key={i + 1}>{i + 1}</option>)}</select></label><button data-testid="create-task" disabled={state.busy || pending} onClick={() => setCreating(true)}>＋ Görev ekle</button></div></div>
+        <TaskGraph tasks={tasks} selected={task?.id} onSelect={(id) => { if (id === task?.id || canLeaveFile()) setSelected(id); }} />
         <div className="task-layout"><div className="task-list">
           <div className="table-label"><span>GÖREV / AJAN</span><span>DURUM</span></div>
           {tasks.length === 0 && <p className="empty">Bu projede görev yok. Proje ayarlarına görev ekleyip yeniden açın.</p>}
@@ -119,9 +123,9 @@ function App() {
       {task && <Suspense fallback={<p className="empty">Editör hazırlanıyor…</p>}><FileEditor key={`${project.id}:${project.workspaceRoot}:${task.id}:${task.worktree?.path ?? "repo"}`} taskId={task.id} api={api} busy={state.busy} onDirty={setEditorDirty} /></Suspense>}
       <section className="activity"><div className="activity-header"><div role="tablist" aria-label="Proje kayıtları">{([
         ["events", "Canlı olaylar", state.events.length], ["context", "Ortak context", Object.keys(context).length], ["messages", "Mesajlar", messages.length],
-      ] as const).map(([id, label, count]) => <button key={id} role="tab" aria-selected={tab === id} aria-controls={`panel-${id}`} id={`tab-${id}`} onClick={() => setTab(id)}>{label} <span>{count}</span></button>)}</div><small><span className="local-dot" /> {state.busy ? "Canlı" : "Yerel kayıt"}</small></div>
+      ] as const).map(([id, label, count]) => <button key={id} role="tab" aria-selected={tab === id} aria-controls={`panel-${id}`} id={`tab-${id}`} onClick={() => setTab(id)}>{label} <span>{count}</span></button>)}</div><label className="history-filter"><input type="checkbox" checked={selectedOnly} onChange={(event) => setSelectedOnly(event.target.checked)} />Seçili görev</label><small><span className="local-dot" /> {state.busy ? "Canlı" : "Son 200 olay"}</small></div>
         <div className="activity-body" role="tabpanel" id={`panel-${tab}`} aria-labelledby={`tab-${tab}`}>
-          {tab === "events" && (state.events.length ? <div className="event-list">{[...state.events].reverse().map((event, index) => <div className="event" key={`${event.at}-${index}`}><time>{new Date(event.at).toLocaleTimeString("tr-TR")}</time><span className="event-task">{event.taskId ?? "proje"}</span><code>{event.text}</code></div>)}</div> : <div className="empty"><b>İlk göreve hazır.</b><p>Ajanları başlattığınızda olaylar burada görünecek.</p></div>)}
+          {tab === "events" && (state.events.length ? <div className="event-list">{[...state.events].reverse().filter((event) => !selectedOnly || event.taskId === task?.id).map((event, index) => <div className="event" key={`${event.at}-${index}`}><time>{new Date(event.at).toLocaleTimeString("tr-TR")}</time><span className="event-task">{event.taskId ?? "proje"}</span><code>{event.text}</code></div>)}</div> : <div className="empty"><b>İlk göreve hazır.</b><p>Ajanları başlattığınızda olaylar burada görünecek.</p></div>)}
           {tab === "context" && (Object.keys(context).length ? Object.values(context).map((fact) => <article className="context-item" key={fact.key}><code>{fact.key}</code><p>{fact.value}</p><small>Kaynak: {fact.sourceTaskId}</small></article>) : <p className="empty">Ajanların paylaştığı sonuçlar burada görünecek.</p>)}
           {tab === "messages" && (messages.length ? messages.map((message) => <article className="context-item" key={message.id}><b>{message.from} → {message.to}</b><p>{message.body}</p><small>{message.kind} · {message.taskId}</small></article>) : <p className="empty">Ajanlar arası mesajlar burada görünecek.</p>)}
         </div>
@@ -131,6 +135,7 @@ function App() {
     {review && <ReviewDialog review={review} pending={pending} error={error} onClose={() => setReview(undefined)}
       onRefresh={() => act(async () => setReview(await api.review(review.taskId, true)))}
       onApprove={() => act(async () => { if (await api.approve(review.taskId, review.inspection.digest)) setReview(undefined); })} />}
+    {creating && <TaskForm state={state} onClose={() => setCreating(false)} onCreate={async (draft) => { await api.createTask(draft); setState(await api.state()); }} />}
   </div>;
 }
 

@@ -39,7 +39,7 @@ Codex, OpenCode, Claude, Antigravity ve diğer API modellerini **tek IDE içinde
 
 ## Açık görevler — öncelik sırasıyla
 
-### P0 — Yarın ilk ele alınacak işler
+### P0 — Öncelikli işler
 
 - [ ] **CORE-004 / İzin köprüsü:** Codex/OpenCode adaptörlerindeki desteklenen izin isteme biçimlerini araştır, yetkileri normalize eden bir `permission.requested` → kullanıcı kararı → sonuç protokolü tasarla. Otomatik yetki yükseltme olmasın. Araştırma ve protokol taslağı: [permissions.md](permissions.md). Çift yönlü transport uygulaması ve testler henüz açık.
 - [x] **CORE-005 / Güvenli log:** Ham stdout/stderr filtreleme, çıktı sınırları ve ayrı görüntüleme/kayıt politikaları. [Gizlilik politikası](log-privacy.md); filtre bilinen sır ve e-posta biçimlerini tanır.
@@ -55,7 +55,7 @@ Codex, OpenCode, Claude, Antigravity ve diğer API modellerini **tek IDE içinde
 - [x] **UI-001:** Klasör bazlı dosya ağacı ve yerel Monaco editör; seçili görevin worktree'si, henüz worktree yoksa salt okunur proje kökü. Kaydetme yalnızca durdurulmuş görev worktree'sinde, allowedPaths ve içerik digest kontrolüyle. UTF-8/1 MiB sınırı, path traversal/symlink engeli, kaydedilmemiş değişiklik koruması ve gerçek Electron dosya açma smoke testi.
 - [ ] **UI-002:** Terminal sekmeleri (PTY) ve süreç yaşam döngüsü.
 - [ ] **UI-003:** Agent Center: provider, CLI/SDK/API bağlantısı, model/rol, bağlantı sağlığı ve giriş eksikliği.
-- [ ] **UI-004:** Task Board: görev oluşturma, bağımlılık çizimi, paralellik limiti, durum, iptal, tekrar dene, geçmiş.
+- [x] **UI-004:** Task Board: görev oluşturma, bağımlılık çizimi (100 göreve kadar SVG; büyük projelerde liste), kalıcı 1–8 paralellik limiti, durum, iptal, tekrar dene, son 200 olay ve seçili görev filtresi. Oluşturulan görevler/paralellik SQLite replay ile korunur; gerçek Electron form smoke testi eklendi.
 - [x] **UI-005:** Shared Context ve ajan mesajlarını kaynak görevleriyle görünür kılma; masaüstü sekmeleri.
 - [ ] **UI-006:** Diff/test önizleme, SHA-256 onayı, merge conflict çözme/yeniden deneme ekranı.
   - [x] Gerçek task worktree diff/yeni dosya önizlemesi, izin ihlalleri, SHA-256 digest ve uygulama içinde açık onay; değiştirilmiş diff reddi için masaüstü servis entegrasyon testi. İnsan düzenlemesi sonrası açık inceleme yenileme yeni digest'i kaydeder; eski onay geçersiz kalır.
@@ -64,6 +64,8 @@ Codex, OpenCode, Claude, Antigravity ve diğer API modellerini **tek IDE içinde
 - [ ] **CORE-010:** İzinleri çalıştırma **öncesinde** zorlayabilecek süreç/OS sandbox politikası; `allowedPaths` şu an yalnızca çalıştırma sonrasında denetleniyor.
 - [ ] **CORE-011:** Kalıcı, sürümlü context/karar yönetimi; çakışan kararlar için doğrulama ve ilgili context paketini seçme.
 - [ ] **CORE-012:** Güvenli log saklama/retention, hata teşhisi, oturum sağlığı ve yeniden başlatma kurtarma senaryoları.
+- [ ] **CORE-013 / Config uyumu:** Yeniden açılan projede görev/ajan tanımları değişmişse sessizce eski tanımı kullanmak yerine farkı göster; eksik sağlayıcı eşlemesi ve aynı ID'nin farklı kapsam/talimatla kullanılması için açık güncelleme akışı.
+- [ ] **UI-007 / Editör devamı:** Dosya/klasör oluşturma, disk değişikliği izleme, çoklu dosya sekmeleri ve kaydedilmemiş taslak kurtarma. Monaco paket boyutu/ilk yükleme optimizasyonu; şu anda editör ayrı ve tembel yüklenen yaklaşık 2.6 MB chunk.
 
 ### P2 — Hibrit sağlayıcılar ve ileri orkestrasyon
 
@@ -76,12 +78,12 @@ Codex, OpenCode, Claude, Antigravity ve diğer API modellerini **tek IDE içinde
 - [ ] **ORCH-003:** Ajan bazlı yetki profilleri, kimlik bilgilerini OS credential store'da saklama, gizli bilgileri context'ten uzak tutma.
 - [ ] **RELEASE-001:** Windows paketleme, otomatik güncelleme, kurulum/dağıtım ve kabul testleri.
 
-## Yarın başlarken
+## Devam ederken
 
 1. `D:\WebGpt` içinde `git status --short` ve `git log -5 --oneline` ile durumu kontrol et.
 2. `npm install` (gerekiyorsa), ardından `npm run typecheck` ve `npm test` çalıştır.
-3. **CORE-004** ile başla: önce gerçek CLI izin/olay protokolünü doğrula, güvenli backend sözleşmesi ve testlerini uygula.
-4. Sonra **CORE-005** log filtrelemesini yap; bunlar oturduktan sonra Electron/React kabuğuna geç.
+3. **CORE-004** için [permissions.md](permissions.md) taslağından çift yönlü transport ve izin yaşam döngüsüne devam et. Mevcut tek yönlü CLI adaptörlerini etkileşimli izin destekliyormuş gibi göstermeme sınırını koru.
+4. Masaüstü, güvenli log, Monaco ve Task Board tamamlandı. Sırada izin köprüsü, terminal (UI-002), sağlayıcı sağlığı (UI-003), config uyumu (CORE-013) ve UI-006 çakışma çözümünün kalan kısmı var.
 5. **Her tamamlanan geliştirmeyi ayrı Git commit'iyle kaydet.** Commit'ten önce ilgili testleri çalıştır; `docs/TASKS.md` kutularını güncelle. Kullanıcı istemedikçe otomatik push/deploy/ana dal dışı entegrasyon merge'i yapma.
 
 ### Faydalı komutlar
@@ -114,7 +116,7 @@ npm run live -- --config agentmesh.config.example.json
 
 ## Bilinen sınırlar / tamamlandı sanılmaması gerekenler
 
-- Grafik masaüstü kabuğu ve Monaco editör var; terminal ve tam Task Board henüz yok. Editör mevcut dosyaları düzenler; yeni dosya/klasör oluşturma ve dosya izleyicisi henüz yok.
+- Grafik masaüstü kabuğu, Monaco editör ve Task Board var; terminal henüz yok. Editör mevcut dosyaları düzenler; yeni dosya/klasör oluşturma ve dosya izleyicisi henüz yok.
 - Codex/OpenCode CLI komutları ve sahte süreç akışları test edildi; gerçek ücretli/oturum açılmış model çalıştırması doğrulanmadı.
 - OpenCode için OS seviyesinde izolasyon kanıtlanmadı; mevcut `allowedPaths` denetimi işlem sonrasındadır.
 - CLI izin/araç onayı köprüsü, chunk güvenli tam log filtrelemesi, gerçek zamanlı *ajanlar arası* mesaj teslimi eksik.

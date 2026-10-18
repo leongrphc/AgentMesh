@@ -83,6 +83,12 @@ export class Orchestrator {
     this.emit({ type: "project.created", project });
   }
 
+  setParallelism(projectId: string, maxParallel: number): void {
+    if (!this.projects.has(projectId)) throw new Error("Proje bulunamadı");
+    if (!Number.isInteger(maxParallel) || maxParallel < 1 || maxParallel > 8) throw new Error("Paralellik 1-8 aralığında olmalı");
+    this.emit({ type: "project.parallelism.updated", projectId, maxParallel });
+  }
+
   addTask(task: AgentTask): void {
     if (!this.projects.has(task.projectId)) throw new Error(`Proje bulunamadı: ${task.projectId}`);
     if (this.tasks.has(task.id)) throw new Error(`Görev ID'si zaten mevcut: ${task.id}`);
@@ -152,7 +158,7 @@ export class Orchestrator {
     return commit;
   }
 
-  async run(projectId: string, maxParallel = 2, signal?: AbortSignal): Promise<ProjectSnapshot> {
+  async run(projectId: string, maxParallel = this.projects.get(projectId)?.maxParallel ?? 2, signal?: AbortSignal): Promise<ProjectSnapshot> {
     if (!Number.isInteger(maxParallel) || maxParallel < 1) throw new Error("maxParallel >= 1 olmalı");
     if (!this.projects.has(projectId)) throw new Error(`Proje bulunamadı: ${projectId}`);
     const cancelRemaining = () => {
@@ -316,6 +322,9 @@ export class Orchestrator {
     switch (event.type) {
       case "project.created":
         this.projects.set(event.project.id, { ...event.project });
+        break;
+      case "project.parallelism.updated":
+        this.projects.get(event.projectId)!.maxParallel = event.maxParallel;
         break;
       case "task.created":
         this.tasks.set(event.task.id, {

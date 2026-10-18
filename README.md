@@ -23,13 +23,15 @@ npm run desktop
 
 Uygulama güvenli mock demo ile açılır. **Ajanları başlat** demo görevlerini bağımlılık sırasıyla çalıştırır. Görev seçerek iptal edebilir veya başarısız/iptal edilmiş görevi yeniden kuyruğa alabilirsiniz. Yeniden kuyruğa alma kendiliğinden çalıştırmaz.
 
+**Görev ekle** ile ajan, talimat, dosya kapsamı ve bağımlılıklar tanımlanır. Bağımlılık çizimi seçili göreve geçiş sağlar. **Paralel ajan** ayarı 1–8 aralığındadır; görevler ve ayar yeniden açıldığında korunur. CLI'de config içindeki açık `maxParallel` değeri önceliklidir; belirtilmemişse kalıcı proje ayarı kullanılır. Olay paneli son 200 olayı yeniden yükler; ham CLI çıktıları kalıcı geçmişe yazılmaz.
+
 Gerçek proje için **Proje ayarlarını aç** ile `agentmesh.config.json` seçin; aşağıdaki CLI bölümündeki yapılandırma kullanılır. Gerçek çalıştırma ayrıca uygulama içinde açıkça başlatılır. Aynı proje CLI ile ortak SQLite günlüğünü kullanır; iki uygulama aynı anda yazamaz. Demo kayıtları Electron kullanıcı veri klasöründedir.
 
 Worktree oluşmuş bir görevi seçip **Değişiklikleri incele** ile diff ve yeni dosyaları görün. Bekleyen digest ile eşleşen değişiklikler **Onayla ve birleştir** ile ayrı entegrasyon dalına alınır. Ardından bağımlı görevleri başlatabilirsiniz. Diff değişmişse onay reddedilir; commit edilmiş merge conflict ve tam test raporları için şimdilik CLI incelemesi gerekir.
 
 **Dosyalar** bölümü seçili görevin çalışma alanını gösterir. Worktree henüz oluşmamışsa proje kökü salt okunur açılır. Durdurulmuş görev worktree'sindeki kapsam içi UTF-8 dosyaları (en fazla 1 MiB) düzenlenebilir; disk üzerinde değişmiş dosyanın üzerine eski içerik yazılmaz. Kaydettikten sonra **İncelemeyi yenile** yeni digest üretir; onay ayrıca gerekir. Monaco/worker dosyaları yerel paket içindedir; CDN kullanılmaz. DOMPurify bağımlılığı audit düzeltmesi için `overrides` ile güncel yama sürümüne alınır.
 
-`npm run desktop:smoke`, görünür pencere açmadan gerçek Electron renderer/preload ve dört görevli mock akışını doğrular; `dist/desktop-smoke.png` üretir. Pencere kapanırken aktif işler iptal edilir ve SQLite kapatılır.
+`npm run desktop:smoke`, görünür pencere açmadan gerçek Electron renderer/preload, Monaco'da dosya açma, dört görevli demo ve formdan bağımlı beşinci görevi ekleyip çalıştırmayı doğrular; `dist/desktop-smoke.png` ve `dist/desktop-editor.png` üretir. Pencere kapanırken kaydedilmemiş değişiklikler kontrol edilir, aktif işler iptal edilir ve SQLite kapatılır.
 
 Demo, `.agentmesh/demo.sqlite` dosyasında olay geçmişini saklar. Eski `.agentmesh/demo-events.jsonl` varsa ilk açılışta SQLite'a aktarır. İkinci çalıştırmada tamamlanan görevleri yeniden çalıştırmaz. Sıfırdan denemek için (gerekirse yedekleyerek) iki dosyayı temizleyin:
 

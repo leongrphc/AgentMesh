@@ -24,15 +24,27 @@ test("desktop service cancels, retries and restores persisted demo without calli
     assert.equal(service.state().busy, true);
     assert.throws(() => service.start(), /zaten/);
     assert.throws(() => service.openDemo(), /durdurun/);
+    assert.throws(() => service.setParallelism(3), /durdurun/);
     service.cancel();
     await finished;
     assert.ok(service.state().snapshot.tasks.every((task) => task.status === "cancelled"));
     service.retry("plan");
     assert.equal(service.state().snapshot.tasks[0]?.status, "pending");
     assert.throws(() => service.retry("not-a-task"), /Geçersiz/);
+    const draft = { id: "custom", title: "Custom task", instruction: "Use the shared context", agentId: "reviewer",
+      dependsOn: ["plan"], allowedPaths: ["src/**"] };
+    service.createTask(draft);
+    assert.throws(() => service.createTask(draft), /Geçersiz/);
+    assert.throws(() => service.createTask({ ...draft, id: "bad", dependsOn: ["missing"] }), /bağımlılığı/);
+    assert.throws(() => service.setParallelism(0), /1-8/);
+    assert.throws(() => service.setParallelism(9), /1-8/);
+    service.setParallelism(3);
     await service.close();
     service.openDemo();
     assert.equal(service.state().snapshot.tasks[0]?.status, "pending");
     assert.equal(service.state().snapshot.tasks[1]?.status, "cancelled");
+    assert.equal(service.state().snapshot.tasks.find((task) => task.id === "custom")?.title, "Custom task");
+    assert.equal(service.state().maxParallel, 3);
+    assert.ok(service.state().events.some((event) => event.text === "project.parallelism.updated"));
   } finally { await service.close(); rmSync(root, { recursive: true, force: true }); }
 });

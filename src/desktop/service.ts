@@ -11,7 +11,7 @@ import { CodexCliAdapter } from "../adapters/codex-cli.js";
 import { OpenCodeCliAdapter } from "../adapters/opencode-cli.js";
 import { safeLog } from "../core/safe-log.js";
 import { listWorkspace, readWorkspaceFile, saveWorkspaceFile } from "../core/workspace-files.js";
-import type { DesktopState, DesktopReview } from "./contracts.js";
+import type { DesktopState, DesktopReview, TaskDraft } from "./contracts.js";
 
 export class DesktopService {
   private journal?: SqliteJournal;
@@ -33,7 +33,8 @@ export class DesktopService {
   state(): DesktopState {
     if (!this.engine || !this.config) throw new Error("Önce proje açın");
     return structuredClone({ snapshot: this.engine.snapshot(this.config.projectId), busy: !!this.running,
-      demo: this.demo, agents: this.config.agents, events: this.events });
+      demo: this.demo, agents: this.config.agents, events: this.events,
+      maxParallel: this.engine.snapshot(this.config.projectId).project.maxParallel ?? this.config.maxParallel ?? 2 });
   }
 
   openDemo(): DesktopState {
@@ -94,7 +95,10 @@ export class DesktopService {
       this.engine = engine;
       this.config = config;
       this.demo = demo;
-      this.events = [];
+      this.events = journal.all().filter(({ payload }) =>
+        (payload.type === "project.created" ? payload.project.id : payload.type === "task.created" ? payload.task.projectId : payload.projectId) === config.projectId)
+        .slice(-200).map((event) => ({ at: event.at, text: event.payload.type,
+          taskId: "taskId" in event.payload ? event.payload.taskId : event.payload.type === "task.created" ? event.payload.task.id : undefined }));
       engine.subscribe((notice) => {
         this.events.push({ at: new Date().toISOString(),
           taskId: notice.kind === "output" ? notice.taskId : "taskId" in notice.event.payload ? notice.event.payload.taskId : undefined,
@@ -116,7 +120,7 @@ export class DesktopService {
     this.abort = new AbortController();
     // Defer execution so busy is visible before the first synchronous domain event.
     this.running = Promise.resolve().then(() => this.engine!.run(this.config!.projectId,
-      this.config!.maxParallel ?? 2, this.abort!.signal)).then(() => {}, (error: unknown) => {
+      this.state().maxParallel, this.abort!.signal)).then(() => {}, (error: unknown) => {
         this.events.push({ at: new Date().toISOString(), text: safeLog(String(error)) });
       }).finally(() => { this.running = undefined; this.abort = undefined; this.publish(); });
     this.publish();
@@ -130,6 +134,20 @@ export class DesktopService {
   retry(taskId: string): void {
     if (this.running) throw new Error("Yeniden denemeden önce çalışmanın bitmesini bekleyin");
     this.engine!.retryTask(this.requireTask(taskId));
+  }
+
+  createTask(draft: TaskDraft): void {
+    if (this.running) throw new Error("Görev eklemeden önce çalışmayı durdurun");
+    if (!draft || typeof draft !== "object" || Array.isArray(draft)) throw new Error("Geçersiz görev");
+    const task = { id: draft.id, title: draft.title, instruction: draft.instruction, agentId: draft.agentId,
+      dependsOn: draft.dependsOn, allowedPaths: draft.allowedPaths, projectId: this.config!.projectId };
+    validate({ ...this.config!, tasks: [...this.state().snapshot.tasks, task] });
+    this.engine!.addTask(task);
+  }
+
+  setParallelism(value: number): void {
+    if (this.running) throw new Error("Paralelliği değiştirmeden önce çalışmayı durdurun");
+    this.engine!.setParallelism(this.config!.projectId, value);
   }
 
   review(taskId: string, refresh = false): DesktopReview {

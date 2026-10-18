@@ -70,6 +70,7 @@ export interface AgentAdapter {
 export interface Project {
   id: string;
   workspaceRoot: string;
+  maxParallel?: number;
 }
 
 export interface TaskRecord extends AgentTask {
@@ -84,6 +85,7 @@ export interface TaskRecord extends AgentTask {
 
 export type DomainEvent =
   | { type: "project.created"; project: Project }
+  | { type: "project.parallelism.updated"; projectId: string; maxParallel: number }
   | { type: "task.created"; task: AgentTask }
   | { type: "task.started"; projectId: string; taskId: string }
   | { type: "task.completed"; projectId: string; taskId: string; summary: string }

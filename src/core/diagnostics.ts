@@ -4,7 +4,7 @@ import type { StoredEvent } from "./contracts.js";
 export function diagnosticReport(events: readonly StoredEvent[]) {
   const counts: Record<string, number> = {};
   const known = new Set([
-    "project.created", "task.created", "task.started", "task.completed", "task.failed",
+    "project.created", "project.parallelism.updated", "task.created", "task.started", "task.completed", "task.failed",
     "task.blocked", "task.interrupted", "task.cancelled", "task.retried", "task.session.saved",
     "task.worktree.prepared", "task.review.requested", "task.review.approved", "context.updated", "message.sent",
   ]);

@@ -25,19 +25,23 @@
 - [x] Onaylanan kodun bağımlı görevlerde görünmesi; değişen diff ve merge çakışmalarının reddi.
 - [x] CLI stdout/stderr olaylarını canlı abonelere aktarma; `AbortSignal` / `Ctrl+C` iptali ve kalıcı `cancelled` durumu.
 - [x] Hata/iptal sonrası görev için `--retry TASK` komutuyla açıkça yeniden kuyruğa alma.
-- [ ] CLI izin talepleri için etkileşimli onay köprüsü, kalıcı filtrelenmiş log arayüzü.
+- [ ] CLI izin talepleri için etkileşimli onay köprüsü; tasarım docs/permissions.md içinde, çift yönlü transport açık.
+- [x] Filtrelenmiş ve sınırlı CLI tanılama çıktısı; serbest metin içermeyen güvenli destek raporu, masaüstünde kalıcı olay geçmişi.
 - [ ] Codex/OpenCode canlı model oturumlarının uçtan uca sınanması.
 - [ ] Ajan bağlantı durumunu/eksik kimlik doğrulamayı gösterme; gerçek ajanın yazma izinleri.
 - [x] İki sahte CLI ajanının ayrı worktree'lerde paralel çalışması ve değişiklik raporu.
 
 ## Aşama 2 — Masaüstü IDE
 
-- [ ] Electron + React temel uygulama; IPC ve güvenli preload API.
-- [ ] Proje/dosya ağacı, Monaco editör, terminal sekmesi.
+- [x] Electron + React temel uygulama; doğrulanan IPC, sandbox ve güvenli preload API.
+- [x] Config ile proje seçimi, görev worktree dosya ağacı ve kapsam/digest kontrollü Monaco editör.
+- [ ] Terminal sekmesi / PTY yaşam döngüsü.
 - [ ] Agent Center (ajan seçme, role bağlama, bağlantı sağlığı).
-- [ ] Task Board (bağımlılık, durum, iptal/tekrar dene, log).
-- [ ] Shared Context ve agent-to-agent mesaj akışı.
+- [x] Task Board (görev oluşturma, bağımlılık çizimi, kalıcı paralellik, durum, iptal/tekrar dene, son 200 olay).
+- [x] Shared Context ve ajan mesajları için kaynak görevleri gösteren masaüstü görünümü; çalışma sırasında canlı ajan teslimi ayrıca CORE-009.
 - [ ] Diff/test önizleme; onaylı merge.
+  - [x] Diff/yeni dosya önizlemesi ve SHA-256 ile onaylı entegrasyon; insan düzenlemesinden sonra inceleme yenileme.
+  - [ ] Yapılandırılmış test kanıtları ve merge conflict çözme ekranı.
 
 ## Aşama 3 — Hibrit genişleme
 
@@ -62,4 +66,4 @@ Bir kullanıcı Windows'ta depoyu seçer. `Codex-manager`, `OpenCode-frontend` v
 
 ## İlk gerçek geliştirme kartı
 
-**Sıradaki kart `CORE-004`: İzin talepleri ve desktop shell.** CLI'deki etkileşimli izin taleplerini kullanıcıya taşımak için güvenli onay köprüsü ve IPC sözleşmesi hazırla; kalıcı loglarda gizli bilgi filtrelemesi uygula. Entegrasyon dalının ana dala alınması ayrıca kullanıcı kararına bağlı kalır.
+**Sıradaki kart `CORE-004`: Etkileşimli izin köprüsü.** Desktop shell, log filtrelemesi, dosya editörü ve Task Board tamamlandı. Çift yönlü Codex App Server / OpenCode Server transport ve kullanıcı kararı yaşam döngüsü sırada. Terminal, sağlayıcı sağlığı ve merge conflict arayüzü de açık. Entegrasyon dalının ana dala alınması ayrıca kullanıcı kararına bağlı kalır.

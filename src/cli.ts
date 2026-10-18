@@ -106,7 +106,7 @@ async function main(): Promise<void> {
         abort.abort();
       };
       process.on("SIGINT", onSigint);
-      try { snapshot = await engine.run(config.projectId, config.maxParallel ?? 2, abort.signal); }
+      try { snapshot = await engine.run(config.projectId, config.maxParallel ?? existing.project.maxParallel ?? 2, abort.signal); }
       finally { process.off("SIGINT", onSigint); }
     } else snapshot = engine.snapshot(config.projectId);
     const reports = snapshot.tasks.map((task) => {

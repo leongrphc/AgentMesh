@@ -49,3 +49,31 @@
 .editor-hint { color: var(--muted); font-size: 10px; line-height: 1.7; padding: 10px 15px; border-top: 1px solid var(--line); }
 .file-error { color: #f0a9a3; padding: 12px 18px; font-size: 12px; background: #422e35; }
 @media(max-width:780px) { .file-layout { grid-template-columns: 150px minmax(0,1fr); } }
+.board-controls { display: flex; align-items: center; gap: 16px; font-size: 11px; }
+.board-controls label { display: flex; align-items: center; gap: 9px; color: var(--muted); }
+.board-controls select, .task-form input, .task-form select, .task-form textarea { color: #dce5ed; background: #15232e; border: 1px solid #465461; border-radius: 5px; font: inherit; padding: 8px 10px; }
+.board-controls button { padding: 7px 11px; font-size: 11px; }
+.graph-scroll { overflow-x: auto; border: 1px solid var(--line); border-radius: 6px; margin-bottom: 15px; background: #15232e; }
+.task-graph { display: block; }
+.task-graph path { stroke: #55727e; stroke-width: 1.5; fill: none; }
+.task-graph rect { fill: #243743; stroke: #435965; }
+.task-graph .graph-selected { stroke: var(--teal); fill: #2b444d; }
+.task-graph text { fill: #dce5ed; font: 10px 'Segoe UI', sans-serif; pointer-events: none; }
+.task-graph text.graph-agent { fill: #95a6b5; font-size: 9px; }
+.task-graph g[role=button] { cursor: pointer; }
+.task-graph g[role=button]:focus rect { stroke: var(--gold); stroke-width: 2; }
+.task-form { max-width: 650px; }
+.task-form label { display: flex; flex-direction: column; gap: 8px; font-size: 12px; color: #b9cbd7; margin-bottom: 16px; }
+.task-form input, .task-form select, .task-form textarea { width: 100%; }
+.task-form textarea { resize: vertical; line-height: 1.7; }
+.task-form input:focus, .task-form select:focus, .task-form textarea:focus { outline: 2px solid var(--teal); outline-offset: 2px; }
+.form-pair { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.form-help { font-size: 10px; line-height: 1.7; color: var(--muted); margin: -5px 0 18px; }
+.task-form fieldset { border: 1px solid var(--line); border-radius: 5px; padding: 15px; }
+.task-form legend { color: var(--muted); font-size: 11px; padding: 0 6px; }
+.dependency-options { max-height: 150px; overflow: auto; }
+.dependency-options label { flex-direction: row; align-items: center; margin-bottom: 12px; }
+.dependency-options input { width: auto; accent-color: var(--teal); }
+.dependency-options small { display: block; font-size: 10px; margin-top: 4px; }
+.history-filter { display: flex; align-items: center; gap: 6px; font-size: 10px; color: var(--muted); }
+.history-filter input { accent-color: var(--teal); }
