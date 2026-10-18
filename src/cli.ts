@@ -5,7 +5,7 @@ import { SqliteJournal } from "./core/sqlite-journal.js";
 import { Orchestrator } from "./core/orchestrator.js";
 import { WorktreeManager } from "./core/worktrees.js";
 import { configuredAdapter } from "./adapters/registry.js";
-import { validate, orderTasks, type Config } from "./core/config.js";
+import { validate, reconcileTasks, type Config } from "./core/config.js";
 import { diagnosticReport } from "./core/diagnostics.js";
 import { safeLog } from "./core/safe-log.js";
 
@@ -78,11 +78,8 @@ async function main(): Promise<void> {
       throw new Error("Proje kimliği başka depo ile eşleşiyor");
     }
     if (executing) {
-      for (const task of orderTasks(config.tasks)) {
-        const old = existing.tasks.find((item) => item.id === task.id);
-        if (old) continue;
-        engine.addTask(task);
-      }
+      const reserved = journal.all().flatMap(({ payload }) => payload.type === "task.created" && payload.task.projectId !== config.projectId ? [payload.task.id] : []);
+      for (const task of reconcileTasks(config, existing.tasks, reserved)) engine.addTask(task);
     }
     if (approving) {
       const taskId = args[args.indexOf("--approve") + 1];

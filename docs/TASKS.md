@@ -35,7 +35,7 @@ Codex, OpenCode, Claude, Antigravity ve diğer API modellerini **tek IDE içinde
 - [x] JSONL stdout/stderr ve journal olaylarını canlı `subscribe()` abonelerine iletme; CLI'da `--stream`.
 - [x] `AbortSignal`, `Ctrl+C`, kalıcı `cancelled`, geç gelen çıktının görev sonucunu tamamlamasını engelleme.
 - [x] Başarısız/iptal edilmiş/engellenmiş görevi `--retry TASK` ile açıkça yeniden kuyruğa alma.
-- [x] Mock ve yerel subprocess/Git worktree testleri; son başarılı doğrulama **44/44 test**, `npm run typecheck`, desktop build, Electron/Monaco/PTY/izin paneli smoke ve modelsiz yerel OpenCode Server protokol smoke başarılı.
+- [x] Mock ve yerel subprocess/Git worktree testleri; son başarılı doğrulama **46/46 test**, `npm run typecheck`, desktop build, Electron/Monaco/PTY/izin paneli smoke ve modelsiz yerel OpenCode Server protokol smoke başarılı.
 
 ## Açık görevler — öncelik sırasıyla
 
@@ -73,7 +73,9 @@ Codex, OpenCode, Claude, Antigravity ve diğer API modellerini **tek IDE içinde
 - [ ] **CORE-010:** İzinleri çalıştırma **öncesinde** zorlayabilecek süreç/OS sandbox politikası; `allowedPaths` şu an yalnızca çalıştırma sonrasında denetleniyor. Native sağlayıcı/araç alt süreç ağacının iptal ve kapanış garantileri ayrıca sınanmalı; sahipli ana sunucuyu kapatmak tek başına OS izolasyonu değildir.
 - [ ] **CORE-011:** Kalıcı, sürümlü context/karar yönetimi; çakışan kararlar için doğrulama ve ilgili context paketini seçme.
 - [ ] **CORE-012:** Güvenli log saklama/retention, hata teşhisi, oturum sağlığı ve yeniden başlatma kurtarma senaryoları.
-- [ ] **CORE-013 / Config uyumu:** Yeniden açılan projede görev/ajan tanımları değişmişse sessizce eski tanımı kullanmak yerine farkı göster; eksik sağlayıcı eşlemesi ve aynı ID'nin farklı kapsam/talimatla kullanılması için açık güncelleme akışı.
+- [ ] **CORE-013 / Config uyumu:** Kayıtlı görev ve ajan tanımlarını açık güncelleme akışıyla uzlaştırma.
+  - [x] Desktop yeniden açma ve CLI execute öncesi toplu görev kontrolü: aynı ID'de başlık/talimat/ajan/bağımlılık/kapsam farkı alan adlarıyla reddedilir; ham talimat hata metnine alınmaz. UI görevleri korunur; eksik ajan eşlemesi ve başka projedeki görev ID çakışması yeni görev eklenmeden reddedilir. Dizi sırası anlamsız fark üretmez; tekrarlı bağımlılıklar config doğrulamasında reddedilir. Başarısız açılış eski projeyi/journal'ı kullanılabilir bırakır.
+  - [ ] Farkları karşılaştıran güncelleme ekranı ve güvenli görev revizyonu; provider/model/transport değişikliklerinin geçmiş native session kimliğiyle uyumunu kalıcı ajan bağlaması üzerinden doğrulama. Şimdilik görev farkında orijinal tanımı geri yüklemek veya yeni görev kimliği kullanmak gerekir.
 - [ ] **UI-007 / Editör devamı:** Dosya/klasör oluşturma, disk değişikliği izleme, çoklu dosya sekmeleri ve kaydedilmemiş taslak kurtarma. Monaco paket boyutu/ilk yükleme optimizasyonu; şu anda editör ayrı ve tembel yüklenen yaklaşık 2.6 MB chunk.
 
 ### P2 — Hibrit sağlayıcılar ve ileri orkestrasyon

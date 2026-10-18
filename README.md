@@ -41,6 +41,8 @@ Worktree oluşmuş bir görevi seçip **Değişiklikleri incele** ile diff ve ye
 
 **Terminal** bölümünde durdurulmuş görev worktree’sinde en fazla dört kabuk açabilirsiniz. Komutlar kullanıcı hesabınızın yetkileriyle çalışır; ajan dosya kapsamı uygulanmaz. Ajan başlatma veya onaydan önce terminal süreçlerini, proje değiştirmeden önce tüm sekmeleri kapatın. Terminal çıktısı journal'a kaydedilmez. [Kapsam ve yaşam döngüsü](docs/terminals.md).
 
+Projeyi yeniden açarken veya CLI `--execute` öncesinde aynı görev kimliğinin kayıtlı tanımıyla config karşılaştırılır. Başlık, talimat, ajan, bağımlılık veya kapsam değişmişse alan adlarıyla hata gösterilir; orijinal tanımı geri yükleyin ya da yeni görev kimliği kullanın. Arayüzden eklenmiş görevler korunur; bunların ajanları config içinde bulunmalıdır. Ajan provider/model/transport geçmişini uzlaştırma ekranı henüz yoktur (CORE-013).
+
 `npm run desktop:smoke`, görünür pencere açmadan gerçek Electron renderer/preload, Monaco'da dosya açma, PTY açma/komut/çıktı/boyutlandırma/kapatma, dört görevli demo ve formdan bağımlı beşinci görevi ekleyip çalıştırmayı doğrular; `dist/desktop-smoke.png`, `dist/desktop-editor.png` ve `dist/desktop-terminal.png` üretir. Pencere kapanırken kaydedilmemiş değişiklikler kontrol edilir, aktif işler ve terminaller kapatılır, SQLite kapatılır.
 
 Demo, `.agentmesh/demo.sqlite` dosyasında olay geçmişini saklar. Eski `.agentmesh/demo-events.jsonl` varsa ilk açılışta SQLite'a aktarır. İkinci çalıştırmada tamamlanan görevleri yeniden çalıştırmaz. Sıfırdan denemek için (gerekirse yedekleyerek) iki dosyayı temizleyin:

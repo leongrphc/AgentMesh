@@ -32,6 +32,7 @@ export function validate(config: Config): void {
       !registered.has(task.agentId) || typeof task.title !== "string" || !task.title.trim() || typeof task.instruction !== "string" || !task.instruction.trim() ||
       !Array.isArray(task.dependsOn) || !Array.isArray(task.allowedPaths) || !task.allowedPaths.length ||
       task.dependsOn.some((id) => typeof id !== "string") ||
+      new Set(task.dependsOn).size !== task.dependsOn.length ||
       task.allowedPaths.some((pattern) => typeof pattern !== "string" || !pattern.trim())) {
       throw new Error(`Geçersiz görev: ${task?.id}`);
     }
@@ -41,6 +42,32 @@ export function validate(config: Config): void {
     if (task.dependsOn.some((id) => !seen.has(id))) throw new Error(`Bulunmayan görev bağımlılığı: ${task.id}`);
   }
   orderTasks(config.tasks);
+}
+
+/** Preflight the entire import before any task-created event is written. */
+export function reconcileTasks(config: Config, existing: readonly AgentTask[], reservedTaskIds: readonly string[] = []): AgentTask[] {
+  const known = new Map(existing.map((task) => [task.id, task]));
+  const agents = new Set(config.agents.map((agent) => agent.id));
+  for (const task of existing) {
+    if (!agents.has(task.agentId)) throw new Error(`Config uyumsuzluğu: ${task.id} görevinin ${task.agentId} ajanı eksik. Ajan eşlemesini geri ekleyin.`);
+  }
+  const fields = ["title", "instruction", "agentId", "dependsOn", "allowedPaths"] as const;
+  const value = (task: AgentTask, field: typeof fields[number]) => {
+    const input = task[field];
+    return Array.isArray(input) ? JSON.stringify([...new Set(input)].sort()) : input;
+  };
+  for (const task of config.tasks) {
+    const old = known.get(task.id);
+    if (!old) continue;
+    const changed = fields.filter((field) => value(old, field) !== value(task, field));
+    if (changed.length) throw new Error(`Config uyumsuzluğu: ${task.id} için değişen alanlar: ${changed.join(", ")}. Kayıtlı tanımı geri yükleyin veya yeni görev kimliği kullanın; mevcut görev değiştirilmedi.`);
+  }
+  const additions = config.tasks.filter((task) => !known.has(task.id));
+  const reserved = new Set(reservedTaskIds);
+  for (const task of additions) if (reserved.has(task.id)) throw new Error(`Config uyumsuzluğu: ${task.id} görev kimliği bu deponun başka projesinde kullanılıyor. Yeni kimlik kullanın.`);
+  const merged = [...existing, ...additions];
+  validate({ ...config, tasks: merged });
+  return orderTasks(merged).filter((task) => !known.has(task.id));
 }
 
 export function orderTasks(tasks: AgentTask[]): AgentTask[] {

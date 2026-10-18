@@ -5,7 +5,7 @@ import { setTimeout as delay } from "node:timers/promises";
 import { SqliteJournal } from "../core/sqlite-journal.js";
 import { Orchestrator } from "../core/orchestrator.js";
 import { WorktreeManager } from "../core/worktrees.js";
-import { validate, orderTasks, type Config } from "../core/config.js";
+import { validate, reconcileTasks, type Config } from "../core/config.js";
 import { MockAgent } from "../adapters/mock.js";
 import { configuredAdapter } from "../adapters/registry.js";
 import type { PermissionDecision } from "../core/permissions.js";
@@ -115,7 +115,8 @@ export class DesktopService {
         throw new Error("Proje kimliği başka depoya ait");
       }
       const tasks = engine.snapshot(config.projectId).tasks;
-      for (const task of orderTasks(config.tasks)) if (!tasks.some((old) => old.id === task.id)) engine.addTask(task);
+      const reserved = journal.all().flatMap(({ payload }) => payload.type === "task.created" && payload.task.projectId !== config.projectId ? [payload.task.id] : []);
+      for (const task of reconcileTasks(config, tasks, reserved)) engine.addTask(task);
       if (!reused) this.journal?.close();
       this.journal = journal;
       this.journalPath = normalized;
