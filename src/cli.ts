@@ -6,67 +6,9 @@ import { Orchestrator } from "./core/orchestrator.js";
 import { WorktreeManager } from "./core/worktrees.js";
 import { CodexCliAdapter } from "./adapters/codex-cli.js";
 import { OpenCodeCliAdapter } from "./adapters/opencode-cli.js";
-import type { AgentTask } from "./core/contracts.js";
-
-interface Config {
-  projectId: string;
-  repoPath: string;
-  maxParallel?: number;
-  agents: Array<{ id: string; provider: "codex" | "opencode"; model?: string }>;
-  tasks: AgentTask[];
-}
-
-function validate(config: Config): void {
-  if (!config || !config.projectId || !config.repoPath || !Array.isArray(config.agents) || !Array.isArray(config.tasks)) {
-    throw new Error("Config: projectId, repoPath, agents[] ve tasks[] zorunlu");
-  }
-  if (config.maxParallel !== undefined && (!Number.isInteger(config.maxParallel) || config.maxParallel < 1 || config.maxParallel > 8)) {
-    throw new Error("maxParallel 1-8 aralığında olmalı");
-  }
-  const registered = new Set<string>();
-  for (const agent of config.agents) {
-    if (!agent.id || !["codex", "opencode"].includes(agent.provider) || registered.has(agent.id)) {
-      throw new Error(`Geçersiz veya tekrarlı ajan: ${agent.id}`);
-    }
-    registered.add(agent.id);
-  }
-  const seen = new Set<string>();
-  for (const task of config.tasks) {
-    if (!task.id || seen.has(task.id) || task.projectId !== config.projectId ||
-      !registered.has(task.agentId) || !task.title || !task.instruction ||
-      !Array.isArray(task.dependsOn) || !Array.isArray(task.allowedPaths) || !task.allowedPaths.length ||
-      task.allowedPaths.some((pattern) => typeof pattern !== "string" || !pattern.trim())) {
-      throw new Error(`Geçersiz görev: ${task.id}`);
-    }
-    seen.add(task.id);
-  }
-  for (const task of config.tasks) {
-    if (task.dependsOn.some((id) => !seen.has(id))) throw new Error(`Bulunmayan görev bağımlılığı: ${task.id}`);
-  }
-  orderTasks(config.tasks);
-}
-
-function orderTasks(tasks: AgentTask[]): AgentTask[] {
-  const known = new Map(tasks.map((task) => [task.id, task]));
-  const completed = new Set<string>();
-  const visiting = new Set<string>();
-  const result: AgentTask[] = [];
-  function visit(task: AgentTask): void {
-    if (completed.has(task.id)) return;
-    if (visiting.has(task.id)) throw new Error(`Döngüsel görev bağımlılığı: ${task.id}`);
-    visiting.add(task.id);
-    for (const parentId of task.dependsOn) {
-      const parent = known.get(parentId);
-      if (!parent) throw new Error(`Görev bulunamadı: ${parentId}`);
-      visit(parent);
-    }
-    visiting.delete(task.id);
-    completed.add(task.id);
-    result.push(task);
-  }
-  for (const task of tasks) visit(task);
-  return result;
-}
+import { validate, orderTasks, type Config } from "./core/config.js";
+import { diagnosticReport } from "./core/diagnostics.js";
+import { safeLog } from "./core/safe-log.js";
 
 async function main(): Promise<void> {
   const args = process.argv.slice(2);
@@ -75,7 +17,8 @@ async function main(): Promise<void> {
   const retrying = args.includes("--retry");
   const executing = args.includes("--execute");
   const streaming = args.includes("--stream");
-  if (Number(reviewing) + Number(approving) + Number(retrying) + Number(executing) > 1) {
+  const diagnostics = args.includes("--diagnostics");
+  if (Number(reviewing) + Number(approving) + Number(retrying) + Number(executing) + Number(diagnostics) > 1) {
     throw new Error("--review, --approve, --retry ve --execute birlikte kullanılamaz");
   }
   if (streaming && !executing) throw new Error("--stream yalnızca --execute ile kullanılabilir");
@@ -89,7 +32,7 @@ async function main(): Promise<void> {
   validate(config);
   const repoPath = isAbsolute(config.repoPath)
     ? realpathSync(config.repoPath) : realpathSync(resolve(dirname(configFile), config.repoPath));
-  if (!executing && !reviewing && !approving && !retrying) {
+  if (!executing && !reviewing && !approving && !retrying && !diagnostics) {
     console.log(JSON.stringify({
       dryRun: true, repoPath, projectId: config.projectId,
       agents: config.agents, tasks: config.tasks.map(({ id, agentId, dependsOn, allowedPaths }) => ({ id, agentId, dependsOn, allowedPaths })),
@@ -104,6 +47,13 @@ async function main(): Promise<void> {
   const dbPath = join(dirname(repoPath), ".agentmesh-data", repoKey, "events.sqlite");
   const journal = new SqliteJournal(dbPath);
   try {
+    if (diagnostics) {
+      const events = journal.all().filter(({ payload }) =>
+        (payload.type === "project.created" ? payload.project.id
+          : payload.type === "task.created" ? payload.task.projectId : payload.projectId) === config.projectId);
+      console.log(JSON.stringify(diagnosticReport(events), null, 2));
+      return;
+    }
     const manager = new WorktreeManager();
     const engine = new Orchestrator(journal, manager);
     if (streaming) engine.subscribe((notice) => {
@@ -180,6 +130,6 @@ async function main(): Promise<void> {
 }
 
 main().catch((error: unknown) => {
-  console.error(error instanceof Error ? error.message : String(error));
+  console.error(safeLog(error instanceof Error ? error.message : String(error)));
   process.exitCode = 1;
 });

@@ -42,10 +42,10 @@ Codex, OpenCode, Claude, Antigravity ve diğer API modellerini **tek IDE içinde
 ### P0 — Yarın ilk ele alınacak işler
 
 - [ ] **CORE-004 / İzin köprüsü:** Codex/OpenCode adaptörlerindeki desteklenen izin isteme biçimlerini araştır, yetkileri normalize eden bir `permission.requested` → kullanıcı kararı → sonuç protokolü tasarla. Otomatik yetki yükseltme olmasın. Araştırma ve protokol taslağı: [permissions.md](permissions.md). Çift yönlü transport uygulaması ve testler henüz açık.
-- [ ] **CORE-005 / Güvenli log:** Ham stdout/stderr içinde anahtar/token/kişisel veriyi maskeleyecek ve çıktı boyutunu sınırlayacak katman; görüntüleme ve kalıcı kayıt için farklı politikalar. Testleri ekle.
+- [x] **CORE-005 / Güvenli log:** Ham stdout/stderr filtreleme, çıktı sınırları ve ayrı görüntüleme/kayıt politikaları. [Gizlilik politikası](log-privacy.md); filtre bilinen sır ve e-posta biçimlerini tanır.
   - [x] Orkestratör canlı çıktı sınırında anahtar/token/e-posta maskeleme, görüntüleme (8192 karakter) ve kalıcı hata (2048 karakter) politikaları; sızıntı/kalıcılık testleri.
   - [x] Süreç okuyucusunda chunk sınırlarını aşan sırlar için tamponlama, JSONL satır/toplam byte sınırı ve flood testleri. Varsayılan satır 1 MiB, stdout/stderr toplamı 16 MiB; aşımda süreç durur. JSONL canlı, stderr süreç kapanışında filtrelenir. Ham sonuç olayları dahili kalır; mevcut filtre keyfi kişisel veriyi tanıma garantisi vermez.
-  - [ ] Sonuç özeti/context/mesajlar ve eski journal kayıtları için ayrı gizlilik politikası; çalışma verisini log filtresiyle sessizce değiştirmeden güvenli dışa aktarma.
+  - [x] Sonuç özeti/context/mesajlar ve eski journal kayıtları için ayrı gizlilik politikası; `--diagnostics` ile serbest metin içermeyen, salt olay sayıları dışa aktarımı ve kaynak veriyi koruma testi.
 - [ ] **CORE-006 / Desktop iskeleti:** Electron main + güvenli preload / IPC + React/Vite renderer; nodeIntegration kapalı, contextIsolation açık; orkestratör snapshot ve olay aboneliği için dar API.
 - [ ] **CORE-007 / İlk arayüz:** Proje seçimi, görev listesi, ajan durumu ve canlı olay paneli. Başlat/iptal/yeniden dene aksiyonları backend'e bağlansın.
 - [ ] **CORE-008 / Gerçek CLI smoke testleri:** Kimliği doğrulanmış Codex ve OpenCode ile küçük, ayrı ve güvenli test reposunda uçtan uca çalışmayı onay ve maliyet sınırlarına dikkat ederek doğrula; session/resume ve izin davranışlarını kaydet. Bu testler **henüz yapılmadı**.
