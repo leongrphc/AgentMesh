@@ -40,7 +40,7 @@ Bu komut yalnızca **dry-run** yapar; model çağrısı ve worktree oluşturmaz.
 npm run live -- --config agentmesh.config.json --execute
 ```
 
-Canlı JSONL stdout/stderr olaylarını ve görev durumlarını izlemek için `--execute --stream` kullanın. Çalışan komutta `Ctrl+C`, aktif CLI süreçlerine iptal sinyali gönderir ve bekleyen görevleri iptal eder. İptal edilen işler `cancelled` olarak kalır; kısmi worktree dosyaları silinmez. Ham CLI olayları gizli içerik barındırabileceğinden logları dışarı paylaşırken filtreleyin.
+Canlı JSONL stdout olaylarını ve görev durumlarını izlemek için `--execute --stream` kullanın. Stderr, parçalara bölünmüş sırları filtrelemek için süreç kapanışında gösterilir. Tanınan anahtar/token/e-posta biçimleri maskelenir; JSONL satırı 1 MiB veya stdout/stderr toplamı 16 MiB sınırını aşarsa süreç durdurulur. Çalışan komutta `Ctrl+C`, aktif CLI süreçlerine iptal sinyali gönderir ve bekleyen görevleri iptal eder. İptal edilen işler `cancelled` olarak kalır; kısmi worktree dosyaları silinmez. Filtre keyfi kişisel veriyi tanımaz; görev sonuçları ve ortak context çalışma verisidir, logları dışarı paylaşmadan önce inceleyin.
 
 İptal edilen, başarısız veya engellenmiş bir görevi tekrar çalıştırmadan önce `--review` ile kısmi dosyaları inceleyin ve ardından açıkça kuyruğa alın:
 

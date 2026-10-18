@@ -35,7 +35,7 @@ Codex, OpenCode, Claude, Antigravity ve diğer API modellerini **tek IDE içinde
 - [x] JSONL stdout/stderr ve journal olaylarını canlı `subscribe()` abonelerine iletme; CLI'da `--stream`.
 - [x] `AbortSignal`, `Ctrl+C`, kalıcı `cancelled`, geç gelen çıktının görev sonucunu tamamlamasını engelleme.
 - [x] Başarısız/iptal edilmiş/engellenmiş görevi `--retry TASK` ile açıkça yeniden kuyruğa alma.
-- [x] Mock ve yerel subprocess/Git worktree testleri; son başarılı doğrulama **16/16 test**, `npm run typecheck` başarılı.
+- [x] Mock ve yerel subprocess/Git worktree testleri; son başarılı doğrulama **18/18 test**, `npm run typecheck` başarılı.
 
 ## Açık görevler — öncelik sırasıyla
 
@@ -44,7 +44,7 @@ Codex, OpenCode, Claude, Antigravity ve diğer API modellerini **tek IDE içinde
 - [ ] **CORE-004 / İzin köprüsü:** Codex/OpenCode adaptörlerindeki desteklenen izin isteme biçimlerini araştır, yetkileri normalize eden bir `permission.requested` → kullanıcı kararı → sonuç protokolü tasarla. Otomatik yetki yükseltme olmasın. Araştırma ve protokol taslağı: [permissions.md](permissions.md). Çift yönlü transport uygulaması ve testler henüz açık.
 - [ ] **CORE-005 / Güvenli log:** Ham stdout/stderr içinde anahtar/token/kişisel veriyi maskeleyecek ve çıktı boyutunu sınırlayacak katman; görüntüleme ve kalıcı kayıt için farklı politikalar. Testleri ekle.
   - [x] Orkestratör canlı çıktı sınırında anahtar/token/e-posta maskeleme, görüntüleme (8192 karakter) ve kalıcı hata (2048 karakter) politikaları; sızıntı/kalıcılık testleri.
-  - [ ] Süreç okuyucusunda chunk sınırlarını aşan sırlar için tamponlama, JSONL satır/toplam byte sınırı ve flood testleri. Ham ProcessRunner çıktısı dahili kalır; mevcut filtre keyfi kişisel veriyi tanıma garantisi vermez.
+  - [x] Süreç okuyucusunda chunk sınırlarını aşan sırlar için tamponlama, JSONL satır/toplam byte sınırı ve flood testleri. Varsayılan satır 1 MiB, stdout/stderr toplamı 16 MiB; aşımda süreç durur. JSONL canlı, stderr süreç kapanışında filtrelenir. Ham sonuç olayları dahili kalır; mevcut filtre keyfi kişisel veriyi tanıma garantisi vermez.
   - [ ] Sonuç özeti/context/mesajlar ve eski journal kayıtları için ayrı gizlilik politikası; çalışma verisini log filtresiyle sessizce değiştirmeden güvenli dışa aktarma.
 - [ ] **CORE-006 / Desktop iskeleti:** Electron main + güvenli preload / IPC + React/Vite renderer; nodeIntegration kapalı, contextIsolation açık; orkestratör snapshot ve olay aboneliği için dar API.
 - [ ] **CORE-007 / İlk arayüz:** Proje seçimi, görev listesi, ajan durumu ve canlı olay paneli. Başlat/iptal/yeniden dene aksiyonları backend'e bağlansın.

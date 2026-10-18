@@ -6,6 +6,42 @@ import { Journal } from "../src/core/journal.js";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { runJsonlProcess } from "../src/adapters/cli-process.js";
+
+test("process filters split stderr credentials and multiline keys without changing agent results", async () => {
+  const updates: string[] = [];
+  const result = await runJsonlProcess({
+    executable: process.execPath, cwd: process.cwd(), timeoutMs: 5000,
+    args: ["-e", `
+      process.stderr.write('pass');
+      setTimeout(() => process.stderr.write('word="split-secret"\\n-----BEGIN PRIVATE KEY-----\\n'), 30);
+      setTimeout(() => {
+        process.stderr.write('key-content\\n-----END PRIVATE KEY-----');
+        process.stdout.write(JSON.stringify({type:'text',part:{text:'original-result'},token:'stdout-secret'}));
+      }, 60);
+    `],
+    onOutput: (output) => updates.push(JSON.stringify(output)),
+  });
+  assert.equal((result.events[0]?.part as { text: string }).text, "original-result");
+  assert.equal(result.events[0]?.token, "stdout-secret");
+  for (const secret of ["split-secret", "key-content", "stdout-secret"]) {
+    assert.ok(!updates.join("").includes(secret));
+    assert.ok(!result.stderr.includes(secret));
+  }
+});
+
+test("process rejects oversized JSONL and combined stdout/stderr floods", async () => {
+  for (const [script, limits, expected] of [
+    ["process.stdout.write('x'.repeat(5000))", { maxLineBytes: 1024 }, /satır byte/],
+    ["for(let i=0;i<1000;i++) process.stdout.write('{}\\n')", { maxOutputBytes: 1024 }, /toplam çıktı/],
+    ["process.stderr.write('x'.repeat(5000))", { maxOutputBytes: 1024 }, /toplam çıktı/],
+    ["process.stdout.write('ü'.repeat(600))", { maxLineBytes: 1024 }, /satır byte/],
+  ] as const) {
+    await assert.rejects(runJsonlProcess({
+      executable: process.execPath, args: ["-e", script], cwd: process.cwd(), timeoutMs: 5000, ...limits,
+    }), expected);
+  }
+});
 
 test("diagnostic secrets and email are masked before truncation", () => {
   const input = 'api_key="private-value" Bearer abc123 user@example.com sk-1234567890';

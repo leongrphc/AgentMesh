@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { createInterface } from "node:readline";
+import { safeLog } from "../core/safe-log.js";
 import type { AgentExecution, AgentOutput } from "../core/contracts.js";
 
 export interface ProcessSpec {
@@ -8,6 +8,8 @@ export interface ProcessSpec {
   cwd: string;
   stdin?: string;
   timeoutMs?: number;
+  maxLineBytes?: number;
+  maxOutputBytes?: number;
   signal?: AbortSignal;
   onOutput?: (output: AgentOutput) => void;
 }
@@ -21,11 +23,20 @@ export type ProcessRunner = (spec: ProcessSpec) => Promise<ProcessResult>;
 
 export const runJsonlProcess: ProcessRunner = async (spec) => {
   if (spec.signal?.aborted) throw new Error("CLI işlemi iptal edildi");
+  const maxLineBytes = spec.maxLineBytes ?? 1024 * 1024;
+  const maxOutputBytes = spec.maxOutputBytes ?? 16 * 1024 * 1024;
+  for (const limit of [maxLineBytes, maxOutputBytes]) {
+    if (!Number.isSafeInteger(limit) || limit < 1) {
+      throw new Error("CLI çıktı sınırı pozitif tamsayı olmalı");
+    }
+  }
   const child = spawn(spec.executable, spec.args, {
     cwd: spec.cwd, stdio: ["pipe", "pipe", "pipe"], shell: false, windowsHide: true,
   });
   const events: Record<string, unknown>[] = [];
   let stderr = "";
+  let stdoutBuffer = "";
+  let outputBytes = 0;
   let rawOutput = "";
   let parseError: Error | undefined;
   let aborted = false;
@@ -38,13 +49,17 @@ export const runJsonlProcess: ProcessRunner = async (spec) => {
   const report = (output: AgentOutput) => {
     try { spec.onOutput?.(output); } catch { /* UI subscriber failures must not crash CLI execution. */ }
   };
-  const reader = createInterface({ input: child.stdout });
-  reader.on("line", (line) => {
+  const failLimit = (message: string) => {
+    parseError ??= new Error(message);
+    stdoutBuffer = "";
+    child.kill();
+  };
+  const consumeLine = (line: string) => {
     try {
       const value: unknown = JSON.parse(line);
       if (value && typeof value === "object" && !Array.isArray(value)) {
         if (events.length < 20_000) events.push(value as Record<string, unknown>);
-        report({ channel: "stdout", data: value as Record<string, unknown> });
+        report({ channel: "stdout", data: { text: safeLog(JSON.stringify(value)) } });
       } else if (rawOutput.length < 8192) rawOutput += line + "\n";
     } catch {
       if (rawOutput.length < 8192) rawOutput += line + "\n";
@@ -53,11 +68,31 @@ export const runJsonlProcess: ProcessRunner = async (spec) => {
       parseError = new Error("CLI olay limiti aşıldı");
       child.kill();
     }
+  };
+  const countBytes = (text: string) => {
+    outputBytes += Buffer.byteLength(text);
+    if (outputBytes > maxOutputBytes) failLimit("CLI toplam çıktı byte limiti aşıldı");
+    return !parseError;
+  };
+  child.stdout.setEncoding("utf8");
+  child.stdout.on("data", (text: string) => {
+    if (!countBytes(text)) return;
+    stdoutBuffer += text;
+    let newline: number;
+    while ((newline = stdoutBuffer.indexOf("\n")) !== -1) {
+      const line = stdoutBuffer.slice(0, newline);
+      stdoutBuffer = stdoutBuffer.slice(newline + 1);
+      if (Buffer.byteLength(line) > maxLineBytes) return failLimit("CLI JSONL satır byte limiti aşıldı");
+      consumeLine(line);
+      if (parseError) return;
+    }
+    if (Buffer.byteLength(stdoutBuffer) > maxLineBytes) failLimit("CLI JSONL satır byte limiti aşıldı");
   });
+  // stderr has no framing contract. Buffer until close so split credentials and
+  // multiline private keys cannot leak through a partially filtered chunk.
   child.stderr.setEncoding("utf8");
   child.stderr.on("data", (text: string) => {
-    stderr += text; stderr = stderr.slice(-8192);
-    report({ channel: "stderr", data: text.slice(-8192) });
+    if (countBytes(text)) stderr += text;
   });
   child.stdin.on("error", () => { /* A child may exit before it accepts all stdin. */ });
   if (spec.stdin !== undefined) child.stdin.end(spec.stdin);
@@ -72,10 +107,13 @@ export const runJsonlProcess: ProcessRunner = async (spec) => {
     clearTimeout(timer);
     spec.signal?.removeEventListener("abort", abort);
   }
+  if (!parseError && stdoutBuffer) consumeLine(stdoutBuffer);
+  stderr = safeLog(stderr);
+  if (stderr) report({ channel: "stderr", data: stderr });
   if (parseError) throw parseError;
   if (aborted) throw new Error("CLI işlemi iptal edildi");
   if (timedOut) throw new Error("CLI zaman aşımı");
-  if (exitCode !== 0) throw new Error(`CLI hata kodu ${exitCode}: ${stderr || rawOutput.slice(-1024)}`);
+  if (exitCode !== 0) throw new Error(`CLI hata kodu ${exitCode}: ${safeLog(stderr || rawOutput, "storage")}`);
   return { events, stderr };
 };
 
@@ -101,7 +139,7 @@ export function parseAgentEvents(events: readonly Record<string, unknown>[]): { 
       if (typeof text === "string") summary += text;
     }
     if (event.type === "turn.failed" || event.type === "error") {
-      throw new Error(`Ajan hatası: ${JSON.stringify(event).slice(0, 1000)}`);
+      throw new Error(`Ajan hatası: ${safeLog(JSON.stringify(event), "storage")}`);
     }
   }
   if (!summary.trim()) throw new Error("CLI başarılı bitti fakat ajan mesajı bulunamadı");
