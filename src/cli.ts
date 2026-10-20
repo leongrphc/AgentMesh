@@ -23,7 +23,8 @@ async function main(): Promise<void> {
   const resolvingContext = args.includes("--resolve-context");
   const archiving = args.includes("--archive");
   const verifyingArchive = args.includes("--verify-archive");
-  if ([reviewing, approving, retrying, executing, diagnostics, contextReview, resolvingContext, archiving, verifyingArchive].filter(Boolean).length > 1) {
+  const checkpointing = args.includes("--checkpoint");
+  if ([reviewing, approving, retrying, executing, diagnostics, contextReview, resolvingContext, archiving, verifyingArchive, checkpointing].filter(Boolean).length > 1) {
     throw new Error("İnceleme, çalıştırma ve karar komutlarını ayrı kullanın");
   }
   if (streaming && !executing) throw new Error("--stream yalnızca --execute ile kullanılabilir");
@@ -44,7 +45,7 @@ async function main(): Promise<void> {
   const needsDesktop = config.agents.some((agent) => agent.transport && agent.transport !== "exec");
   const repoPath = isAbsolute(config.repoPath)
     ? realpathSync(config.repoPath) : realpathSync(resolve(dirname(configFile), config.repoPath));
-  if (!executing && !reviewing && !approving && !retrying && !diagnostics && !contextReview && !resolvingContext && !archiving) {
+  if (!executing && !reviewing && !approving && !retrying && !diagnostics && !contextReview && !resolvingContext && !archiving && !checkpointing) {
     console.log(JSON.stringify({
       dryRun: true, repoPath, projectId: config.projectId,
       agents: config.agents, tasks: config.tasks.map(({ id, agentId, dependsOn, allowedPaths, contextKeys }) => ({ id, agentId, dependsOn, allowedPaths, contextKeys })),
@@ -53,6 +54,7 @@ async function main(): Promise<void> {
         : "--execute [--stream]: ajanları çalıştır, --review: diff görüntüle, --approve TASK --digest SHA256: onayla, --retry TASK: görevi yeniden kuyruğa al.",
       contextInstruction: "--context: sürüm ve çakışmaları incele; --resolve-context ID --revision N --choice keep|accept|custom: karar ver. custom için --value-file UTF8_FILE gerekir.",
       archiveInstruction: "--archive YENI_DOSYA.sqlite: journal'ın doğrulanan tam kopyasını oluşturur; kaynak kayıtlarını silmez. --verify-archive DOSYA.sqlite config gerektirmeden doğrular.",
+      checkpointInstruction: "--checkpoint: kurtarma sonrası mevcut durumun açılış önbelleğini kaydeder; olayları silmez ve ajan çalıştırmaz.",
     }, null, 2));
     return;
   }
@@ -61,7 +63,7 @@ async function main(): Promise<void> {
   }
   const repoKey = createHash("sha256").update(repoPath.toLowerCase()).digest("hex").slice(0, 16);
   const dbPath = join(dirname(repoPath), ".agentmesh-data", repoKey, "events.sqlite");
-  if (archiving && !existsSync(dbPath)) throw new Error("Arşivlenecek journal bulunamadı; önce projeyi açın");
+  if ((archiving || checkpointing) && !existsSync(dbPath)) throw new Error("Journal bulunamadı; önce projeyi açın");
   const journal = new SqliteJournal(dbPath);
   try {
     if (archiving) {
@@ -75,7 +77,7 @@ async function main(): Promise<void> {
     }
     const manager = new WorktreeManager();
     const sourceAgents = structuredClone(config.agents);
-    config = resolveAgentSettings(config, journal.scan(config.projectId));
+    config = resolveAgentSettings(config, journal.latestAgentSettings(config.projectId));
     if (executing && config.agents.some((agent) => agent.transport && agent.transport !== "exec")) {
       throw new Error("Etkileşimli izin kararları için bu config'i masaüstü uygulamasında açın; CLI yalnızca exec transport çalıştırır");
     }
@@ -96,9 +98,12 @@ async function main(): Promise<void> {
     if (realpathSync(existing.project.workspaceRoot).toLowerCase() !== repoPath.toLowerCase()) {
       throw new Error("Proje kimliği başka depo ile eşleşiyor");
     }
+    if (checkpointing) {
+      console.log(JSON.stringify({ checkpointed: true, ...engine.checkpoint() }, null, 2));
+      return;
+    }
     if (executing) {
-      const reserved: string[] = [];
-      for (const { payload } of journal.scan()) if (payload.type === "task.created" && payload.task.projectId !== config.projectId) reserved.push(payload.task.id);
+      const reserved = journal.reservedTaskIds(config.projectId);
       for (const task of reconcileTasks(config, existing.tasks, reserved)) engine.addTask(task);
       engine.configureAgents(config.projectId, config.agents, sourceAgents);
     }

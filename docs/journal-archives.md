@@ -20,3 +20,20 @@ Arşivin bir **kopyası** üzerinde çalışın. Şema v2 olduğu için journal 
 Bu arşiv Git deposunu, worktree dosyalarını, native sağlayıcı oturumlarını veya uygulama dışı kimlik bilgilerini yedeklemez. Journal tek başına eksik çalışma dosyalarını kurtaramaz. Arşivleme şu anda aktif journal boyutunu küçültmez; checkpoint, eski kayıtları arşivden transparan okuma ve kullanıcı tarafından seçilen retention politikası açık iştir.
 
 Testler: sıra boşlukları ve olay eşitliği, mevcut dosyanın korunması, kaynakta recovery oluşmaması, arşiv kopyasında gerçek replay/kurtarma, değiştirilmiş içerik/manifest ve bilinmeyen şema reddi, boş arşiv, config olmadan CLI doğrulaması.
+
+
+## Replay checkpoint
+
+```powershell
+npm run live -- --config agentmesh.config.json --checkpoint
+```
+
+Checkpoint, aynı SQLite journal içinde açılış için türetilmiş bir durum önbelleği oluşturur. Sonraki masaüstü/CLI açılışı geçerli checkpoint'i yükler ve yalnızca sonrasındaki olayları replay eder. Kaynak journal ve arşivler tutulur; checkpoint hiçbir olayı silmez ve aktif dosyayı küçültmez. Elle oluşturulur, her işlem sonrası otomatik yeniden yazılmaz.
+
+Komut normal açılış kurtarmasını **önce** uygular: kesilmiş görevleri needs_review yapabilir, eski izinleri reddedebilir ve belirsiz teslimleri işaretleyebilir; model çağırmaz. Bu yönüyle ham arşivleme komutundan farklıdır. Çalışan görev/izin/inbox varken checkpoint yazılamaz. Durumu yükledikten sonra journal'a başka olay eklenmişse eski orkestratör checkpoint yazamaz; yeniden açılması gerekir.
+
+Durum sürümü, SHA-256, son sıra numarası ve kaynak olay kimliği doğrulanır. JSON alanlarında undefined opsiyonel değerler saklanmaz. Bozuk checksum, bilinmeyen biçim veya geçersiz projeksiyon durumunda kısmen yüklenen veriler temizlenir ve tüm journal replay edilir. Eski olay UPDATE/DELETE işlemleri checkpoint'i SQLite trigger'ı ile geçersizleştirir. Bu kontroller kaza/bozulma içindir; checksum, kötü niyetle hem içeriği hem özeti değiştiren kişiye karşı imza değildir.
+
+Checkpoint tablo/indeksleri türetilmiş verilerdir; journal şeması v2 kalır. Arşivler sadece kaynak olayları ve arşiv manifestini taşır; checkpoint arşive kopyalanmaz. Böylece kurtarma checkpoint'e bağımlı değildir. Ajan ayarları son kayıt sorgusuyla, başka proje görev kimlikleri de indeksli kimlik sorgusuyla alınır; checkpoint kazanımını geri alan tam açılış taraması yapılmaz.
+
+Checkpoint'in boyutu görev, güncel context, bekleyen öneri, mesaj ve teslim kayıtlarının sayısına bağlıdır. Geçmiş facts/paket/çözülmüş öneri içerikleri dahil edilmez. Tam dışa aktarım ve tanı raporu yine gerektiğinde journal'ı tarar. Aktif journal küçültme, soğuk arşivlerden birleşik okuma ve kullanıcı retention politikası açık işlerdir.

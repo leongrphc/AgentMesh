@@ -66,13 +66,19 @@ export class Orchestrator {
   private readonly diskHistory: boolean;
   private readonly packageCounts = new Map<string, number>();
   private readonly resolvedCounts = new Map<string, number>();
+  private lastAppliedId: string | null = null;
 
   constructor(private readonly journal: EventStore, private readonly worktrees?: WorktreeManager) {
     this.diskHistory = !!(journal.scan && journal.contextHistoryPage && journal.contextPackagesPage && journal.resolvedContextPage);
     this.permissions = new PermissionBroker((event) => this.emit(event));
+    const checkpoint = this.diskHistory && journal.scanAfter ? journal.loadCheckpoint?.() : undefined;
+    const restored = checkpoint && this.restoreCheckpoint(checkpoint.state);
+    if (restored) this.lastAppliedId = checkpoint.sourceId;
     const unresolved = new Map<string, Extract<DomainEvent, { type: "permission.requested" }>>();
-    for (const { payload } of eventStream(journal)) {
+    const events = restored ? journal.scanAfter!(checkpoint.sequence) : eventStream(journal);
+    for (const { payload, id } of events) {
       this.apply(payload);
+      this.lastAppliedId = id;
       if (payload.type === "permission.requested") unresolved.set(payload.requestId, payload);
       if (payload.type === "permission.resolved") unresolved.delete(payload.requestId);
     }
@@ -87,6 +93,73 @@ export class Orchestrator {
       if (task.status === "running") {
         this.emit({ type: "task.interrupted", projectId: task.projectId, taskId: task.id });
       }
+    }
+  }
+
+  checkpoint() {
+    if (!this.diskHistory || !this.journal.saveCheckpoint) throw new Error("Bu journal checkpoint desteklemiyor");
+    if (this.controllers.size || this.inboxes.size || [...this.tasks.values()].some(task => task.status === "running")
+      || [...this.projects.keys()].some(id => this.pendingPermissions(id).length)) throw new Error("Checkpoint için çalışan görevleri bitirin");
+    const state = { version: 1, projects: [...this.projects], tasks: [...this.tasks],
+      facts: [...this.facts].map(([id, values]) => [id, [...values]]),
+      conflicts: [...this.contextConflicts].map(([id, values]) => [id, [...values]]),
+      messages: this.messages, deliveries: [...this.deliveries], agentSettings: [...this.agentSettings],
+      packageCounts: [...this.packageCounts], resolvedCounts: [...this.resolvedCounts] };
+    return this.journal.saveCheckpoint(JSON.stringify(state), this.lastAppliedId);
+  }
+
+  private restoreCheckpoint(serialized: string): boolean {
+    try {
+      const state = JSON.parse(serialized);
+      const names = ["projects", "tasks", "facts", "conflicts", "messages", "deliveries", "agentSettings", "packageCounts", "resolvedCounts"];
+      if (state?.version !== 1 || names.some(name => !Array.isArray(state[name]))) return false;
+      const pairs = (entries: unknown): Array<[string, any]> => {
+        if (!Array.isArray(entries) || entries.some(entry => !Array.isArray(entry) || entry.length !== 2 || typeof entry[0] !== "string")
+          || new Set(entries.map(entry => entry[0])).size !== entries.length) throw new Error("Geçersiz checkpoint haritası");
+        return entries;
+      };
+      for (const [key, value] of pairs(state.projects)) {
+        if (value?.id !== key || typeof value.workspaceRoot !== "string") throw new Error("Geçersiz checkpoint projesi");
+        this.projects.set(key, value);
+      }
+      for (const [key, value] of pairs(state.tasks)) {
+        if (value?.id !== key || !this.projects.has(value.projectId) || !Array.isArray(value.dependsOn) || !Array.isArray(value.allowedPaths)
+          || !["pending", "completed", "failed", "blocked", "cancelled", "needs_review", "pending_review"].includes(value.status)) throw new Error("Geçersiz checkpoint görevi");
+        this.tasks.set(key, value);
+      }
+      for (const [id, entries] of pairs(state.facts)) {
+        const values = pairs(entries);
+        if (!this.projects.has(id) || values.some(([key, value]) => value?.key !== key || !Number.isInteger(value.revision) || value.revision < 1)) throw new Error("Geçersiz checkpoint context");
+        this.facts.set(id, new Map(values));
+      }
+      for (const [id, entries] of pairs(state.conflicts)) {
+        const values = pairs(entries);
+        if (!this.projects.has(id) || values.some(([key, value]) => value?.id !== key || value.status !== "pending")) throw new Error("Geçersiz checkpoint kararı");
+        this.contextConflicts.set(id, new Map(values));
+      }
+      for (const entry of state.messages) {
+        if (!entry || typeof entry.id !== "string" || !this.projects.has(entry.projectId)) throw new Error("Geçersiz checkpoint mesajı");
+        this.messages.push(entry);
+      }
+      for (const [key, value] of pairs(state.deliveries)) {
+        if (!value || !this.tasks.has(value.taskId) || !["sending", "accepted", "uncertain", "queued"].includes(value.status)) throw new Error("Geçersiz checkpoint teslimi");
+        this.deliveries.set(key, value);
+      }
+      for (const [key, value] of pairs(state.agentSettings)) {
+        if (!this.projects.has(key) || !Array.isArray(value)) throw new Error("Geçersiz checkpoint ajanları");
+        this.agentSettings.set(key, value);
+      }
+      for (const [target, entries] of [[this.packageCounts, state.packageCounts], [this.resolvedCounts, state.resolvedCounts]] as const) {
+        for (const [key, value] of pairs(entries)) {
+          if (!Number.isSafeInteger(value) || value < 0) throw new Error("Geçersiz checkpoint sayısı");
+          target.set(key, value);
+        }
+      }
+      return true;
+    } catch {
+      for (const map of [this.projects, this.tasks, this.facts, this.contextConflicts, this.deliveries, this.agentSettings, this.packageCounts, this.resolvedCounts]) map.clear();
+      this.messages.length = 0;
+      return false;
     }
   }
 
@@ -559,6 +632,7 @@ export class Orchestrator {
   private emitBatch(payloads: readonly DomainEvent[]): void {
     const entries = this.journal.appendBatch(payloads);
     for (const event of payloads) this.apply(event);
+    if (entries.length) this.lastAppliedId = entries.at(-1)!.id;
     for (const event of entries) this.notify({ kind: "event", event });
     if (payloads.some((event) => event.type === "message.sent")) for (const inbox of this.inboxes.values()) inbox.wake();
   }

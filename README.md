@@ -151,3 +151,5 @@ Monaco motoru ilk dosya açılışında veya taslak kurtarmada yüklenir; dosya 
 Yeni görevlerde **Ortak context kapsamı** ile karar anahtarları seçilebilir. Bağımlılık özetleri otomatik eklenir; paket 128 kayıt/256 KiB ile sınırlıdır. Görev detayındaki **Hazırlanan context** her denemenin anahtar/sürüm listesini gösterir. CLI tanımında `contextKeys`, raporda `contextPackages` kullanılır. [Paket politikası ve sınırlar](docs/context-decisions.md#Görev-context-paketleri).
 
 Journal arşivi: `npm run live -- --config agentmesh.config.json --archive yeni-arsiv.sqlite`. Doğrulama: `npm run live -- --verify-archive yeni-arsiv.sqlite`. Kaynak olayları silinmez; Git/worktree dosyaları dahil değildir. [Arşiv ve kurtarma kapsamı](docs/journal-archives.md).
+
+Açılış checkpoint'i: `npm run live -- --config agentmesh.config.json --checkpoint`. Sonraki açılış yalnızca yeni olayları replay eder; geçersiz checkpoint tam replay ile kurtarılır. Kaynak journal silinmez veya küçültülmez. [Checkpoint davranışı](docs/journal-archives.md#replay-checkpoint).

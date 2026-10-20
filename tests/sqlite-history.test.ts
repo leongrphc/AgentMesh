@@ -41,7 +41,7 @@ test("indexed SQLite history matches replay pages, including interleaved project
       for (const [type, field, index] of [["context.updated", "fact.key", "events_history_fact"], ["task.context.prepared", "taskId", "events_history_task"], ["context.conflict.resolved", "", "events_history_type"]]) {
         const query = `EXPLAIN QUERY PLAN SELECT payload FROM events WHERE project_id = 'p' AND json_extract(payload, '$.type') = '${type}'${field ? ` AND json_extract(payload, '$.${field}') = 'p'` : ""} ORDER BY sequence DESC LIMIT 20`;
         const plan = JSON.stringify(inspect.prepare(query).all());
-        assert.ok(plan.includes(index!), plan);
+        assert.ok(plan.includes(index!) || (!field && plan.includes("events_type_project_sequence")), plan);
         assert.doesNotMatch(plan, /TEMP B-TREE/);
       }
     } finally { inspect.close(); }

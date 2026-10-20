@@ -93,7 +93,8 @@ Codex, OpenCode, Claude, Antigravity ve diğer API modellerini **tek IDE içinde
   - [x] SQLite başlangıç okumalarında akış halinde replay; tek geçişte izin kurtarma, sınırlı son olay sorgusu ve geçmişsiz config kontrolleri. Geçici tüm-journal dizileri kaldırıldı.
   - [x] SQLite context projeksiyonunda yalnızca güncel değerler/bekleyen öneriler ve geçmiş sayıları; eski içerikler diskten sayfalanır. Tam snapshot açık istekte yeniden kurulur; zamanlayıcı/masaüstü kompakt çalışır.
   - [x] Tam journal için mevcut dosyayı ezmeyen CLI arşivleme ve salt okunur doğrulama; olay sıra/kimlik korunumu, SHA-256 manifesti, SQLite bütünlüğü ve kopyadan recovery testi. [Arşiv kapsamı](journal-archives.md).
-  - [ ] Checkpoint, aktif journal küçültme/retention ve mesaj/görev geçmişlerinin bellek politikası.
+  - [x] Açık CLI checkpoint oluşturma; checksum/olay sınırı/biçim doğrulaması, yalnızca sonraki olayları replay, geçersiz checkpoint için temiz tam replay ve olay değişiminde geçersizleştirme. Açılış config okumaları indeksli.
+  - [ ] Aktif journal küçültme/retention ve mesaj/görev geçmişlerinin bellek politikası.
 - [ ] **CORE-012:** Güvenli log saklama/retention, hata teşhisi, oturum sağlığı ve yeniden başlatma kurtarma senaryoları.
 - [ ] **CORE-013 / Config uyumu:** Kayıtlı görev ve ajan tanımlarını açık güncelleme akışıyla uzlaştırma.
   - [x] Desktop yeniden açma ve CLI execute öncesi toplu görev kontrolü: aynı ID'de başlık/talimat/ajan/bağımlılık/kapsam farkı alan adlarıyla reddedilir; ham talimat hata metnine alınmaz. UI görevleri korunur; eksik ajan eşlemesi ve başka projedeki görev ID çakışması yeni görev eklenmeden reddedilir. Dizi sırası anlamsız fark üretmez; tekrarlı bağımlılıklar config doğrulamasında reddedilir. Başarısız açılış eski projeyi/journal'ı kullanılabilir bırakır.
@@ -122,7 +123,7 @@ Codex, OpenCode, Claude, Antigravity ve diğer API modellerini **tek IDE içinde
 
 ## Devam ederken
 
-20 Ekim goal çalışması: UI-003 ajan ayarları, CORE-013 kalıcı ajan bağlaması ilk adımı, UI-006 test raporu/merge çözüm akışı ve CORE-009 kalıcı inbox/Codex canlı teslim eklendi. **98/98 tam süit**, TypeScript ve canlı mesaj/gerçek Git çakışma çözümünü doğrulayan Electron smoke başarılı. Gerçek model çağrısı yapılmadı. UI-007 dosya/klasör oluşturma, çoklu sekmeler, taslak kurtarma ve disk izleme eklendi. Monaco ilk yükleme optimizasyonu ve UI-007 tamamlandı. CORE-011 karar sürümleri/çakışma çözümü ve görev bazlı sınırlı context paketleri eklendi. Kalan native canlı teslim kabul işleri, OS sandbox, context geçmişi sayfalama/retention ve config revizyonları açık.
+20 Ekim goal çalışması: UI-003 ajan ayarları, CORE-013 kalıcı ajan bağlaması ilk adımı, UI-006 test raporu/merge çözüm akışı ve CORE-009 kalıcı inbox/Codex canlı teslim eklendi. **101/101 tam süit**, TypeScript ve canlı mesaj/gerçek Git çakışma çözümünü doğrulayan Electron smoke başarılı. Gerçek model çağrısı yapılmadı. UI-007 dosya/klasör oluşturma, çoklu sekmeler, taslak kurtarma ve disk izleme eklendi. Monaco ilk yükleme optimizasyonu ve UI-007 tamamlandı. CORE-011 karar sürümleri/çakışma çözümü ve görev bazlı sınırlı context paketleri eklendi. Kalan native canlı teslim kabul işleri, OS sandbox, context geçmişi sayfalama/retention ve config revizyonları açık.
 
 1. `D:\WebGpt` içinde `git status --short` ve `git log -5 --oneline` ile durumu kontrol et.
 2. `npm install` (gerekiyorsa), ardından `npm run typecheck` ve `npm test` çalıştır.

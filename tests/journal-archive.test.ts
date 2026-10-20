@@ -90,5 +90,11 @@ test("CLI archives without task recovery and verifies without config or provider
     const source = new SqliteJournal(path);
     try { assert.equal(source.all().length, 3); assert.equal(source.all()[2]!.payload.type, "task.started"); }
     finally { source.close(); }
+    const checkpoint = cli("--config", config, "--checkpoint");
+    assert.equal(checkpoint.checkpointed, true);
+    assert.equal(checkpoint.sequence, 4); // Explicit checkpoint runs ordinary interrupted-task recovery first.
+    const reopened = new SqliteJournal(path);
+    try { assert.ok(reopened.loadCheckpoint()); assert.equal(new Orchestrator(reopened).snapshot("p", false).tasks[0]!.status, "needs_review"); }
+    finally { reopened.close(); }
   } finally { journal.close(); rmSync(root, { recursive: true, force: true }); }
 });

@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { closeSync, existsSync, mkdirSync, openSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { DatabaseSync } from "node:sqlite";
@@ -41,7 +41,11 @@ export class SqliteJournal implements EventStore {
       if (legacyJsonl && existsSync(legacyJsonl)) this.importJsonlOnce(legacyJsonl);
       // Derived indexes only: old writers maintain them automatically; event schema stays v2.
       this.db.exec(`
+        CREATE TABLE IF NOT EXISTS replay_checkpoint (id INTEGER PRIMARY KEY CHECK(id = 1), format INTEGER NOT NULL, sequence INTEGER NOT NULL, source_id TEXT, state TEXT NOT NULL, digest TEXT NOT NULL);
+        CREATE TRIGGER IF NOT EXISTS invalidate_checkpoint_update AFTER UPDATE ON events BEGIN DELETE FROM replay_checkpoint; END;
+        CREATE TRIGGER IF NOT EXISTS invalidate_checkpoint_delete AFTER DELETE ON events BEGIN DELETE FROM replay_checkpoint; END;
         CREATE INDEX IF NOT EXISTS events_history_type ON events(project_id, json_extract(payload, '$.type'), sequence);
+        CREATE INDEX IF NOT EXISTS events_type_project_sequence ON events(json_extract(payload, '$.type'), project_id, sequence);
         CREATE INDEX IF NOT EXISTS events_history_fact ON events(project_id, json_extract(payload, '$.type'), json_extract(payload, '$.fact.key'), sequence);
         CREATE INDEX IF NOT EXISTS events_history_task ON events(project_id, json_extract(payload, '$.type'), json_extract(payload, '$.taskId'), sequence);
         CREATE INDEX IF NOT EXISTS events_history_conflict ON events(project_id, json_extract(payload, '$.type'), json_extract(payload, '$.conflict.id'), sequence);
@@ -58,12 +62,43 @@ export class SqliteJournal implements EventStore {
     return [...this.scan()];
   }
 
-  *scan(projectId?: string): Iterable<StoredEvent> {
+  *scan(projectId?: string, afterSequence = 0): Iterable<StoredEvent> {
     this.assertOpen();
+    if (!Number.isSafeInteger(afterSequence) || afterSequence < 0) throw new Error("Geçersiz replay sınırı");
     const { last } = this.db.prepare("SELECT COALESCE(MAX(sequence), 0) AS last FROM events").get() as { last: number };
-    const rows = this.db.prepare(`SELECT id, at, payload FROM events WHERE sequence <= ?${projectId === undefined ? "" : " AND project_id = ?"} ORDER BY sequence`)
-      .iterate(...(projectId === undefined ? [last] : [last, projectId]));
+    const rows = this.db.prepare(`SELECT id, at, payload FROM events WHERE sequence > ? AND sequence <= ?${projectId === undefined ? "" : " AND project_id = ?"} ORDER BY sequence`)
+      .iterate(...(projectId === undefined ? [afterSequence, last] : [afterSequence, last, projectId]));
     for (const row of rows) yield { id: row.id as string, at: row.at as string, payload: JSON.parse(row.payload as string) as DomainEvent };
+  }
+
+  scanAfter(sequence: number) { return this.scan(undefined, sequence); }
+
+  loadCheckpoint() {
+    this.assertOpen();
+    try {
+      const row = this.db.prepare("SELECT format, sequence, source_id, state, digest FROM replay_checkpoint WHERE id = 1").get() as
+        { format: number; sequence: number; source_id: string | null; state: string; digest: string } | undefined;
+      if (!row || row.format !== 1 || !Number.isSafeInteger(row.sequence) || row.sequence < 0) return undefined;
+      const digest = createHash("sha256").update(JSON.stringify([row.format, row.sequence, row.source_id, row.state])).digest("hex");
+      if (digest !== row.digest) return undefined;
+      const boundary = this.db.prepare("SELECT id FROM events WHERE sequence = ?").get(row.sequence) as { id: string } | undefined;
+      if (row.sequence === 0 ? row.source_id !== null : boundary?.id !== row.source_id) return undefined;
+      return { sequence: row.sequence, sourceId: row.source_id, state: row.state };
+    } catch { return undefined; } // Derived cache failures fall back to authoritative event replay.
+  }
+
+  saveCheckpoint(state: string, expectedSourceId: string | null) {
+    this.assertOpen();
+    this.db.exec("BEGIN IMMEDIATE");
+    try {
+      const last = this.db.prepare("SELECT sequence, id FROM events ORDER BY sequence DESC LIMIT 1").get() as { sequence: number; id: string } | undefined;
+      if ((last?.id ?? null) !== expectedSourceId) throw new Error("Journal değişti; checkpoint için yeniden açın");
+      const sequence = last?.sequence ?? 0;
+      const digest = createHash("sha256").update(JSON.stringify([1, sequence, expectedSourceId, state])).digest("hex");
+      this.db.prepare("INSERT OR REPLACE INTO replay_checkpoint(id, format, sequence, source_id, state, digest) VALUES (1, 1, ?, ?, ?, ?)").run(sequence, expectedSourceId, state, digest);
+      this.db.exec("COMMIT");
+      return { sequence, digest };
+    } catch (error) { this.db.exec("ROLLBACK"); throw error; }
   }
 
   recent(projectId: string, limit = 200): StoredEvent[] {
@@ -71,6 +106,18 @@ export class SqliteJournal implements EventStore {
     if (!Number.isInteger(limit) || limit < 1 || limit > 200) throw new Error("Geçersiz son olay sınırı");
     const rows = this.db.prepare("SELECT id, at, payload FROM events WHERE project_id = ? ORDER BY sequence DESC LIMIT ?").all(projectId, limit);
     return rows.reverse().map(row => ({ id: row.id as string, at: row.at as string, payload: JSON.parse(row.payload as string) as DomainEvent }));
+  }
+
+  latestAgentSettings(projectId: string): StoredEvent[] {
+    this.assertOpen();
+    const row = this.db.prepare("SELECT id, at, payload FROM events WHERE project_id = ? AND json_extract(payload, '$.type') = 'project.agents.configured' ORDER BY sequence DESC LIMIT 1").get(projectId);
+    return row ? [{ id: row.id as string, at: row.at as string, payload: JSON.parse(row.payload as string) as DomainEvent }] : [];
+  }
+
+  reservedTaskIds(projectId: string): string[] {
+    this.assertOpen();
+    const rows = this.db.prepare("SELECT json_extract(payload, '$.task.id') AS id FROM events WHERE json_extract(payload, '$.type') = 'task.created' AND project_id <> ?").all(projectId);
+    return rows.map(row => row.id as string);
   }
 
   contextHistoryPage(projectId: string, key: string, before?: number) {

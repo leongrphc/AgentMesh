@@ -142,7 +142,7 @@ export class DesktopService {
     const journal = reused || new SqliteJournal(path);
     try {
       const sourceAgents = structuredClone(config.agents);
-      config = resolveAgentSettings(config, journal.scan(config.projectId));
+      config = resolveAgentSettings(config, journal.latestAgentSettings(config.projectId));
       const engine = new Orchestrator(journal, new WorktreeManager());
       for (const agent of config.agents) {
         engine.registerAgent(this.makeAdapter(agent, demo));
@@ -154,8 +154,7 @@ export class DesktopService {
         throw new Error("Proje kimliği başka depoya ait");
       }
       const tasks = engine.snapshot(config.projectId, false).tasks;
-      const reserved: string[] = [];
-      for (const { payload } of journal.scan()) if (payload.type === "task.created" && payload.task.projectId !== config.projectId) reserved.push(payload.task.id);
+      const reserved = journal.reservedTaskIds(config.projectId);
       for (const task of reconcileTasks(config, tasks, reserved)) engine.addTask(task);
       engine.configureAgents(config.projectId, config.agents, sourceAgents);
       if (!reused) this.journal?.close();
