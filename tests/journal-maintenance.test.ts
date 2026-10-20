@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { mkdtempSync, mkdirSync, readdirSync, rmSync, writeFileSync, existsSync, renameSync } from "node:fs";
+import { mkdtempSync, mkdirSync, readdirSync, rmSync, writeFileSync, existsSync, renameSync, symlinkSync, lstatSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, dirname } from "node:path";
 import { createHash } from "node:crypto";
@@ -128,6 +128,36 @@ test("retention rejects registered paths outside its directory without removing 
     assert.equal(result.removed, 0);
     assert.match(result.errors[0]!, /klasör dışında/);
     assert.ok(existsSync(outside)); assert.ok(existsSync(paths[1]!));
+    assert.equal(new Orchestrator(journal).snapshot("p").messages.length, 2);
+  } finally { journal.close(); rmSync(root, { recursive: true, force: true }); }
+});
+
+test("retention rejects directory aliases and dangling sidecar links without retiring history", () => {
+  const root = mkdtempSync(join(tmpdir(), "mesh-retention-links-")), path = join(root, "events.sqlite");
+  const journal = new SqliteJournal(path);
+  try {
+    const engine = new Orchestrator(journal); engine.createProject({ id: "p", workspaceRoot: root });
+    const paths: string[] = [];
+    for (let i = 0; i < 2; i++) {
+      engine.sendMessage("p", { to: "*", kind: "progress", body: "x".repeat(2000), idempotencyKey: String(i) });
+      const result = maintainJournal(journal, engine, path, { maxActivePayloadBytes: 1024 });
+      if (result.status !== "compacted") throw new Error("Expected rotation");
+      paths.push(result.archive.path);
+    }
+    const directory = join(root, "archives"), alias = join(root, "alias");
+    symlinkSync(directory, alias, process.platform === "win32" ? "junction" : "dir");
+    assert.throws(() => journal.pruneManagedArchives(alias, 1), /bağlantı üzerinden/);
+    const sidecar = paths[0]! + "-wal";
+    rmSync(sidecar, { force: true });
+    symlinkSync(join(root, "missing-target"), sidecar, process.platform === "win32" ? "junction" : "dir");
+    assert.equal(existsSync(sidecar), false);
+    assert.equal(lstatSync(sidecar).isSymbolicLink(), true);
+    const result = journal.pruneManagedArchives(directory, 1);
+    assert.equal(result.removed, 0);
+    assert.match(result.errors[0]!, /normal dosya değil/);
+    assert.ok(paths.every(file => existsSync(file)));
+    assert.equal(lstatSync(sidecar).isSymbolicLink(), true);
+    assert.ok(!existsSync(paths[0]! + ".lock"));
     assert.equal(new Orchestrator(journal).snapshot("p").messages.length, 2);
   } finally { journal.close(); rmSync(root, { recursive: true, force: true }); }
 });

@@ -353,8 +353,12 @@ export class SqliteJournal implements EventStore {
         lock = openSync(row.path + ".lock", "wx");
         writeFileSync(lock, JSON.stringify({ pid: process.pid, created: new Date().toISOString() }));
         for (const suffix of ["", "-wal", "-shm"]) {
-          if (!existsSync(row.path + suffix)) continue;
-          const stat = lstatSync(row.path + suffix);
+          let stat;
+          try { stat = lstatSync(row.path + suffix); }
+          catch (error) {
+            if ((error as NodeJS.ErrnoException).code === "ENOENT") continue;
+            throw error;
+          }
           if (!stat.isFile() || stat.isSymbolicLink()) throw new Error("Arşiv yolu normal dosya değil");
         }
         // Prove the complete retired history still exists before removing any file.
