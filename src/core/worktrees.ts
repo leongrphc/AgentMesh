@@ -6,6 +6,19 @@ import { dirname, isAbsolute, join, matchesGlob, resolve, sep } from "node:path"
 export interface WorktreeLease {
   path: string;
   branch: string;
+  baseCommit?: string;
+}
+
+export interface MergeConflict {
+  paths: string[];
+  integrationCommit: string;
+  taskCommit: string;
+}
+
+export class MergeConflictError extends Error {
+  constructor(readonly conflict: MergeConflict) {
+    super(`Entegrasyon conflict, görev branch'i korundu: ${conflict.paths.join(", ")}`);
+  }
 }
 
 export interface WorktreeInspection {
@@ -64,7 +77,7 @@ export class WorktreeManager {
     const path = join(dirname(root), ".agentmesh-worktrees", repoId, taskHash);
     if (existsSync(path)) throw new Error(`Worktree zaten var: ${path}`);
     git(root, "worktree", "add", "-b", branch, path, integration.branch);
-    return { path, branch };
+    return { path, branch, baseCommit: git(path, "rev-parse", "HEAD").trim() };
   }
 
   reopen(repoPath: string, lease: WorktreeLease): WorktreeLease {
@@ -82,12 +95,13 @@ export class WorktreeManager {
     if (resolve(commonDir).toLowerCase() !== resolve(expectedCommon).toLowerCase()) {
       throw new Error("Worktree farklı repoya ait");
     }
-    return { path: actual, branch: lease.branch };
+    return { path: actual, branch: lease.branch, baseCommit: lease.baseCommit };
   }
 
-  inspect(worktreePath: string, allowedPaths: readonly string[]): WorktreeInspection {
+  inspect(worktreePath: string, allowedPaths: readonly string[], baseCommit?: string): WorktreeInspection {
     const root = exactRoot(worktreePath);
-    const tracked = git(root, "diff", "--name-only", "--no-renames", "-z", "HEAD")
+    const base = this.commit(root, baseCommit ?? "HEAD");
+    const tracked = git(root, "diff", "--name-only", "--no-renames", "-z", base, "--")
       .split("\0").filter(Boolean);
     const untracked = git(root, "ls-files", "--others", "--exclude-standard", "-z")
       .split("\0").filter(Boolean);
@@ -104,9 +118,23 @@ export class WorktreeManager {
       }
       return !fullPath.startsWith(root + sep) || symlink || !patterns.some((pattern) => matchesGlob(normalized, pattern));
     });
-    const trackedDiff = git(root, "diff", "--binary", "--no-ext-diff", "HEAD");
-    const digestHash = createHash("sha256").update(git(root, "rev-parse", "HEAD"))
-      .update(trackedDiff, "utf8");
+    const trackedDiff = git(root, "diff", "--binary", "--no-ext-diff", "--no-renames", base, "--");
+    // Content identity survives staging/committing, so a failed merge can be retried.
+    const digestHash = createHash("sha256").update(base + "\n");
+    const modes = new Map(git(root, "ls-files", "--stage", "-z").split("\0").filter(Boolean).map((line) => {
+      const tab = line.indexOf("\t");
+      return [line.slice(tab + 1), line.slice(0, 6)] as const;
+    }));
+    for (const path of changedPaths) {
+      digestHash.update(JSON.stringify(path) + "\n");
+      if (violations.includes(path)) { digestHash.update("violation\n"); continue; }
+      const full = resolve(root, path);
+      if (!existsSync(full)) { digestHash.update("deleted\n"); continue; }
+      const stat = lstatSync(full);
+      if (!stat.isFile()) throw new Error("Yalnızca normal dosya değişiklikleri incelenebilir");
+      const mode = process.platform === "win32" ? modes.get(path) ?? "100644" : stat.mode & 0o111 ? "100755" : "100644";
+      digestHash.update(mode + "\n").update(createHash("sha256").update(readFileSync(full)).digest());
+    }
     const untrackedPreviews = untracked.map((path) => {
       const full = resolve(root, path);
       if (!full.startsWith(root + sep)) throw new Error(`Geçersiz dosya yolu: ${path}`);
@@ -114,7 +142,6 @@ export class WorktreeManager {
         path, preview: "[sembolik bağlantı; açılmadı]", truncated: false, binary: true,
       };
       const contents = readFileSync(full);
-      digestHash.update(path).update(contents);
       const binary = contents.includes(0);
       const truncated = contents.length > 64 * 1024;
       return {
@@ -127,17 +154,80 @@ export class WorktreeManager {
     return { digest: digestHash.digest("hex"), changedPaths, violations, trackedDiff, untrackedPreviews };
   }
 
+  private commit(root: string, value: string): string {
+    if (value !== "HEAD" && !/^[a-f0-9]{40,64}$/.test(value)) throw new Error("Geçersiz temel commit");
+    return git(root, "rev-parse", "--verify", `${value}^{commit}`).trim();
+  }
+
+  /** Legacy leases are resolved against their branch point; new leases persist their base. */
+  reviewBase(repoPath: string, lease: WorktreeLease): string {
+    const verified = this.reopen(repoPath, lease);
+    if (lease.baseCommit) return this.commit(verified.path, lease.baseCommit);
+    const integration = this.integration(repoPath);
+    return git(verified.path, "merge-base", "HEAD", integration.branch).trim();
+  }
+
+  inspectTask(repoPath: string, lease: WorktreeLease, allowedPaths: readonly string[]) {
+    return this.inspect(this.reopen(repoPath, lease).path, allowedPaths, this.reviewBase(repoPath, lease));
+  }
+
+  mergeState(repoPath: string, lease: WorktreeLease) {
+    const verified = this.reopen(repoPath, lease);
+    const target = this.integration(repoPath);
+    const integrationCommit = this.commit(target.path, "HEAD");
+    const paths = git(verified.path, "diff", "--name-only", "--diff-filter=U", "-z").split("\0").filter(Boolean);
+    let mergeHead: string | undefined;
+    try { mergeHead = git(verified.path, "rev-parse", "--verify", "MERGE_HEAD").trim(); } catch { /* No merge in progress. */ }
+    return { paths, mergeHead, integrationCommit };
+  }
+
+  validateResolution(repoPath: string, lease: WorktreeLease, allowedPaths: readonly string[], digest: string, targetCommit: string) {
+    const verified = this.reopen(repoPath, lease);
+    const state = this.mergeState(repoPath, lease);
+    if (state.integrationCommit !== targetCommit) throw new Error("Entegrasyon dalı değişti; incelemeyi yeniden açın");
+    if (state.mergeHead) throw new Error("Görevde çakışma çözümü zaten açık");
+    if (git(verified.path, "status", "--porcelain").trim()) throw new Error("Çakışma çözümünden önce görev worktree'si temiz olmalı");
+    const inspection = this.inspectTask(repoPath, lease, allowedPaths);
+    if (inspection.digest !== digest) throw new Error("Diff değişti; incelemeyi yeniden açın");
+    if (inspection.violations.length && lease.baseCommit !== targetCommit) throw new Error("Görev kapsamı dışında değişiklik var");
+  }
+
+  /** Merge approved integration history into the task; never leave integration conflicted. */
+  beginResolution(repoPath: string, lease: WorktreeLease, targetCommit: string): void {
+    const verified = this.reopen(repoPath, lease);
+    if (this.mergeState(repoPath, lease).integrationCommit !== targetCommit) throw new Error("Entegrasyon dalı değişti; incelemeyi yeniden açın");
+    try {
+      git(verified.path, "-c", "core.hooksPath=", "merge", "--no-ff", "--no-commit", targetCommit);
+    } catch (error) {
+      if (!this.mergeState(repoPath, lease).paths.length) throw error;
+      // Expected conflicts remain in this task's worktree for explicit human resolution.
+    }
+  }
+
+  stageResolution(repoPath: string, lease: WorktreeLease, path: string): void {
+    const verified = this.reopen(repoPath, lease);
+    if (!this.mergeState(repoPath, lease).paths.includes(path)) throw new Error("Dosya artık çözülmemiş çakışma değil");
+    git(verified.path, "--literal-pathspecs", "add", "--all", "--", path);
+  }
+
   /** Called only after an explicit digest-matched approval; never merges into the user's main branch. */
   integrate(repoPath: string, lease: WorktreeLease, allowedPaths: readonly string[], approvedDigest: string, taskId: string): string {
     const verified = this.reopen(repoPath, lease);
-    const inspection = this.inspect(verified.path, allowedPaths);
+    const inspection = this.inspectTask(repoPath, verified, allowedPaths);
     if (inspection.violations.length) throw new Error(`İzin dışı dosyalar: ${inspection.violations.join(", ")}`);
-    let committed = false;
-    if (!inspection.changedPaths.length) {
+    const mergeState = this.mergeState(repoPath, verified);
+    if (mergeState.paths.length) throw new Error("Çözülmemiş dosya çakışmaları var");
+    const base = this.reviewBase(repoPath, verified);
+    if (mergeState.mergeHead && mergeState.mergeHead !== base) throw new Error("Beklenmeyen merge hedefi; çalışma alanını inceleyin");
+    if (!mergeState.mergeHead) {
+      try { git(verified.path, "merge-base", "--is-ancestor", base, "HEAD"); }
+      catch { throw new Error("Çözüm hedefi görev geçmişine alınmamış; çakışma çözümünü yeniden başlatın"); }
+    }
+    const committed = !git(verified.path, "status", "--porcelain").trim() && !mergeState.mergeHead;
+    if (!lease.baseCommit && !inspection.changedPaths.length) {
       // A previous approval may have committed just before a merge conflict or interruption.
       const message = git(verified.path, "log", "-1", "--format=%B");
       if (!message.includes(`AgentMesh-Digest: ${approvedDigest}\n`)) throw new Error("İncelenen diff worktree'de bulunamadı");
-      committed = true;
     } else if (inspection.digest !== approvedDigest) {
       throw new Error("Diff onaydan sonra değişmiş; tekrar inceleyin");
     }
@@ -148,14 +238,19 @@ export class WorktreeManager {
     }
     if (!committed) {
       git(verified.path, "add", "--all");
-      git(verified.path, "-c", "user.name=AgentMesh", "-c", "user.email=agentmesh@localhost", "commit", "-m", `agentmesh: approve ${taskId}`, "-m", `AgentMesh-Digest: ${approvedDigest}`);
+      git(verified.path, "-c", "core.hooksPath=", "-c", "user.name=AgentMesh", "-c", "user.email=agentmesh@localhost", "commit", "-m", `agentmesh: approve ${taskId}`, "-m", `AgentMesh-Digest: ${approvedDigest}`);
     }
     const taskCommit = git(verified.path, "rev-parse", "HEAD").trim();
     try {
-      git(destination.path, "-c", "user.name=AgentMesh", "-c", "user.email=agentmesh@localhost", "merge", "--no-ff", "--no-edit", verified.branch);
+      git(destination.path, "-c", "core.hooksPath=", "-c", "user.name=AgentMesh", "-c", "user.email=agentmesh@localhost", "merge", "--no-ff", "--no-edit", taskCommit);
     } catch (error) {
       // On conflict, leave the task branch intact and restore the integration checkout.
-      git(destination.path, "merge", "--abort");
+      const paths = git(destination.path, "diff", "--name-only", "--diff-filter=U", "-z").split("\0").filter(Boolean);
+      const integrationCommit = this.commit(destination.path, "HEAD");
+      if (paths.length) {
+        git(destination.path, "merge", "--abort");
+        throw new MergeConflictError({ paths, integrationCommit, taskCommit });
+      }
       throw new Error(`Entegrasyon conflict, görev branch'i korundu: ${error instanceof Error ? error.message : String(error)}`);
     }
     return taskCommit;

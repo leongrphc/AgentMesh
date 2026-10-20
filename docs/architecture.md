@@ -27,7 +27,7 @@ Electron Desktop (React + Monaco + xterm.js)
        Direct model API provider'ları da ayrı adapter olabilir.
 ```
 
-**MVP uygulama sırası:** çekirdek, SQLite, worktree, Codex/OpenCode CLI adaptörleri, insan onaylı entegrasyon dalı, canlı CLI olay aboneliği ve iptal eklendi. Electron/React kabuğu, dar preload/IPC, Monaco dosya editörü, PTY terminalleri, Task Board ve diff onayı da çalışır. Codex App Server ve OpenCode Server izin köprüleri ile modelsiz bağlantı kontrolleri var. Sırada ajan ayarları; daha sonra Claude / Antigravity ile doğrudan API sağlayıcıları var. Adaptör sınırları sağlayıcı sürümlerinden bağımsız tutulur.
+**MVP uygulama sırası:** çekirdek, SQLite, worktree, Codex/OpenCode CLI adaptörleri, insan onaylı entegrasyon dalı, canlı CLI olay aboneliği ve iptal eklendi. Electron/React kabuğu, dar preload/IPC, Monaco dosya editörü, PTY terminalleri, Task Board, kalıcı ajan ayarları, test raporları ve diff/merge çözüm akışı çalışır. Codex App Server ve OpenCode Server izin köprüleri ile modelsiz bağlantı kontrolleri var. Claude API anahtarlı ve Antigravity headless adaptörleri de eklendi. Doğrudan API sağlayıcıları, canlı inbox ve ileri editör işleri devam ediyor. Adaptör sınırları sağlayıcı sürümlerinden bağımsız tutulur.
 
 ## Neden Electron?
 
@@ -48,6 +48,7 @@ Her ajan çağrısından önce Orchestrator bir **context paketi** oluşturur: p
 - Her görev bir proje ve belirli bir ajanla ilişkilidir; `dependsOn` başka görevlerin bitmesini şart koşar.
 - Bağımsız görevler aynı anda çalışır. Aynı dosyalara yazacak görevler **ayrı Git worktree** içinde tutulur; paralellik sadece izin verilen dosya/branch sınırları içinde açılır.
 - Dosya değiştiren görevler `pending_review` olur. SHA-256 digest ile onaylanan değişiklik görev branch'inde commit edilir ve **AgentMesh entegrasyon worktree'sine** merge edilir. Bağımlı görevler yeni kodu buradan alır. Ana dal değiştirilmez; çakışma otomatik çözülmez.
+- İnceleme task `baseCommit` değerinden yapılır; ajanın commit ettiği dosyalar da denetlenir. Digest stage/commit durumundan bağımsız içerik kimliğidir. Çakışmada entegrasyon merge'i geri alınır; kullanıcı görev worktree'sinde çözüm hazırlar ve yeni digest'i onaylar. Ayrıntılar: [merge-review.md](merge-review.md).
 - Değişiklikler özet, diff, test ve review aşamasından geçmeden ana dalda birleştirilmez.
 - Ajanın komut çalıştırma / ağ / dosya erişim izinleri adapter kapasitelerine göre tanımlanır. Riskli dış etkiler için kullanıcı onayı gerekir.
 - Çöken veya kesilen görev doğrudan tekrar yürütülmez. `needs_review` durumuna alınır; kullanıcı veya yönetici ajan çalışma ağacını inceleyip yeniden dener.

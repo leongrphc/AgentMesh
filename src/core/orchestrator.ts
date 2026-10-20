@@ -15,6 +15,7 @@ import type {
 } from "./contracts.js";
 import type { EventStore } from "./journal.js";
 import type { WorktreeManager } from "./worktrees.js";
+import { MergeConflictError } from "./worktrees.js";
 import type { AgentConfig } from "./config.js";
 import { validate } from "./config.js";
 import { validateAgentEdit } from "./agent-settings.js";
@@ -170,11 +171,24 @@ export class Orchestrator {
       throw new Error("Görev inceleme beklemiyor");
     }
     const lease = this.worktrees.reopen(project.workspaceRoot, task.worktree);
-    const inspection = this.worktrees.inspect(lease.path, task.allowedPaths);
-    if (!inspection.changedPaths.length) throw new Error("İncelenecek değişiklik yok; commit edilmiş branch'i CLI üzerinden inceleyin");
+    const inspection = this.worktrees.inspectTask(project.workspaceRoot, lease, task.allowedPaths);
+    if (!inspection.changedPaths.length && !task.mergeConflict) throw new Error("İncelenecek değişiklik yok");
     if (inspection.violations.length) throw new Error(`İzin dışı dosyalar: ${inspection.violations.join(", ")}`);
     this.emit({ type: "task.review.requested", projectId: task.projectId, taskId,
       digest: inspection.digest, result: task.review.result, testDigest: task.testDigest });
+  }
+
+  prepareMergeResolution(taskId: string, digest: string, targetCommit: string): void {
+    const task = this.requireTask(taskId);
+    const project = this.projects.get(task.projectId);
+    if (task.status !== "pending_review" || !task.mergeConflict || !task.worktree || !project || !this.worktrees) {
+      throw new Error("Görev merge çakışması beklemiyor");
+    }
+    this.worktrees.validateResolution(project.workspaceRoot, task.worktree, task.allowedPaths, digest, targetCommit);
+    // Persist intent first: restart can recover a merge that stopped between Git operations.
+    this.emit({ type: "task.merge.prepared", projectId: task.projectId, taskId, baseCommit: targetCommit });
+    this.worktrees.beginResolution(project.workspaceRoot, task.worktree, targetCommit);
+    this.refreshReview(taskId);
   }
 
   /** A human approval must supply the exact digest from a review preview. */
@@ -185,7 +199,12 @@ export class Orchestrator {
       throw new Error(`Görev inceleme beklemiyor: ${taskId}`);
     }
     if (task.review.digest !== approvedDigest) throw new Error("Onay digest'i bekleyen inceleme ile eşleşmiyor");
-    const commit = this.worktrees.integrate(project.workspaceRoot, task.worktree, task.allowedPaths, approvedDigest, task.id);
+    let commit: string;
+    try { commit = this.worktrees.integrate(project.workspaceRoot, task.worktree, task.allowedPaths, approvedDigest, task.id); }
+    catch (error) {
+      if (error instanceof MergeConflictError) this.emit({ type: "task.merge.conflicted", projectId: task.projectId, taskId, conflict: error.conflict });
+      throw error;
+    }
     this.emitBatch([
       { type: "task.review.approved", projectId: task.projectId, taskId, digest: approvedDigest, commit },
       ...this.resultEvents(task, task.review.result),
@@ -246,7 +265,7 @@ export class Orchestrator {
         workspaceRoot = lease.path;
         if (!task.worktree) this.emit({
           type: "task.worktree.prepared", projectId: task.projectId,
-          taskId: task.id, path: lease.path, branch: lease.branch,
+          taskId: task.id, path: lease.path, branch: lease.branch, baseCommit: lease.baseCommit,
         });
       }
       controller = new AbortController();
@@ -287,7 +306,7 @@ export class Orchestrator {
         type: "task.session.saved", projectId: task.projectId, taskId: task.id, sessionId: output.sessionId,
       });
       if (adapter.connection !== "mock") {
-        const inspection = this.worktrees!.inspect(workspaceRoot, task.allowedPaths);
+        const inspection = this.worktrees!.inspectTask(snapshot.project.workspaceRoot, this.requireTask(task.id).worktree!, task.allowedPaths);
         if (inspection.violations.length > 0) {
           throw new Error(`İzin verilmeyen dosya değişikliği: ${inspection.violations.join(", ")}`);
         }
@@ -403,6 +422,7 @@ export class Orchestrator {
         task.summary = event.summary;
         task.error = undefined;
         task.review = undefined;
+        task.mergeConflict = undefined;
         task.tests = structuredClone(event.tests);
         break;
       }
@@ -435,7 +455,13 @@ export class Orchestrator {
         this.requireTask(event.taskId).sessionId = event.sessionId;
         break;
       case "task.worktree.prepared":
-        this.requireTask(event.taskId).worktree = { path: event.path, branch: event.branch };
+        this.requireTask(event.taskId).worktree = { path: event.path, branch: event.branch, baseCommit: event.baseCommit };
+        break;
+      case "task.merge.conflicted":
+        this.requireTask(event.taskId).mergeConflict = structuredClone(event.conflict);
+        break;
+      case "task.merge.prepared":
+        this.requireTask(event.taskId).worktree!.baseCommit = event.baseCommit;
         break;
       case "task.review.requested": {
         const task = this.requireTask(event.taskId);

@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { lstatSync, readFileSync, readdirSync, realpathSync, writeFileSync } from "node:fs";
+import { existsSync, lstatSync, readFileSync, readdirSync, realpathSync, unlinkSync, writeFileSync } from "node:fs";
 import { isAbsolute, join, matchesGlob, relative, sep } from "node:path";
 
 const maxFileBytes = 1024 * 1024;
@@ -9,7 +9,7 @@ export interface WorkspaceEntry { path: string; name: string; directory: boolean
 export interface WorkspaceFile { path: string; content: string; digest: string; writable: boolean }
 
 /** Every path is relative to a verified workspace. Symlinks/junctions and ADS are excluded. */
-function checkedPath(root: string, path: string): string {
+function checkedPath(root: string, path: string, allowMissingLeaf = false): string {
   if (typeof path !== "string" || path.includes("\0") || path.includes(":") || isAbsolute(path)) throw new Error("Geçersiz dosya yolu");
   const parts = path.replace(/\\/g, "/").split("/").filter(Boolean);
   if (parts.some((part) => part === ".." || part === "." || hidden.has(part) || /[. ]$/.test(part))) {
@@ -17,13 +17,48 @@ function checkedPath(root: string, path: string): string {
   }
   const realRoot = realpathSync(root);
   let target = realRoot;
-  for (const part of parts) {
+  for (const [index, part] of parts.entries()) {
     target = join(target, part);
+    if (allowMissingLeaf && index === parts.length - 1) {
+      try { lstatSync(target); } catch (error) { if ((error as NodeJS.ErrnoException).code === "ENOENT") break; throw error; }
+    }
     if (lstatSync(target).isSymbolicLink()) throw new Error("Sembolik bağlantı açılamaz");
   }
-  const delta = relative(realRoot, realpathSync(target));
+  const delta = relative(realRoot, allowMissingLeaf && !existsSync(target) ? target : realpathSync(target));
   if (delta.startsWith(`..${sep}`) || delta === ".." || isAbsolute(delta)) throw new Error("Çalışma alanı dışı yol");
   return target;
+}
+
+export interface ConflictFile { path: string; content: string | null; digest: string | null; binary: boolean }
+
+export function readConflictFile(root: string, path: string): ConflictFile {
+  const target = checkedPath(root, path, true);
+  if (!existsSync(target)) return { path, content: null, digest: null, binary: false };
+  const stat = lstatSync(target);
+  if (!stat.isFile() || stat.size > maxFileBytes) throw new Error("Çakışma editörü yalnızca 1 MiB altındaki dosyaları destekler");
+  const bytes = readFileSync(target);
+  if (bytes.length > maxFileBytes) throw new Error("Dosya çok büyük");
+  const digest = createHash("sha256").update(bytes).digest("hex");
+  let content: string | null = null;
+  if (!bytes.includes(0)) {
+    try { content = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(bytes); } catch { /* Binary or non-UTF8. */ }
+  }
+  return { path, digest, content, binary: content === null };
+}
+
+export function writeConflictResolution(root: string, path: string, content: string | null, digest: string | null, allowedPaths: readonly string[], keepCurrent = false) {
+  if (!allowedPaths.some((pattern) => matchesGlob(path, pattern.replace(/\\/g, "/")))) throw new Error("Dosya görev kapsamı dışında");
+  if (content !== null && (typeof content !== "string" || Buffer.byteLength(content) > maxFileBytes || content.includes("\0"))) throw new Error("Geçersiz veya büyük dosya içeriği");
+  if (content !== null && /^(<<<<<<<|=======|>>>>>>>)(?: |$)/m.test(content)) throw new Error("Çakışma işaretlerini kaldırıp çözümü tekrar kaydedin");
+  const current = readConflictFile(root, path);
+  if (current.digest !== digest) throw new Error("Dosya disk üzerinde değişti; yeniden açın");
+  if (keepCurrent) {
+    if (current.content !== null && /^(<<<<<<<|=======|>>>>>>>)(?: |$)/m.test(current.content)) throw new Error("Çakışma işaretlerini kaldırın");
+    return;
+  }
+  const target = checkedPath(root, path, true);
+  if (content === null) { if (existsSync(target)) unlinkSync(target); }
+  else writeFileSync(target, content, "utf8");
 }
 
 export function listWorkspace(root: string, path = ""): WorkspaceEntry[] {

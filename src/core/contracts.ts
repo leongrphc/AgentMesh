@@ -1,5 +1,6 @@
 import type { PermissionDecision, PermissionProposal, PermissionSource } from "./permissions.js";
 import type { AgentConfig } from "./config.js";
+import type { MergeConflict } from "./worktrees.js";
 /** Provider bağımsız dahili sözleşmeler. ACP veya MCP wire formatı değildir. */
 export type TaskStatus =
   | "pending"
@@ -94,7 +95,8 @@ export interface TaskRecord extends AgentTask {
   summary?: string;
   error?: string;
   sessionId?: string;
-  worktree?: { path: string; branch: string };
+  worktree?: { path: string; branch: string; baseCommit?: string };
+  mergeConflict?: MergeConflict;
   review?: { digest: string; result: AgentResult };
   integratedCommit?: string;
   tests?: TestReport[];
@@ -116,7 +118,9 @@ export type DomainEvent =
   | { type: "task.cancelled"; projectId: string; taskId: string }
   | { type: "task.retried"; projectId: string; taskId: string }
   | { type: "task.session.saved"; projectId: string; taskId: string; sessionId: string }
-  | { type: "task.worktree.prepared"; projectId: string; taskId: string; path: string; branch: string }
+  | { type: "task.worktree.prepared"; projectId: string; taskId: string; path: string; branch: string; baseCommit?: string }
+  | { type: "task.merge.conflicted"; projectId: string; taskId: string; conflict: MergeConflict }
+  | { type: "task.merge.prepared"; projectId: string; taskId: string; baseCommit: string }
   | { type: "task.review.requested"; projectId: string; taskId: string; digest: string; result: AgentResult; testDigest?: string }
   | { type: "task.review.approved"; projectId: string; taskId: string; digest: string; commit: string }
   | { type: "context.updated"; projectId: string; fact: Fact }

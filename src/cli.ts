@@ -115,12 +115,13 @@ async function main(): Promise<void> {
     } else snapshot = engine.snapshot(config.projectId);
     const reports = snapshot.tasks.map((task) => {
       const changes = task.worktree && existsSync(task.worktree.path)
-        ? manager.inspect(task.worktree.path, task.allowedPaths)
+        ? manager.inspectTask(repoPath, task.worktree, task.allowedPaths)
         : undefined;
       return {
         id: task.id, agentId: task.agentId, status: task.status,
         summary: task.summary, error: task.error, sessionId: task.sessionId,
         tests: task.tests,
+        mergeConflict: task.mergeConflict,
         testsStale: !!task.tests?.length && !!changes && task.testDigest !== changes.digest,
         worktree: task.worktree,
         reviewDigest: task.review?.digest,

@@ -1,6 +1,6 @@
 import type { ProjectSnapshot } from "../core/orchestrator.js";
 import type { WorktreeInspection } from "../core/worktrees.js";
-import type { WorkspaceEntry, WorkspaceFile } from "../core/workspace-files.js";
+import type { ConflictFile, WorkspaceEntry, WorkspaceFile } from "../core/workspace-files.js";
 import type { AgentTask, TestReport } from "../core/contracts.js";
 import type { PermissionRequest, PermissionDecision } from "../core/permissions.js";
 import type { ProviderHealth } from "../adapters/provider-health.js";
@@ -18,6 +18,7 @@ export interface DesktopReview {
   expectedDigest?: string;
   tests?: TestReport[];
   testsStale?: boolean;
+  merge?: { paths: string[]; integrationCommit: string; active: boolean; unresolved: string[] };
 }
 
 export interface DesktopState {
@@ -49,6 +50,9 @@ export interface DesktopAPI {
   cancel(taskId?: string): Promise<void>;
   retry(taskId: string): Promise<void>;
   review(taskId: string, refresh?: boolean): Promise<DesktopReview>;
+  prepareMergeResolution(taskId: string, digest: string, integrationCommit: string): Promise<DesktopReview>;
+  conflictFile(taskId: string, path: string): Promise<ConflictFile>;
+  resolveConflict(taskId: string, path: string, content: string | null, digest: string | null, keepCurrent?: boolean): Promise<DesktopReview>;
   approve(taskId: string, digest: string): Promise<boolean>;
   files(taskId: string, path?: string): Promise<{ root: string; entries: WorkspaceEntry[] }>;
   readFile(taskId: string, path: string): Promise<WorkspaceFile>;

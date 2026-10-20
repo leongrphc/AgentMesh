@@ -7,6 +7,7 @@ import { safeLog } from "../core/safe-log.js";
 import type { TaskDraft } from "./contracts.js";
 import type { AgentConfig } from "../core/config.js";
 import type { ProviderMessageInput } from "../adapters/provider-message.js";
+import { mergeSmoke } from "./merge-smoke.js";
 
 protocol.registerSchemesAsPrivileged([{ scheme: "agentmesh", privileges: { standard: true, secure: true, supportFetchAPI: true } }]);
 const origin = "agentmesh://desktop";
@@ -260,6 +261,7 @@ async function createWindow() {
         })()`);
       }
       await window.webContents.executeJavaScript(`document.querySelector('[aria-label="Ajan merkezini kapat"]').click()`);
+      await mergeSmoke(window, service);
       console.log("Desktop smoke başarılı: sandbox, preload, Monaco, gerçek PTY ve demo görevleri doğrulandı");
       app.quit();
     } catch (error) {
@@ -333,6 +335,19 @@ app.whenReady().then(async () => {
   handle("mesh:review", (taskId, refresh = false) => {
     if (typeof taskId !== "string" || typeof refresh !== "boolean") throw new Error("Geçersiz görev kimliği");
     return service.review(taskId, refresh);
+  });
+  handle("mesh:prepare-merge", (taskId, digest, integrationCommit) => {
+    if (typeof taskId !== "string" || typeof digest !== "string" || typeof integrationCommit !== "string") throw new Error("Geçersiz çözüm isteği");
+    return service.prepareMergeResolution(taskId, digest, integrationCommit);
+  });
+  handle("mesh:conflict-file", (taskId, path) => {
+    if (typeof taskId !== "string" || typeof path !== "string") throw new Error("Geçersiz çakışma dosyası");
+    return service.conflictFile(taskId, path);
+  });
+  handle("mesh:resolve-conflict", (taskId, path, content, digest, keepCurrent = false) => {
+    if (typeof taskId !== "string" || typeof path !== "string" || (content !== null && typeof content !== "string")
+      || (digest !== null && typeof digest !== "string") || typeof keepCurrent !== "boolean") throw new Error("Geçersiz çakışma çözümü");
+    return service.resolveConflict(taskId, path, content, digest, keepCurrent);
   });
   handle("mesh:approve", async (taskId, digest) => {
     if (typeof taskId !== "string" || typeof digest !== "string") throw new Error("Geçersiz onay");

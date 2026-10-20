@@ -3,6 +3,7 @@ import { createRoot } from "react-dom/client";
 import { TaskForm, TaskGraph } from "./task-board.js";
 import { AgentCenter } from "./agent-center.js";
 import { TestReports } from "./test-reports.js";
+import { MergeResolution } from "./merge-resolution.js";
 import type { DesktopAPI, DesktopState, DesktopReview } from "../src/desktop/contracts.js";
 import type { TaskStatus } from "../src/core/contracts.js";
 import "./style.css";
@@ -15,27 +16,30 @@ declare global { interface Window { agentmesh: DesktopAPI } }
 const labels: Record<TaskStatus, string> = { pending: "Sırada", running: "Çalışıyor", completed: "Tamamlandı",
   failed: "Başarısız", blocked: "Engellendi", pending_review: "İnceleme bekliyor", cancelled: "İptal edildi", needs_review: "Kontrol gerekli" };
 
-function ReviewDialog({ review, onClose, onRefresh, onApprove, pending, error }: {
-  review: DesktopReview; onClose: () => void; onRefresh: () => void; onApprove: () => void; pending: boolean; error: string;
+function ReviewDialog({ review, api, onReview, onDirty, onClose, onRefresh, onApprove, pending, error }: {
+  review: DesktopReview; api: DesktopAPI; onReview: (review: DesktopReview) => void; onDirty: (dirty: boolean) => void; onClose: () => void; onRefresh: () => void; onApprove: () => void; pending: boolean; error: string;
 }) {
   const dialog = useRef<HTMLDialogElement>(null);
+  const [dirty, setDirty] = useState(false);
+  const close = () => { if (!dirty || window.confirm("Kaydedilmemiş çakışma çözümü silinsin mi?")) onClose(); };
   useEffect(() => { dialog.current?.showModal(); }, []);
   const { inspection } = review;
-  return <dialog className="review-dialog" ref={dialog} onCancel={onClose} aria-labelledby="review-title">
-    <div className="review-header"><div><div className="eyebrow">DEĞİŞİKLİK İNCELEMESİ</div><h2 id="review-title">{review.title}</h2></div><button aria-label="İncelemeyi kapat" onClick={onClose}>×</button></div>
+  return <dialog className="review-dialog" ref={dialog} onCancel={(event) => { event.preventDefault(); close(); }} aria-labelledby="review-title">
+    <div className="review-header"><div><div className="eyebrow">DEĞİŞİKLİK İNCELEMESİ</div><h2 id="review-title">{review.title}</h2></div><button aria-label="İncelemeyi kapat" onClick={close}>×</button></div>
     <div className="review-content">
       {error && <p className="task-error" role="alert">{error}</p>}
       <p className="review-digest">SHA-256 <code>{inspection.digest}</code></p>
       <TestReports reports={review.tests} stale={review.testsStale} />
       {!!inspection.violations.length && <p className="task-error">İzin dışı dosyalar: {inspection.violations.join(", ")}</p>}
-      {!review.canApprove && <p className="review-warning">Bu görünüm onaylanamaz. Görev durumu, dosya kapsamı veya beklenen değişiklikler farklı olabilir. Değişiklikleri kontrol edip incelemeyi yenileyin. Commit edilmiş bir çakışma varsa görev branch’ini CLI üzerinden inceleyin.</p>}
+      {!review.canApprove && <p className="review-warning">Bu görünüm onaylanamaz. Görev durumu, dosya kapsamı, çözülmemiş çakışmalar veya beklenen değişiklikler farklı olabilir. Değişiklikleri kontrol edip incelemeyi yenileyin.</p>}
+      <MergeResolution review={review} api={api} disabled={pending} onReview={onReview} onDirty={(value) => { setDirty(value); onDirty(value); }} />
       <h3>Değişen dosyalar · {inspection.changedPaths.length}</h3>
       <ul className="changed-files">{inspection.changedPaths.map((path) => <li key={path}><code>{path}</code></li>)}</ul>
       {inspection.trackedDiff && <><h3>Takip edilen dosyalar</h3><pre className="diff">{inspection.trackedDiff}</pre></>}
       {inspection.untrackedPreviews.map((file) => <section key={file.path}><h3>Yeni dosya: {file.path}</h3>{file.truncated && <p className="review-warning">Önizleme kısaltıldı. Dosyanın tamamını çalışma alanında inceleyin.</p>}{file.binary && <p className="review-warning">İkili dosya; çalışma alanında ayrıca inceleyin.</p>}<pre className="diff">{file.preview}</pre></section>)}
       <p className="review-warning">Bu ekran test çalıştırmaz. Onaylanan kod ayrı entegrasyon dalına birleştirilir.</p>
     </div>
-    <div className="review-actions"><button disabled={pending} onClick={onRefresh}>İncelemeyi yenile</button><button className="primary" disabled={pending || !review.canApprove} onClick={onApprove}>Onayla ve birleştir</button></div>
+    <div className="review-actions"><button disabled={pending || dirty} onClick={onRefresh}>İncelemeyi yenile</button><button className="primary" disabled={pending || dirty || !review.canApprove} onClick={onApprove}>Onayla ve birleştir</button></div>
   </dialog>;
 }
 
@@ -47,11 +51,12 @@ function App() {
   const [pending, setPending] = useState(false);
   const [review, setReview] = useState<DesktopReview>();
   const [editorDirty, setEditorDirty] = useState(false);
+  const [mergeDirty, setMergeDirty] = useState(false);
   const [creating, setCreating] = useState(false);
   const [agentCenter, setAgentCenter] = useState(false);
   const [selectedOnly, setSelectedOnly] = useState(false);
   const api = window.agentmesh;
-  useEffect(() => { document.documentElement.dataset.unsaved = String(editorDirty); }, [editorDirty]);
+  useEffect(() => { document.documentElement.dataset.unsaved = String(editorDirty || mergeDirty); }, [editorDirty, mergeDirty]);
 
   useEffect(() => {
     let live = true;
@@ -145,9 +150,12 @@ function App() {
       </section>
       <footer>AgentMesh <span>Görevler · ortak context · bağımsız çalışma alanları</span></footer>
     </main>
-    {review && <ReviewDialog review={review} pending={pending} error={error} onClose={() => setReview(undefined)}
+    {review && <ReviewDialog review={review} api={api} onReview={setReview} onDirty={setMergeDirty} pending={pending} error={error} onClose={() => { setMergeDirty(false); setReview(undefined); }}
       onRefresh={() => act(async () => setReview(await api.review(review.taskId, true)))}
-      onApprove={() => act(async () => { if (await api.approve(review.taskId, review.inspection.digest)) setReview(undefined); })} />}
+      onApprove={() => act(async () => {
+        try { if (await api.approve(review.taskId, review.inspection.digest)) setReview(undefined); }
+        catch (error) { setReview(await api.review(review.taskId)); throw error; }
+      })} />}
     {creating && <TaskForm state={state} onClose={() => setCreating(false)} onCreate={async (draft) => { await api.createTask(draft); setState(await api.state()); }} />}
     {agentCenter && <AgentCenter state={state} api={api} onClose={() => setAgentCenter(false)} />}
   </div>;

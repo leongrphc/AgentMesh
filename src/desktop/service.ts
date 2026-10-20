@@ -13,7 +13,7 @@ import { configuredAdapter } from "../adapters/registry.js";
 import type { PermissionDecision } from "../core/permissions.js";
 import { probeCodex, probeOpenCode, probeOpenCodeServer, probeHeadlessProvider, type ProviderHealth } from "../adapters/provider-health.js";
 import { safeLog } from "../core/safe-log.js";
-import { listWorkspace, readWorkspaceFile, saveWorkspaceFile } from "../core/workspace-files.js";
+import { listWorkspace, readWorkspaceFile, saveWorkspaceFile, readConflictFile, writeConflictResolution } from "../core/workspace-files.js";
 import type { DesktopState, DesktopReview, TaskDraft } from "./contracts.js";
 import { Terminals } from "./terminals.js";
 import { sendProviderMessage, validateProviderMessage, type ProviderMessageInput, type ProviderMessageResult } from "../adapters/provider-message.js";
@@ -271,11 +271,37 @@ export class DesktopService {
     if (task.status === "running" || !task.worktree) throw new Error("İncelenecek durdurulmuş çalışma alanı yok");
     const manager = new WorktreeManager();
     const lease = manager.reopen(this.config!.repoPath, task.worktree);
-    const inspection = manager.inspect(lease.path, task.allowedPaths);
+    const inspection = manager.inspectTask(this.config!.repoPath, lease, task.allowedPaths);
+    const merge = task.mergeConflict ? manager.mergeState(this.config!.repoPath, lease) : undefined;
     return { taskId, title: task.title, inspection, expectedDigest: task.review?.digest,
       tests: task.tests, testsStale: !!task.tests?.length && task.testDigest !== inspection.digest,
+      merge: merge && { paths: task.mergeConflict!.paths, integrationCommit: merge.integrationCommit, active: !!merge.mergeHead, unresolved: merge.paths },
       canApprove: !this.running && !this.terminals.active && task.status === "pending_review" && !inspection.violations.length
-        && inspection.changedPaths.length > 0 && inspection.digest === task.review?.digest };
+        && !merge?.paths.length && (inspection.changedPaths.length > 0 || !!merge?.mergeHead) && inspection.digest === task.review?.digest };
+  }
+
+  prepareMergeResolution(taskId: string, digest: string, integrationCommit: string): DesktopReview {
+    this.requireClosedTerminals();
+    if (this.running || this.messageAbort || this.healthAbort) throw new Error("Önce aktif işlemi bitirin");
+    this.engine!.prepareMergeResolution(this.requireTask(taskId), digest, integrationCommit);
+    return this.review(taskId);
+  }
+
+  conflictFile(taskId: string, path: string) {
+    const { root, task } = this.workspace(taskId);
+    if (!task.mergeConflict || !this.review(taskId).merge?.unresolved.includes(path)) throw new Error("Çözülmemiş çakışma dosyası seçin");
+    return readConflictFile(root, path);
+  }
+
+  resolveConflict(taskId: string, path: string, content: string | null, digest: string | null, keepCurrent = false): DesktopReview {
+    this.requireClosedTerminals();
+    if (this.running || this.messageAbort || this.healthAbort) throw new Error("Önce aktif işlemi bitirin");
+    const { root, task, writable } = this.workspace(taskId);
+    if (!writable || !task.mergeConflict || !task.worktree || !this.review(taskId).merge?.unresolved.includes(path)) throw new Error("Çözülmemiş çakışma dosyası seçin");
+    writeConflictResolution(root, path, content, digest, task.allowedPaths, keepCurrent);
+    new WorktreeManager().stageResolution(this.config!.repoPath, task.worktree, path);
+    this.engine!.refreshReview(taskId);
+    return this.review(taskId);
   }
 
   testProvider(input: ProviderMessageInput): Promise<ProviderMessageResult> {
