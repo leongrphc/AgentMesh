@@ -1,7 +1,7 @@
 import type { ProjectSnapshot } from "../core/orchestrator.js";
 import type { WorktreeInspection } from "../core/worktrees.js";
 import type { ConflictFile, WorkspaceEntry, WorkspaceFile } from "../core/workspace-files.js";
-import type { AgentTask, TestReport } from "../core/contracts.js";
+import type { AgentTask, TestReport, MessageDraft } from "../core/contracts.js";
 import type { PermissionRequest, PermissionDecision } from "../core/permissions.js";
 import type { ProviderHealth } from "../adapters/provider-health.js";
 import type { TerminalInfo, TerminalOutput } from "./terminals.js";
@@ -25,7 +25,7 @@ export interface DesktopState {
   snapshot: ProjectSnapshot;
   busy: boolean;
   demo: boolean;
-  agents: Array<AgentConfig & { interactivePermissions?: boolean }>;
+  agents: Array<AgentConfig & { interactivePermissions?: boolean; liveMessages?: boolean }>;
   permissions: PermissionRequest[];
   health: Record<string, ProviderHealth>;
   checkingAgents: boolean;
@@ -35,6 +35,7 @@ export interface DesktopState {
 }
 
 export interface DesktopAPI {
+  sendMessage(message: MessageDraft): Promise<string>;
   openProviderTerminal(model?: string): Promise<TerminalInfo>;
   testProvider(input: ProviderMessageInput): Promise<ProviderMessageResult>;
   cancelProviderTest(): Promise<void>;

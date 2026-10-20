@@ -27,7 +27,7 @@ Electron Desktop (React + Monaco + xterm.js)
        Direct model API provider'ları da ayrı adapter olabilir.
 ```
 
-**MVP uygulama sırası:** çekirdek, SQLite, worktree, Codex/OpenCode CLI adaptörleri, insan onaylı entegrasyon dalı, canlı CLI olay aboneliği ve iptal eklendi. Electron/React kabuğu, dar preload/IPC, Monaco dosya editörü, PTY terminalleri, Task Board, kalıcı ajan ayarları, test raporları ve diff/merge çözüm akışı çalışır. Codex App Server ve OpenCode Server izin köprüleri ile modelsiz bağlantı kontrolleri var. Claude API anahtarlı ve Antigravity headless adaptörleri de eklendi. Doğrudan API sağlayıcıları, canlı inbox ve ileri editör işleri devam ediyor. Adaptör sınırları sağlayıcı sürümlerinden bağımsız tutulur.
+**MVP uygulama sırası:** çekirdek, SQLite, worktree, Codex/OpenCode CLI adaptörleri, insan onaylı entegrasyon dalı, canlı CLI olay aboneliği ve iptal eklendi. Electron/React kabuğu, dar preload/IPC, Monaco dosya editörü, PTY terminalleri, Task Board, kalıcı ajan ayarları, test raporları ve diff/merge çözüm akışı çalışır. Codex App Server ve OpenCode Server izin köprüleri ile modelsiz bağlantı kontrolleri var. Claude API anahtarlı ve Antigravity headless adaptörleri de eklendi. Görev bazlı kalıcı inbox ve Codex App Server canlı mesaj teslimi eklendi; diğer native canlı bağlantılar, doğrudan API sağlayıcıları ve ileri editör işleri devam ediyor. [Teslim semantiği](messages.md). Adaptör sınırları sağlayıcı sürümlerinden bağımsız tutulur.
 
 ## Neden Electron?
 

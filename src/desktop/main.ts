@@ -7,6 +7,7 @@ import { safeLog } from "../core/safe-log.js";
 import type { TaskDraft } from "./contracts.js";
 import type { AgentConfig } from "../core/config.js";
 import type { ProviderMessageInput } from "../adapters/provider-message.js";
+import type { MessageDraft } from "../core/contracts.js";
 import { mergeSmoke } from "./merge-smoke.js";
 
 protocol.registerSchemesAsPrivileged([{ scheme: "agentmesh", privileges: { standard: true, secure: true, supportFetchAPI: true } }]);
@@ -129,6 +130,33 @@ async function createWindow() {
         }, 50);
       })`);
       writeFileSync(resolve("dist", "desktop-permission.png"), (await window.capturePage()).toPNG());
+      await window.webContents.executeJavaScript(`(async () => {
+        document.getElementById('tab-messages').click();
+        for (let i = 0; i < 100; i++) {
+          if (document.querySelector('[data-testid="project-message-form"]')) break;
+          await new Promise(r => setTimeout(r, 50));
+        }
+        const form = document.querySelector('[data-testid="project-message-form"]');
+        const field = form.querySelector('[aria-label="Proje mesajı"]');
+        Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set.call(field, 'SMOKE_LIVE_INBOX');
+        field.dispatchEvent(new Event('input', {bubbles:true}));
+        await new Promise(r => setTimeout(r, 100));
+        form.requestSubmit();
+        for (let i = 0; i < 100; i++) {
+          const state = await window.agentmesh.state();
+          const message = state.snapshot.messages.find(m => m.body === 'SMOKE_LIVE_INBOX');
+          const accepted = message && state.snapshot.deliveries.some(d => d.messageId === message.id && d.taskId === 'plan' && d.status === 'accepted' && d.mode === 'live');
+          if (accepted && document.querySelector('.message-deliveries')?.textContent.includes('Kabul edildi')) {
+            document.querySelector('.messages-panel').scrollIntoView({block:'center'});
+            await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+            return;
+          }
+          await new Promise(r => setTimeout(r, 50));
+        }
+        throw new Error('Canlı inbox formu veya teslim kaydı doğrulanamadı');
+      })()`);
+      writeFileSync(resolve("dist", "desktop-messages.png"), (await window.capturePage()).toPNG());
+      await window.webContents.executeJavaScript(`document.getElementById('tab-events').click()`);
       await window.webContents.executeJavaScript(`[...document.querySelectorAll('.permission-panel button')].find((button) => button.textContent === 'Reddet').click()`);
       await window.webContents.executeJavaScript(`new Promise((resolve, reject) => {
         const timeout = setTimeout(() => reject(new Error('Demo ekranı tamamlanmadı')), 15000);
@@ -374,6 +402,7 @@ app.whenReady().then(async () => {
     return service.saveFile(taskId as string, path as string, content as string, digest as string);
   });
   handle("mesh:create-task", (task) => service.createTask(task as TaskDraft));
+  handle("mesh:send-message", (message) => service.sendMessage(message as MessageDraft));
   handle("mesh:save-agent", (agent) => service.saveAgent(agent as AgentConfig));
   handle("mesh:parallelism", (value) => {
     if (typeof value !== "number") throw new Error("Geçersiz paralellik");

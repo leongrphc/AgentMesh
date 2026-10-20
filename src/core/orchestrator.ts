@@ -12,6 +12,8 @@ import type {
   Project,
   StoredEvent,
   TaskRecord,
+  MessageDraft,
+  MessageDelivery,
 } from "./contracts.js";
 import type { EventStore } from "./journal.js";
 import type { WorktreeManager } from "./worktrees.js";
@@ -20,12 +22,15 @@ import type { AgentConfig } from "./config.js";
 import { validate } from "./config.js";
 import { validateAgentEdit } from "./agent-settings.js";
 import { normalizeTestReports } from "./test-reports.js";
+import { ExecutionInbox, validateMessageDraft } from "./inbox.js";
 
 export interface ProjectSnapshot {
   project: Project;
   tasks: TaskRecord[];
   context: Record<string, Fact>;
   messages: AgentMessage[];
+  deliveries: MessageDelivery[];
+  inboxes: Array<{ taskId: string; cursor: number; pending: number; uncertain: number }>;
 }
 
 /** Live notifications are ephemeral; domain events are additionally kept in the journal. */
@@ -38,6 +43,8 @@ export class Orchestrator {
   private readonly tasks = new Map<string, TaskRecord>();
   private readonly facts = new Map<string, Map<string, Fact>>();
   private readonly messages: AgentMessage[] = [];
+  private readonly deliveries = new Map<string, MessageDelivery>();
+  private readonly inboxes = new Map<string, ExecutionInbox>();
   private readonly adapters = new Map<string, AgentAdapter>();
   private readonly agentSettings = new Map<string, AgentConfig[]>();
   private readonly controllers = new Map<string, AbortController>();
@@ -47,6 +54,10 @@ export class Orchestrator {
   constructor(private readonly journal: EventStore, private readonly worktrees?: WorktreeManager) {
     this.permissions = new PermissionBroker((event) => this.emit(event));
     for (const event of journal.all()) this.apply(event.payload);
+    for (const delivery of this.deliveries.values()) if (delivery.status === "sending") {
+      const task = this.requireTask(delivery.taskId);
+      this.emit({ type: "message.delivery", projectId: task.projectId, delivery: { ...delivery, status: "uncertain" } });
+    }
     const unresolved = new Map<string, Extract<DomainEvent, { type: "permission.requested" }>>();
     for (const { payload } of journal.all()) {
       if (payload.type === "permission.requested") unresolved.set(payload.requestId, payload);
@@ -152,7 +163,44 @@ export class Orchestrator {
         .map((task) => structuredClone(task)),
       context: Object.fromEntries(this.facts.get(projectId) ?? []),
       messages: this.messages.filter((message) => message.projectId === projectId).map((x) => ({ ...x })),
+      deliveries: [...this.deliveries.values()].filter((delivery) => this.tasks.get(delivery.taskId)?.projectId === projectId).map((delivery) => ({ ...delivery })),
+      inboxes: [...this.tasks.values()].filter((task) => task.projectId === projectId).map((task) => {
+        const relevant = this.messagesFor(task);
+        let cursor = 0;
+        while (cursor < relevant.length && this.delivery(task.id, relevant[cursor]!.id)?.status === "accepted") cursor++;
+        return { taskId: task.id, cursor, pending: relevant.filter((message) => this.delivery(task.id, message.id)?.status !== "accepted").length,
+          uncertain: relevant.filter((message) => this.delivery(task.id, message.id)?.status === "uncertain").length };
+      }),
     };
+  }
+
+  private delivery(taskId: string, messageId: string) { return this.deliveries.get(JSON.stringify([taskId, messageId])); }
+  private messagesFor(task: TaskRecord) {
+    return this.messages.filter((message) => message.projectId === task.projectId && message.taskId !== task.id
+      && (message.to === task.agentId || message.to === "*"));
+  }
+  private recipientIds(projectId: string) {
+    return [...new Set([...(this.agentSettings.get(projectId) ?? []).map((agent) => agent.id),
+      ...[...this.tasks.values()].filter((task) => task.projectId === projectId).map((task) => task.agentId)])];
+  }
+
+  sendMessage(projectId: string, draft: MessageDraft, sourceTaskId?: string): string {
+    if (!this.projects.has(projectId)) throw new Error("Proje bulunamadı");
+    validateMessageDraft(draft, this.recipientIds(projectId));
+    const source = sourceTaskId ? this.requireTask(sourceTaskId) : undefined;
+    if (source && (source.projectId !== projectId || source.status !== "running")) throw new Error("Mesaj kaynağı aktif görev değil");
+    const taskId = source?.id ?? "@user";
+    const from = source?.agentId ?? "@user";
+    const existing = this.messages.find((message) => message.projectId === projectId && message.taskId === taskId
+      && message.idempotencyKey === draft.idempotencyKey);
+    if (existing) {
+      if (existing.to !== draft.to || existing.kind !== draft.kind || existing.body !== draft.body) throw new Error("Aynı mesaj anahtarı farklı içerikle kullanılamaz");
+      return existing.id;
+    }
+    const id = randomUUID();
+    this.emit({ type: "message.sent", projectId, message: { id, projectId, taskId, from,
+      to: draft.to, kind: draft.kind, body: draft.body, idempotencyKey: draft.idempotencyKey, createdAt: new Date().toISOString() } });
+    return id;
   }
 
   retryTask(taskId: string): void {
@@ -254,6 +302,7 @@ export class Orchestrator {
     let controller: AbortController | undefined;
     const executionId = randomUUID();
     let permissionEnd: "execution_ended" | "disconnect" = "execution_ended";
+    let inbox: ExecutionInbox | undefined;
     try {
       let workspaceRoot = snapshot.project.workspaceRoot;
       if (adapter.connection !== "mock") {
@@ -272,12 +321,49 @@ export class Orchestrator {
       this.controllers.set(task.id, controller);
       this.emit({ type: "task.started", projectId: task.projectId, taskId: task.id });
       if (controller.signal.aborted) return;
+      const active = () => !!controller && !controller.signal.aborted && this.controllers.get(task.id) === controller && this.requireTask(task.id).status === "running";
+      let initialBytes = 0;
+      const initial: AgentMessage[] = [];
+      for (const message of this.messagesFor(task)) {
+        if (task.sessionId && this.delivery(task.id, message.id)?.status === "accepted") continue;
+        const bytes = Buffer.byteLength(JSON.stringify(message));
+        if (initial.length >= 64 || initialBytes + bytes > 128 * 1024) break;
+        initial.push(message); initialBytes += bytes;
+      }
+      const initialIds = new Set(initial.map((message) => message.id));
+      const receipt = (messageId: string, status: MessageDelivery["status"], mode: MessageDelivery["mode"]) =>
+        this.emit({ type: "message.delivery", projectId: task.projectId, delivery: { taskId: task.id, messageId, executionId, status, mode } });
+      let acknowledged = false;
+      const acknowledgeInbox = () => {
+        if (!active() || acknowledged) return;
+        this.emitBatch(initial.map((message) => ({ type: "message.delivery" as const, projectId: task.projectId,
+          delivery: { taskId: task.id, messageId: message.id, executionId, status: "accepted" as const, mode: "prompt" as const } })));
+        acknowledged = true;
+      };
+      inbox = new ExecutionInbox({ active, signal: controller.signal,
+        pending: () => this.messagesFor(task).filter((message) => !initialIds.has(message.id) && this.delivery(task.id, message.id)?.status !== "accepted"),
+        record: (messageId, status) => receipt(messageId, status, "live"),
+        onError: (error) => { this.notify({ kind: "output", projectId: task.projectId, taskId: task.id,
+          output: { channel: "stderr", data: safeLog(`Inbox kaydı başarısız: ${String(error)}`) } }); },
+      });
+      this.inboxes.set(task.id, inbox);
+      this.emitBatch(initial.map((message) => ({ type: "message.delivery" as const, projectId: task.projectId,
+        delivery: { taskId: task.id, messageId: message.id, executionId, status: "sending" as const, mode: "prompt" as const } })));
+      let sent = 0;
       const output = await adapter.execute({
         task,
         workspaceRoot,
         context: snapshot.context,
-        inbox: snapshot.messages.filter((message) => message.to === task.agentId || message.to === "*"),
-        knownAgentIds: [...new Set(snapshot.tasks.map((item) => item.agentId))],
+        inbox: structuredClone(initial),
+        knownAgentIds: this.recipientIds(task.projectId),
+        liveMessages: adapter.liveMessages === true,
+        acknowledgeInbox,
+        subscribeInbox: adapter.liveMessages ? (handler) => inbox!.subscribe(handler) : undefined,
+        sendMessage: (draft) => {
+          if (!active()) throw new Error("Görev artık aktif değil");
+          if (++sent > 64) throw new Error("Çalıştırma başına canlı mesaj sınırı aşıldı");
+          return this.sendMessage(task.projectId, draft, task.id);
+        },
         agentRole: this.agentSettings.get(task.projectId)?.find((agent) => agent.id === task.agentId)?.role,
         sessionId: task.sessionId,
         signal: controller.signal,
@@ -301,6 +387,9 @@ export class Orchestrator {
         }),
       });
       if (controller.signal.aborted || this.requireTask(task.id).status === "cancelled") return;
+      await inbox.close();
+      if (controller.signal.aborted || this.requireTask(task.id).status === "cancelled") return;
+      acknowledgeInbox();
       output.tests = normalizeTestReports(output.tests);
       if (output.sessionId && this.requireTask(task.id).sessionId !== output.sessionId) this.emit({
         type: "task.session.saved", projectId: task.projectId, taskId: task.id, sessionId: output.sessionId,
@@ -330,6 +419,10 @@ export class Orchestrator {
         error: safeLog(error instanceof Error ? error.message : String(error), "storage"),
       });
     } finally {
+      await inbox?.close();
+      this.inboxes.delete(task.id);
+      const uncertain = [...this.deliveries.values()].filter((delivery) => delivery.executionId === executionId && delivery.status === "sending");
+      if (uncertain.length) this.emitBatch(uncertain.map((delivery) => ({ type: "message.delivery", projectId: task.projectId, delivery: { ...delivery, status: "uncertain" } })));
       this.permissions.closeExecution(executionId, permissionEnd);
       controller?.abort();
       this.controllers.delete(task.id);
@@ -392,10 +485,14 @@ export class Orchestrator {
     const entries = this.journal.appendBatch(payloads);
     for (const event of payloads) this.apply(event);
     for (const event of entries) this.notify({ kind: "event", event });
+    if (payloads.some((event) => event.type === "message.sent")) for (const inbox of this.inboxes.values()) inbox.wake();
   }
 
   private apply(event: DomainEvent): void {
     switch (event.type) {
+      case "message.delivery":
+        this.deliveries.set(JSON.stringify([event.delivery.taskId, event.delivery.messageId]), { ...event.delivery });
+        break;
       case "project.created":
         this.projects.set(event.project.id, { ...event.project });
         break;

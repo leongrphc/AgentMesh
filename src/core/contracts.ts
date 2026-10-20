@@ -39,6 +39,21 @@ export interface AgentMessage {
   kind: "handoff" | "question" | "progress";
   body: string;
   createdAt: string;
+  idempotencyKey?: string;
+}
+
+export interface MessageDraft {
+  to: string;
+  kind: "question" | "progress";
+  body: string;
+  idempotencyKey: string;
+}
+export interface MessageDelivery {
+  taskId: string;
+  messageId: string;
+  executionId: string;
+  status: "sending" | "accepted" | "queued" | "uncertain";
+  mode: "prompt" | "live";
 }
 
 export interface AgentExecution {
@@ -48,6 +63,10 @@ export interface AgentExecution {
   inbox: ReadonlyArray<AgentMessage>;
   knownAgentIds?: readonly string[];
   agentRole?: string;
+  liveMessages?: boolean;
+  sendMessage?: (message: MessageDraft) => string;
+  acknowledgeInbox?: () => void;
+  subscribeInbox?: (handler: (message: AgentMessage) => Promise<boolean>) => () => Promise<void>;
   sessionId?: string;
   onSession?: (sessionId: string) => void;
   signal?: AbortSignal;
@@ -81,6 +100,7 @@ export interface AgentAdapter {
   readonly provider: string;
   readonly connection: "cli" | "api" | "mock";
   readonly interactivePermissions?: boolean;
+  readonly liveMessages?: boolean;
   execute(input: AgentExecution): Promise<AgentResult>;
 }
 
@@ -106,6 +126,7 @@ export interface TaskRecord extends AgentTask {
 export type DomainEvent =
   | { type: "project.created"; project: Project }
   | { type: "project.agents.configured"; projectId: string; agents: AgentConfig[]; sourceAgents: AgentConfig[] }
+  | { type: "message.delivery"; projectId: string; delivery: MessageDelivery }
   | { type: "project.parallelism.updated"; projectId: string; maxParallel: number }
   | { type: "permission.requested"; projectId: string; taskId: string; executionId: string; requestId: string; provider: string; kind: "command" | "file"; digest: string; expiresAt: string }
   | { type: "permission.resolved"; projectId: string; taskId: string; executionId: string; requestId: string; decision: PermissionDecision; source: PermissionSource }

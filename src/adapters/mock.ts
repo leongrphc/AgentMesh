@@ -4,6 +4,7 @@ import type { AgentAdapter, AgentExecution, AgentResult } from "../core/contract
 export class MockAgent implements AgentAdapter {
   readonly provider = "mock";
   readonly connection = "mock" as const;
+  readonly liveMessages = true;
 
   constructor(
     readonly id: string,
@@ -11,6 +12,7 @@ export class MockAgent implements AgentAdapter {
   ) {}
 
   async execute(input: AgentExecution): Promise<AgentResult> {
+    input.acknowledgeInbox?.();
     return this.work(input);
   }
 }

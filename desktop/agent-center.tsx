@@ -60,6 +60,7 @@ export function AgentCenter({ state, api, onClose }: { state: DesktopState; api:
         <div className="agent-card-header"><h3>{agent.id}</h3><span className={`health-status ${health?.status ?? "unchecked"}`}>{health ? labels[health.status] : "Kontrol edilmedi"}</span></div>
         <dl><dt>Sağlayıcı</dt><dd>{state.demo ? "Mock" : agent.provider}</dd><dt>Bağlantı</dt><dd>{state.demo ? "Yerel demo" : agent.transport === "app-server" ? "CLI / App Server" : agent.transport === "server" ? "CLI / HTTP Server" : "CLI / exec"}</dd><dt>Model</dt><dd>{agent.model ?? (state.demo ? "Kullanılmaz" : "Sağlayıcı varsayılanı")}</dd><dt>Görev rolü</dt><dd>{agent.role ?? agent.id}</dd><dt>Araç izinleri</dt><dd>{agent.interactivePermissions ? "Kullanıcı kararı · tek istek" : "Etkileşimli izin desteklenmiyor"}</dd></dl>
         {health && <><p>{health.detail}</p><small>Son kontrol: {new Date(health.checkedAt).toLocaleString("tr-TR")}</small></>}
+        <p>Proje mesajları: {agent.liveMessages ? "Aktif göreve canlı teslim desteklenir" : "Sonraki görev veya yeniden denemede teslim edilir"}.</p>
       </article>; })}
     </div><div className="review-actions"><button data-testid="check-agents" className="primary" disabled={state.busy || state.checkingAgents} onClick={async () => { setError(""); try { await api.checkAgents(); } catch (e) { setError(String(e)); } }}>{state.checkingAgents ? "Kontrol ediliyor…" : "Bağlantıları kontrol et"}</button></div>
   </dialog>;

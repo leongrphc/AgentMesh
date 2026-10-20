@@ -39,6 +39,12 @@ function serverScript(mode: string): string {
         if(m.params.sandboxPolicy.networkAccess!==false) process.exit(9);
         send({id:m.id,result:{turn:{id:'turn-1',status:'inProgress'}}});
         notify('turn/started',{threadId:'thread-1',turn:{id:'turn-1'}});
+        if(mode==='live'||mode==='wrong-steer') {
+          notify('item/completed',scoped({item:{type:'agentMessage',text:JSON.stringify({
+            agentmeshMessageVersion:1,key:'question-1',to:'reviewer',kind:'question',body:'Please check'
+          })}}));
+          return;
+        }
         let params=scoped({itemId:'tool-1',command:'npm test',cwd:process.cwd()});
         if(mode==='wrong-thread') params.threadId='other-thread';
         if(mode==='extra-permissions') params.additionalPermissions={network:{enabled:true}};
@@ -53,6 +59,14 @@ function serverScript(mode: string): string {
         send({id:'permission-1',method:'item/commandExecution/requestApproval',params});
         notify('item/agentMessage/delta',scoped({delta:'still streaming'}));
         return;
+      }
+      if(m.method==='turn/steer') {
+        if(m.params.threadId!=='thread-1'||m.params.expectedTurnId!=='turn-1'||!m.params.input[0].text.includes('incoming-1')) process.exit(9);
+        complete('Task complete');
+        notify('item/completed',scoped({item:{type:'agentMessage',text:JSON.stringify({
+          agentmeshMessageVersion:1,key:'late',to:'reviewer',kind:'progress',body:'Too late'
+        })}}));
+        return send({id:m.id,result:{turnId:mode==='wrong-steer'?'other-turn':'turn-1'}});
       }
       if(m.id==='permission-1') {
         if(mode==='permission-subset') return complete(JSON.stringify(m.result));
@@ -116,5 +130,27 @@ test("RPC transport stops oversized or invalid records and times out unanswered 
       onNotification() {}, async onRequest() { return {}; }, onExit() {} });
     try { await assert.rejects(client.request("initialize", {}), expected); }
     finally { await client.close(); }
+  }
+});
+
+test("Codex live inbox binds the active turn, waits for steer acknowledgement and ignores post-completion messages", async () => {
+  for (const mode of ["live", "wrong-steer"]) {
+    let accepted = false, acknowledged = false, deliveryError = "";
+    const sent: string[] = [];
+    const output = await adapter(mode).execute({ ...input(), liveMessages: true,
+      acknowledgeInbox: () => { acknowledged = true; },
+      sendMessage: (message) => { sent.push(message.idempotencyKey); return "outgoing-1"; },
+      subscribeInbox: (handler) => {
+        assert.equal(acknowledged, true);
+        const pending = handler({ id: "incoming-1", projectId: "p", taskId: "other", from: "reviewer", to: "a",
+          kind: "progress", body: "Keep scope small", createdAt: "" })
+          .then((value) => { accepted = value; }, (error: unknown) => { deliveryError = String(error); });
+        return async () => { await pending; };
+      },
+    });
+    assert.equal(output.summary, "Task complete");
+    assert.deepEqual(sent, ["question-1"]);
+    assert.equal(accepted, mode === "live");
+    if (mode === "wrong-steer") assert.match(deliveryError, /farklı tura/);
   }
 });

@@ -108,6 +108,7 @@ Görev detayı ve değişiklik inceleme ekranında yapılandırılmış **Test r
 
 - [Görev listesi ve devam notları](docs/TASKS.md): tamamlanan işler, açık kartlar, öncelikler ve ertesi gün başlangıç adımları.
 - [Sistem mimarisi](docs/architecture.md): bileşenler, hibrit bağlantılar, Git izolasyonu, veri modeli.
+- [Canlı mesajlar ve inbox](docs/messages.md): mesaj formu, Codex aktif tur teslimi, kalıcı cursor ve belirsiz teslim/retry davranışı. Diğer otomatik bağlantılar mesajı sonraki istemde alır.
 - [Ajan iletişim protokolü](docs/agent-protocol.md): görev, olay, mesaj ve context sözleşmeleri.
 - [MVP planı](docs/mvp.md): kapsam, öncelik, kabul kriterleri ve bilinen açıklar.
 

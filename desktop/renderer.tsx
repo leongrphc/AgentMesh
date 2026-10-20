@@ -4,6 +4,7 @@ import { TaskForm, TaskGraph } from "./task-board.js";
 import { AgentCenter } from "./agent-center.js";
 import { TestReports } from "./test-reports.js";
 import { MergeResolution } from "./merge-resolution.js";
+import { Messages } from "./messages.js";
 import type { DesktopAPI, DesktopState, DesktopReview } from "../src/desktop/contracts.js";
 import type { TaskStatus } from "../src/core/contracts.js";
 import "./style.css";
@@ -145,7 +146,7 @@ function App() {
         <div className="activity-body" role="tabpanel" id={`panel-${tab}`} aria-labelledby={`tab-${tab}`}>
           {tab === "events" && (state.events.length ? <div className="event-list">{[...state.events].reverse().filter((event) => !selectedOnly || event.taskId === task?.id).map((event, index) => <div className="event" key={`${event.at}-${index}`}><time>{new Date(event.at).toLocaleTimeString("tr-TR")}</time><span className="event-task">{event.taskId ?? "proje"}</span><code>{event.text}</code></div>)}</div> : <div className="empty"><b>İlk göreve hazır.</b><p>Ajanları başlattığınızda olaylar burada görünecek.</p></div>)}
           {tab === "context" && (Object.keys(context).length ? Object.values(context).map((fact) => <article className="context-item" key={fact.key}><code>{fact.key}</code><p>{fact.value}</p><small>Kaynak: {fact.sourceTaskId}</small></article>) : <p className="empty">Ajanların paylaştığı sonuçlar burada görünecek.</p>)}
-          {tab === "messages" && (messages.length ? messages.map((message) => <article className="context-item" key={message.id}><b>{message.from} → {message.to}</b><p>{message.body}</p><small>{message.kind} · {message.taskId}</small></article>) : <p className="empty">Ajanlar arası mesajlar burada görünecek.</p>)}
+          {tab === "messages" && <Messages key={project.id + project.workspaceRoot} state={state} api={api} taskId={task?.id} selectedOnly={selectedOnly} />}
         </div>
       </section>
       <footer>AgentMesh <span>Görevler · ortak context · bağımsız çalışma alanları</span></footer>

@@ -17,6 +17,7 @@ import { listWorkspace, readWorkspaceFile, saveWorkspaceFile, readConflictFile, 
 import type { DesktopState, DesktopReview, TaskDraft } from "./contracts.js";
 import { Terminals } from "./terminals.js";
 import { sendProviderMessage, validateProviderMessage, type ProviderMessageInput, type ProviderMessageResult } from "../adapters/provider-message.js";
+import type { MessageDraft } from "../core/contracts.js";
 
 export class DesktopService {
   readonly terminals = new Terminals();
@@ -75,6 +76,7 @@ export class DesktopService {
     if (!this.engine || !this.config) throw new Error("Önce proje açın");
     return structuredClone({ snapshot: this.engine.snapshot(this.config.projectId), busy: !!this.running,
       demo: this.demo, agents: this.config.agents.map((agent) => ({ ...agent,
+        liveMessages: this.demo || (agent.provider === "codex" && agent.transport === "app-server"),
         interactivePermissions: this.demo || (agent.provider === "codex" && agent.transport === "app-server") || (agent.provider === "opencode" && agent.transport === "server") })),
       permissions: this.engine.pendingPermissions(this.config.projectId), events: this.events,
       health: this.health, checkingAgents: !!this.healthAbort, testingProvider: this.testingProvider,
@@ -195,6 +197,11 @@ export class DesktopService {
     this.engine!.addTask(task);
   }
 
+  sendMessage(message: MessageDraft): string {
+    if (!this.config || !this.engine) throw new Error("Önce proje açın");
+    return this.engine.sendMessage(this.config.projectId, message);
+  }
+
   saveAgent(draft: AgentConfig): void {
     if (!this.config || !this.engine) throw new Error("Önce proje açın");
     if (this.running || this.healthAbort || this.messageAbort) throw new Error("Ajan ayarlarından önce aktif işlemi bitirin");
@@ -217,6 +224,11 @@ export class DesktopService {
   private makeAdapter(agent: AgentConfig, demo: boolean) {
     if (!demo) return configuredAdapter(agent);
     return new MockAgent(agent.id, async (input) => {
+      const stop = input.subscribeInbox?.(async (message) => {
+        input.onOutput?.({ channel: "stdout", data: { text: `Demo canlı mesaj alındı: ${message.id}` } });
+        return true;
+      });
+      try {
       input.onOutput?.({ channel: "stdout", data: { text: `${input.task.title} başladı` } });
       let permissionNote = "";
       if (input.task.id === "plan" && input.requestPermission) {
@@ -229,6 +241,7 @@ export class DesktopService {
         tests: [{ name: "Gerçek proje testleri", status: "not_run", details: "Demo yalnızca orkestrasyon akışını gösterir; proje testleri çalıştırılmadı." }],
         facts: [{ key: `${input.task.id}.result`, value: "Demo doğrulaması başarılı" }],
         messages: [{ to: "*", kind: "handoff", body: `${input.task.title} sonucu hazır.` }] };
+      } finally { await stop?.(); }
     });
   }
 

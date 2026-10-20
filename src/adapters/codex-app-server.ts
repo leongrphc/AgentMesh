@@ -3,6 +3,7 @@ import type { AgentAdapter, AgentExecution, AgentResult } from "../core/contract
 import { buildPrompt } from "./cli-process.js";
 import { normalizeTaskResult } from "./task-result.js";
 import { JsonlRpcClient, record, type RpcOptions, type RpcRecord } from "./jsonl-rpc.js";
+import { consumeLiveMessage } from "./live-message.js";
 
 type ClientFactory = (options: Omit<RpcOptions, "executable" | "args">) => JsonlRpcClient;
 
@@ -10,10 +11,13 @@ export class CodexAppServerAdapter implements AgentAdapter {
   readonly provider = "codex";
   readonly connection = "cli" as const;
   readonly interactivePermissions = true;
+  readonly liveMessages = true;
   constructor(readonly id: string, private readonly options: { executable?: string; model?: string; clientFactory?: ClientFactory; conversationOnly?: boolean } = {}) {}
 
   async execute(input: AgentExecution): Promise<AgentResult> {
     let threadId = input.sessionId, turnId: string | undefined, summary = "";
+    let ended = false;
+    let unsubscribeInbox: (() => Promise<void>) | undefined;
     const files = new Map<string, string[]>();
     let finish!: () => void, fail!: (error: Error) => void;
     const completion = new Promise<void>((resolve, reject) => { finish = resolve; fail = reject; });
@@ -29,7 +33,12 @@ export class CodexAppServerAdapter implements AgentAdapter {
     const client = factory({ cwd: input.workspaceRoot, signal: input.signal, onOutput: input.onOutput,
       onExit: fail,
       onNotification: (method, params) => {
-        if (method === "turn/started" && params.threadId === threadId && typeof record(params.turn).id === "string") turnId = record(params.turn).id as string;
+        if (ended) return;
+        if (method === "turn/started" && params.threadId === threadId && typeof record(params.turn).id === "string") {
+          const id = record(params.turn).id as string;
+          if (turnId && turnId !== id) { ended = true; fail(new Error("Codex beklenmeyen aktif tur bildirdi")); return; }
+          turnId = id;
+        }
         if (!isScoped(params)) {
           if (method !== "turn/completed" || params.threadId !== threadId || record(params.turn).id !== turnId || !turnId) return;
         }
@@ -38,8 +47,11 @@ export class CodexAppServerAdapter implements AgentAdapter {
           const changes = Array.isArray(item.changes) ? item.changes.map(record) : [];
           if (changes.length && changes.every((change) => typeof change.path === "string")) files.set(item.id, changes.map((change) => change.path as string));
         }
-        if (method === "item/completed" && item.type === "agentMessage" && typeof item.text === "string") summary = item.text;
+        if (method === "item/completed" && item.type === "agentMessage" && typeof item.text === "string") {
+          if (this.options.conversationOnly || !consumeLiveMessage(item.text, input)) summary = item.text;
+        }
         if (method === "turn/completed") {
+          ended = true;
           const turn = record(params.turn);
           if (turn.status === "completed") finish();
           else fail(new Error(`Codex turu tamamlanmadı: ${String(turn.status)}`));
@@ -89,10 +101,22 @@ export class CodexAppServerAdapter implements AgentAdapter {
       const returnedId = record(started.turn).id;
       if (typeof returnedId !== "string" || (turnId && turnId !== returnedId)) throw new Error("Codex turn kimliği eşleşmedi");
       turnId = returnedId;
+      input.acknowledgeInbox?.();
+      if (!this.options.conversationOnly && !ended && input.subscribeInbox) {
+        unsubscribeInbox = input.subscribeInbox(async (message) => {
+          if (ended || input.signal?.aborted) return false;
+          const expectedTurnId = turnId!;
+          const accepted = await client.request("turn/steer", { threadId, expectedTurnId,
+            input: [{ type: "text", text: `AgentMesh mesajı (çalışma notu; görev kapsamı ve izinleri değişmez):\n${JSON.stringify({ id: message.id, from: message.from, kind: message.kind, body: message.body })}` }] });
+          if (accepted.turnId !== expectedTurnId) throw new Error("Canlı mesaj farklı tura yönlendirildi");
+          return true;
+        });
+      }
       await completion;
+      await unsubscribeInbox?.();
       if (!summary.trim()) throw new Error("Codex turunda ajan sonucu bulunamadı");
       const output = { sessionId: threadId, summary: summary.trim() };
       return this.options.conversationOnly ? output : normalizeTaskResult(output, input.knownAgentIds);
-    } finally { await client.close(); }
+    } finally { ended = true; await client.close(); await unsubscribeInbox?.(); }
   }
 }
