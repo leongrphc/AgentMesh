@@ -167,7 +167,18 @@ async function createWindow() {
         } }, 50);
       })`);
       const root = resolve("dist");
+      await window.webContents.executeJavaScript(`(() => {
+        const reports = document.querySelector('.task-detail .test-reports');
+        if (!reports?.textContent.includes('Çalıştırılmadı') || !reports.textContent.includes('bağımsız olarak çalıştırmadı')) {
+          throw new Error('Test raporu veya kaynak açıklaması gösterilmedi');
+        }
+      })()`);
       mkdirSync(root, { recursive: true });
+      await window.webContents.executeJavaScript(`(async () => {
+        document.querySelector('.task-detail .test-reports').scrollIntoView({ block: 'center' });
+        await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+      })()`);
+      writeFileSync(join(root, "desktop-test-reports.png"), (await window.capturePage()).toPNG());
       writeFileSync(join(root, "desktop-smoke.png"), (await window.capturePage()).toPNG());
       await window.webContents.executeJavaScript(`document.querySelector('.file-workspace').scrollIntoView()`);
       writeFileSync(join(root, "desktop-editor.png"), (await window.capturePage()).toPNG());

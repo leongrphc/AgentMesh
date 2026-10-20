@@ -64,6 +64,15 @@ export interface AgentResult {
   sessionId?: string;
   facts?: ReadonlyArray<{ key: string; value: string }>;
   messages?: ReadonlyArray<Pick<AgentMessage, "to" | "kind" | "body">>;
+  tests?: TestReport[];
+}
+
+/** Agent-reported evidence, never an independent verification by AgentMesh. */
+export interface TestReport {
+  name: string;
+  status: "passed" | "failed" | "not_run";
+  command?: string;
+  details?: string;
 }
 
 export interface AgentAdapter {
@@ -88,6 +97,8 @@ export interface TaskRecord extends AgentTask {
   worktree?: { path: string; branch: string };
   review?: { digest: string; result: AgentResult };
   integratedCommit?: string;
+  tests?: TestReport[];
+  testDigest?: string;
 }
 
 export type DomainEvent =
@@ -98,7 +109,7 @@ export type DomainEvent =
   | { type: "permission.resolved"; projectId: string; taskId: string; executionId: string; requestId: string; decision: PermissionDecision; source: PermissionSource }
   | { type: "task.created"; task: AgentTask }
   | { type: "task.started"; projectId: string; taskId: string }
-  | { type: "task.completed"; projectId: string; taskId: string; summary: string }
+  | { type: "task.completed"; projectId: string; taskId: string; summary: string; tests?: TestReport[] }
   | { type: "task.failed"; projectId: string; taskId: string; error: string }
   | { type: "task.blocked"; projectId: string; taskId: string }
   | { type: "task.interrupted"; projectId: string; taskId: string }
@@ -106,7 +117,7 @@ export type DomainEvent =
   | { type: "task.retried"; projectId: string; taskId: string }
   | { type: "task.session.saved"; projectId: string; taskId: string; sessionId: string }
   | { type: "task.worktree.prepared"; projectId: string; taskId: string; path: string; branch: string }
-  | { type: "task.review.requested"; projectId: string; taskId: string; digest: string; result: AgentResult }
+  | { type: "task.review.requested"; projectId: string; taskId: string; digest: string; result: AgentResult; testDigest?: string }
   | { type: "task.review.approved"; projectId: string; taskId: string; digest: string; commit: string }
   | { type: "context.updated"; projectId: string; fact: Fact }
   | { type: "message.sent"; projectId: string; message: AgentMessage };

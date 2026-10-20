@@ -2,6 +2,7 @@ import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { TaskForm, TaskGraph } from "./task-board.js";
 import { AgentCenter } from "./agent-center.js";
+import { TestReports } from "./test-reports.js";
 import type { DesktopAPI, DesktopState, DesktopReview } from "../src/desktop/contracts.js";
 import type { TaskStatus } from "../src/core/contracts.js";
 import "./style.css";
@@ -25,13 +26,14 @@ function ReviewDialog({ review, onClose, onRefresh, onApprove, pending, error }:
     <div className="review-content">
       {error && <p className="task-error" role="alert">{error}</p>}
       <p className="review-digest">SHA-256 <code>{inspection.digest}</code></p>
+      <TestReports reports={review.tests} stale={review.testsStale} />
       {!!inspection.violations.length && <p className="task-error">İzin dışı dosyalar: {inspection.violations.join(", ")}</p>}
       {!review.canApprove && <p className="review-warning">Bu görünüm onaylanamaz. Görev durumu, dosya kapsamı veya beklenen değişiklikler farklı olabilir. Değişiklikleri kontrol edip incelemeyi yenileyin. Commit edilmiş bir çakışma varsa görev branch’ini CLI üzerinden inceleyin.</p>}
       <h3>Değişen dosyalar · {inspection.changedPaths.length}</h3>
       <ul className="changed-files">{inspection.changedPaths.map((path) => <li key={path}><code>{path}</code></li>)}</ul>
       {inspection.trackedDiff && <><h3>Takip edilen dosyalar</h3><pre className="diff">{inspection.trackedDiff}</pre></>}
       {inspection.untrackedPreviews.map((file) => <section key={file.path}><h3>Yeni dosya: {file.path}</h3>{file.truncated && <p className="review-warning">Önizleme kısaltıldı. Dosyanın tamamını çalışma alanında inceleyin.</p>}{file.binary && <p className="review-warning">İkili dosya; çalışma alanında ayrıca inceleyin.</p>}<pre className="diff">{file.preview}</pre></section>)}
-      <p className="review-warning">Test kanıtı görev sonucunda yer alır; bu ekran test çalıştırmaz. Onaylanan kod ayrı entegrasyon dalına birleştirilir.</p>
+      <p className="review-warning">Bu ekran test çalıştırmaz. Onaylanan kod ayrı entegrasyon dalına birleştirilir.</p>
     </div>
     <div className="review-actions"><button disabled={pending} onClick={onRefresh}>İncelemeyi yenile</button><button className="primary" disabled={pending || !review.canApprove} onClick={onApprove}>Onayla ve birleştir</button></div>
   </dialog>;
@@ -121,6 +123,7 @@ function App() {
         </div><aside className="task-detail">{task && <><div className="eyebrow">SEÇİLİ GÖREV</div><h3>{task.title}</h3><code>{task.id}</code><p>{task.instruction}</p>
           <dl><dt>Ajan</dt><dd>{task.agentId}</dd><dt>Durum</dt><dd>{labels[task.status]}</dd><dt>Dosya kapsamı</dt><dd>{task.allowedPaths.join(", ") || "Demo"}</dd></dl>
           {task.summary && <div className="result"><b>Sonuç</b><p>{task.summary}</p></div>}
+          {!!task.tests?.length && <TestReports reports={task.tests} stale={!!task.review && task.testDigest !== task.review.digest} />}
           {task.error && <p className="task-error">{task.error}</p>}
           {task.status === "pending_review" && <p className="review-note">Bağımlı görevler değişiklikler onaylandıktan sonra başlayabilir.</p>}
           <div className="detail-actions">{["running", "pending"].includes(task.status) && <button disabled={pending} onClick={() => act(() => api.cancel(task.id))}>Görevi iptal et</button>}

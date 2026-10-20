@@ -18,6 +18,7 @@ import type { WorktreeManager } from "./worktrees.js";
 import type { AgentConfig } from "./config.js";
 import { validate } from "./config.js";
 import { validateAgentEdit } from "./agent-settings.js";
+import { normalizeTestReports } from "./test-reports.js";
 
 export interface ProjectSnapshot {
   project: Project;
@@ -147,7 +148,7 @@ export class Orchestrator {
       project: { ...project },
       tasks: [...this.tasks.values()]
         .filter((task) => task.projectId === projectId)
-        .map((task) => ({ ...task, dependsOn: [...task.dependsOn], allowedPaths: [...task.allowedPaths] })),
+        .map((task) => structuredClone(task)),
       context: Object.fromEntries(this.facts.get(projectId) ?? []),
       messages: this.messages.filter((message) => message.projectId === projectId).map((x) => ({ ...x })),
     };
@@ -173,7 +174,7 @@ export class Orchestrator {
     if (!inspection.changedPaths.length) throw new Error("İncelenecek değişiklik yok; commit edilmiş branch'i CLI üzerinden inceleyin");
     if (inspection.violations.length) throw new Error(`İzin dışı dosyalar: ${inspection.violations.join(", ")}`);
     this.emit({ type: "task.review.requested", projectId: task.projectId, taskId,
-      digest: inspection.digest, result: task.review.result });
+      digest: inspection.digest, result: task.review.result, testDigest: task.testDigest });
   }
 
   /** A human approval must supply the exact digest from a review preview. */
@@ -281,6 +282,7 @@ export class Orchestrator {
         }),
       });
       if (controller.signal.aborted || this.requireTask(task.id).status === "cancelled") return;
+      output.tests = normalizeTestReports(output.tests);
       if (output.sessionId && this.requireTask(task.id).sessionId !== output.sessionId) this.emit({
         type: "task.session.saved", projectId: task.projectId, taskId: task.id, sessionId: output.sessionId,
       });
@@ -293,6 +295,7 @@ export class Orchestrator {
           this.emit({
             type: "task.review.requested", projectId: task.projectId, taskId: task.id,
             digest: inspection.digest, result: output,
+            testDigest: output.tests?.length ? inspection.digest : undefined,
           });
           return;
         }
@@ -351,7 +354,8 @@ export class Orchestrator {
           sourceTaskId: task.id, updatedAt: new Date().toISOString(),
         },
       });
-      events.push({ type: "task.completed", projectId: task.projectId, taskId: task.id, summary: output.summary });
+      events.push({ type: "task.completed", projectId: task.projectId, taskId: task.id, summary: output.summary,
+        tests: normalizeTestReports(output.tests) });
       return events;
   }
 
@@ -399,6 +403,7 @@ export class Orchestrator {
         task.summary = event.summary;
         task.error = undefined;
         task.review = undefined;
+        task.tests = structuredClone(event.tests);
         break;
       }
       case "task.failed": {
@@ -422,6 +427,8 @@ export class Orchestrator {
         task.error = undefined;
         task.summary = undefined;
         task.review = undefined;
+        task.tests = undefined;
+        task.testDigest = undefined;
         break;
       }
       case "task.session.saved":
@@ -435,6 +442,8 @@ export class Orchestrator {
         task.status = "pending_review";
         task.summary = event.result.summary;
         task.review = { digest: event.digest, result: event.result };
+        task.tests = structuredClone(event.result.tests);
+        task.testDigest = event.testDigest;
         break;
       }
       case "task.review.approved":

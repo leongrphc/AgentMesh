@@ -88,6 +88,8 @@ Orkestratör journal'ındaki temel olaylar: `project.created`, `task.created`, `
 
 ## Doğrulama ilkeleri
 
+Sürüm 1 sonuç zarfı isteğe bağlı `tests` dizisi kabul eder (en fazla 32 kayıt). Her kayıtta `name` ve `status` (`passed`, `failed`, `not_run`), isteğe bağlı `command` ve `details` bulunur. Bunlar **ajanın beyan ettiği** test sonuçlarıdır; AgentMesh bağımsız test çalıştırdığı iddiasında bulunmaz. Alanlar doğrulanır ve tanılama filtresinden geçer. Raporlar `task.review.requested` veya `task.completed` ile kalıcıdır. Dosya değiştiren görevin test raporu ilk diff digest'ine bağlıdır; inceleme yenilense de bu bağ korunur ve farklı dosya içeriğinde rapor eski olarak gösterilir. Rapor eksikliği veya `not_run` başarılı test sayılmaz; başarısız test raporu kodun insan incelemesini engellemez veya otomatik onay oluşturmaz.
+
 - Proje ID'si var olmalı, görev ID'si benzersiz olmalı, bağımlılıklar aynı projeden olmalı.
 - Görevler bağımlılık tamamlanmadan başlamamalı; başarısız bağımlı görevleri bekletmeli.
 - Kullanıcı veya yönetici tarafından alınan görev kararı JSON şemasına göre doğrulanmalı.

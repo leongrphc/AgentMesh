@@ -7,3 +7,5 @@ Görev tanımları, sonuçlar, context, mesajlar, session ve review verileri ça
 `npm run live -- --config agentmesh.config.json --diagnostics` yalnızca sürümlü olay sayıları raporunu stdout'a yazar. Kullanıcı/sağlayıcı metni, kimlikler, zamanlar, yollar ve oturumlar rapora alınmaz; eski kayıtlarda maskeleme dışında kalan sırlar da bu yolla dışa aktarılmaz. Rapor çalışma verilerinin yerine geri yüklenemez. Ham journal, review ve execute çıktıları destek raporu değildir.
 
 Retention, disk şifreleme ve credential store entegrasyonu CORE-012 / ORCH-003 kapsamındadır.
+
+Yapılandırılmış test raporlarının ad/komut/açıklama alanları tanılama verisi sayılır; kalıcı kayıttan önce bilinen sır/e-posta biçimleri maskelenir ve alan başına 2048 karakterle sınırlandırılır. Test komutu görüntülenen metindir, uygulama tarafından çalıştırılmaz.

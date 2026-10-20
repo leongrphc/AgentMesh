@@ -103,7 +103,7 @@ test("desktop reloads real worktree review, rejects stale approval and integrate
     engine.createProject({ id: "p", workspaceRoot: f.repo });
     engine.registerAgent({ id: "a", provider: "test", connection: "cli", async execute({ workspaceRoot }) {
       writeFileSync(join(workspaceRoot, "src", "feature.txt"), "review me\n");
-      return { summary: "Test fixture prepared" };
+      return { summary: "Test fixture prepared", tests: [{ name: "Fixture check", status: "passed", command: "fixture-check" }] };
     } });
     const definition = task("feature", "a", ["src/feature.txt"]);
     engine.addTask(definition);
@@ -116,6 +116,8 @@ test("desktop reloads real worktree review, rejects stale approval and integrate
     assert.equal(state.demo, false);
     const review = service.review("feature");
     assert.equal(review.canApprove, true);
+    assert.equal(review.tests?.[0]?.status, "passed");
+    assert.equal(review.testsStale, false);
     assert.match(review.inspection.untrackedPreviews[0]!.preview, /review me/);
     const worktree = state.snapshot.tasks[0]!.worktree!.path;
     const terminal = await service.openTerminal("feature", 90, 24);
@@ -132,12 +134,18 @@ test("desktop reloads real worktree review, rejects stale approval and integrate
     writeFileSync(join(worktree, "src", "feature.txt"), "changed after preview\n");
     assert.equal(service.review("feature").canApprove, false);
     assert.throws(() => service.approve("feature", review.inspection.digest), /değişmiş/);
+    assert.equal(service.review("feature").testsStale, true);
     const refreshed = service.review("feature", true);
     assert.equal(refreshed.canApprove, true);
+    assert.equal(refreshed.testsStale, true);
+    assert.equal(refreshed.tests?.[0]?.status, "passed");
     assert.notEqual(refreshed.inspection.digest, review.inspection.digest);
     assert.throws(() => service.approve("feature", review.inspection.digest), /eşleşmiyor/);
     service.approve("feature", refreshed.inspection.digest);
     assert.equal(service.state().snapshot.tasks[0]?.status, "completed");
+    assert.equal(service.state().snapshot.tasks[0]?.tests?.[0]?.name, "Fixture check");
+    await service.close();
+    assert.equal(service.openConfig(configPath).snapshot.tasks[0]?.tests?.[0]?.name, "Fixture check");
     assert.throws(() => service.openTerminal("feature", 80, 24), /durdurulmuş/);
     assert.throws(() => service.saveFile("feature", editable.path, "late edit", editable.digest), /durdurulmuş/);
     assert.equal(git(f.repo, "status", "--porcelain"), "");

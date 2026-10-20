@@ -1,7 +1,7 @@
 import type { ProjectSnapshot } from "../core/orchestrator.js";
 import type { WorktreeInspection } from "../core/worktrees.js";
 import type { WorkspaceEntry, WorkspaceFile } from "../core/workspace-files.js";
-import type { AgentTask } from "../core/contracts.js";
+import type { AgentTask, TestReport } from "../core/contracts.js";
 import type { PermissionRequest, PermissionDecision } from "../core/permissions.js";
 import type { ProviderHealth } from "../adapters/provider-health.js";
 import type { TerminalInfo, TerminalOutput } from "./terminals.js";
@@ -16,6 +16,8 @@ export interface DesktopReview {
   inspection: WorktreeInspection;
   canApprove: boolean;
   expectedDigest?: string;
+  tests?: TestReport[];
+  testsStale?: boolean;
 }
 
 export interface DesktopState {

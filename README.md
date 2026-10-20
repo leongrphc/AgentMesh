@@ -35,7 +35,7 @@ OpenCode etkileşimli izinleri için ajana `"transport": "server"` ekleyin veya 
 
 Gerçek proje için **Proje ayarlarını aç** ile `agentmesh.config.json` seçin; aşağıdaki CLI bölümündeki yapılandırma kullanılır. Gerçek çalıştırma ayrıca uygulama içinde açıkça başlatılır. Aynı proje CLI ile ortak SQLite günlüğünü kullanır; iki uygulama aynı anda yazamaz. Demo kayıtları Electron kullanıcı veri klasöründedir.
 
-Worktree oluşmuş bir görevi seçip **Değişiklikleri incele** ile diff ve yeni dosyaları görün. Bekleyen digest ile eşleşen değişiklikler **Onayla ve birleştir** ile ayrı entegrasyon dalına alınır. Ardından bağımlı görevleri başlatabilirsiniz. Diff değişmişse onay reddedilir; commit edilmiş merge conflict ve tam test raporları için şimdilik CLI incelemesi gerekir.
+Worktree oluşmuş bir görevi seçip **Değişiklikleri incele** ile diff, yeni dosyalar ve ajanın bildirdiği test raporlarını görün. Bekleyen digest ile eşleşen değişiklikler **Onayla ve birleştir** ile ayrı entegrasyon dalına alınır. Ardından bağımlı görevleri başlatabilirsiniz. Diff değişmişse onay reddedilir; commit edilmiş merge conflict için şimdilik CLI incelemesi gerekir.
 
 **Dosyalar** bölümü seçili görevin çalışma alanını gösterir. Worktree henüz oluşmamışsa proje kökü salt okunur açılır. Durdurulmuş görev worktree'sindeki kapsam içi UTF-8 dosyaları (en fazla 1 MiB) düzenlenebilir; disk üzerinde değişmiş dosyanın üzerine eski içerik yazılmaz. Kaydettikten sonra **İncelemeyi yenile** yeni digest üretir; onay ayrıca gerekir. Monaco/worker dosyaları yerel paket içindedir; CDN kullanılmaz. DOMPurify bağımlılığı audit düzeltmesi için `overrides` ile güncel yama sürümüne alınır.
 
@@ -45,7 +45,7 @@ Worktree oluşmuş bir görevi seçip **Değişiklikleri incele** ile diff ve ye
 
 **Antigravity** ve **Claude · API anahtarı** da mesaj testinde seçilebilir. `agentmesh.hybrid.example.json`, Antigravity plan → Codex uygulama → Claude review görev zinciridir; `repoPath` değerini kendi temiz Git deponuza göre ayarlayın. Görev sonuçları, ortak kararlar ve hedefli devir mesajları otomatik kaydedilip sonraki ajana aktarılır; dosya değişiklikleri insan digest onayından sonra yayınlanır. Antigravity gerçek selamlama yanıtıyla doğrulandı; Claude için `ANTHROPIC_API_KEY` gerekir. [Sağlayıcı yolları, araştırma ve kalan kabul işleri](docs/providers.md).
 
-Projeyi yeniden açarken veya CLI `--execute` öncesinde aynı görev kimliğinin kayıtlı tanımıyla config karşılaştırılır. Başlık, talimat, ajan, bağımlılık veya kapsam değişmişse alan adlarıyla hata gösterilir; orijinal tanımı geri yükleyin ya da yeni görev kimliği kullanın. Arayüzden eklenmiş görevler korunur; bunların ajanları config içinde bulunmalıdır. Ajan provider/model/transport geçmişini uzlaştırma ekranı henüz yoktur (CORE-013).
+Projeyi yeniden açarken veya CLI `--execute` öncesinde aynı görev kimliğinin kayıtlı tanımıyla config karşılaştırılır. Başlık, talimat, ajan, bağımlılık veya kapsam değişmişse alan adlarıyla hata gösterilir; orijinal tanımı geri yükleyin ya da yeni görev kimliği kullanın. Arayüzden eklenmiş görevler ve proje günlüğündeki ajan ayarları korunur. Kullanılmış ajanların provider/model/transport/rol değişikliği engellenir; ayrıntılı geçmiş uzlaştırma ekranı henüz yoktur (CORE-013).
 
 `npm run desktop:smoke`, görünür pencere açmadan gerçek Electron renderer/preload, Monaco'da dosya açma, PTY açma/komut/çıktı/boyutlandırma/kapatma, dört görevli demo ve formdan bağımlı beşinci görevi ekleyip çalıştırmayı doğrular; `dist/desktop-smoke.png`, `dist/desktop-editor.png` ve `dist/desktop-terminal.png` üretir. Pencere kapanırken kaydedilmemiş değişiklikler kontrol edilir, aktif işler ve terminaller kapatılır, SQLite kapatılır.
 
@@ -103,6 +103,8 @@ npm run live -- --config agentmesh.config.json --execute
 Worktree'ler `.../.agentmesh-worktrees/`, SQLite ise `.../.agentmesh-data/` altında tutulur. Onaylı kod **ayrı AgentMesh entegrasyon dalına** birleştirilir; yeni bağımlı görevler bu dalı temel alır. Kullanıcının ana dalına otomatik merge yapılmaz. Dosya değiştirmeyen görev sonuçları doğrudan ortak context'e aktarılır; değişiklik yapan görevlerin sonuçları onaya kadar bekler.
 
 ## Tasarım belgeleri
+
+Görev detayı ve değişiklik inceleme ekranında yapılandırılmış **Test raporları** gösterilir: başarılı, başarısız ve çalıştırılmadı. Bunlar ajanın bildirimidir; uygulama bağımsız test yürütmez. Dosyalar rapordan sonra değiştiyse incelemede eski rapor uyarısı görünür. İncelemeyi yenilemek testleri yeniden çalıştırmaz.
 
 - [Görev listesi ve devam notları](docs/TASKS.md): tamamlanan işler, açık kartlar, öncelikler ve ertesi gün başlangıç adımları.
 - [Sistem mimarisi](docs/architecture.md): bileşenler, hibrit bağlantılar, Git izolasyonu, veri modeli.

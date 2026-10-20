@@ -36,7 +36,7 @@ Codex, OpenCode, Claude, Antigravity ve diğer API modellerini **tek IDE içinde
 - [x] JSONL stdout/stderr ve journal olaylarını canlı `subscribe()` abonelerine iletme; CLI'da `--stream`.
 - [x] `AbortSignal`, `Ctrl+C`, kalıcı `cancelled`, geç gelen çıktının görev sonucunu tamamlamasını engelleme.
 - [x] Başarısız/iptal edilmiş/engellenmiş görevi `--retry TASK` ile açıkça yeniden kuyruğa alma.
-- [x] Mock ve yerel subprocess/Git worktree testleri; 20 Ekim doğrulaması **60/60 test**, `npm run typecheck` ve `npm run desktop:smoke` başarılı. Desktop smoke build, Electron/sandbox/preload, Monaco, gerçek PTY ve demo görevlerini kapsar. Native OpenCode TUI ve modelsiz yerel OpenCode Server protokol smoke önceki çalışmada doğrulandı.
+- [x] Mock ve yerel subprocess/Git worktree testleri; 20 Ekim doğrulaması **64/64 test**, `npm run typecheck` ve `npm run desktop:smoke` başarılı. Desktop smoke build, Electron/sandbox/preload, Monaco, gerçek PTY, ajan ayarları, test raporları ve demo görevlerini kapsar. Native OpenCode TUI ve modelsiz yerel OpenCode Server protokol smoke önceki çalışmada doğrulandı.
 
 ## Açık görevler — öncelik sırasıyla
 
@@ -76,7 +76,8 @@ Codex, OpenCode, Claude, Antigravity ve diğer API modellerini **tek IDE içinde
 - [x] **UI-005:** Shared Context ve ajan mesajlarını kaynak görevleriyle görünür kılma; masaüstü sekmeleri.
 - [ ] **UI-006:** Diff/test önizleme, SHA-256 onayı, merge conflict çözme/yeniden deneme ekranı.
   - [x] Gerçek task worktree diff/yeni dosya önizlemesi, izin ihlalleri, SHA-256 digest ve uygulama içinde açık onay; değiştirilmiş diff reddi için masaüstü servis entegrasyon testi. İnsan düzenlemesi sonrası açık inceleme yenileme yeni digest'i kaydeder; eski onay geçersiz kalır.
-  - [ ] Yapılandırılmış test raporları ve commit edilmiş merge conflict için tam diff/çözüm/yeniden deneme akışı. Mevcut ekran bu durumda CLI incelemesine yönlendirir; otomatik çözüm yapmaz.
+  - [x] Sonuç zarfında isteğe bağlı `tests`: başarılı/başarısız/çalıştırılmadı, komut ve açıklama; sınır ve şema kontrolü, tanılama maskelemesi. Görev detayı, diff inceleme ve CLI raporunda gösterilir; SQLite replay ile korunur. Bunlar ajan beyanıdır, bağımsız test yürütmesi değildir. Dosyalar değiştiğinde digest üzerinden eski rapor uyarısı gösterilir; incelemeyi yenilemek test raporunu güncellemez.
+  - [ ] Commit edilmiş merge conflict için tam diff/çözüm/yeniden deneme akışı. Mevcut ekran bu durumda CLI incelemesine yönlendirir; otomatik çözüm yapmaz.
 - [ ] **CORE-009:** Ajan çalışırken gelen mesajların canlı teslimi, inbox cursor ve idempotency.
 - [ ] **CORE-010:** İzinleri çalıştırma **öncesinde** zorlayabilecek süreç/OS sandbox politikası; `allowedPaths` şu an yalnızca çalıştırma sonrasında denetleniyor. Native sağlayıcı/araç alt süreç ağacının iptal ve kapanış garantileri ayrıca sınanmalı; sahipli ana sunucuyu kapatmak tek başına OS izolasyonu değildir.
 - [ ] **CORE-011:** Kalıcı, sürümlü context/karar yönetimi; çakışan kararlar için doğrulama ve ilgili context paketini seçme.
@@ -106,12 +107,12 @@ Codex, OpenCode, Claude, Antigravity ve diğer API modellerini **tek IDE içinde
 
 ## Devam ederken
 
-20 Ekim goal çalışması: UI-003 ajan ayarları ve CORE-013 kalıcı ajan bağlaması ilk adımı tamamlandı. **63/63 test**, TypeScript ve yeni ajan formunu kaydeden Electron smoke başarılı. Gerçek model çağrısı yapılmadı. Sırada UI-006 yapılandırılmış test raporları ve kalan inceleme akışı, CORE-009 canlı inbox ve UI-007 editör geliştirmeleri var.
+20 Ekim goal çalışması: UI-003 ajan ayarları, CORE-013 kalıcı ajan bağlaması ilk adımı ve UI-006 yapılandırılmış test raporları tamamlandı. **64/64 test**, TypeScript ve yeni ajan formu/test raporu görünümünü doğrulayan Electron smoke başarılı. Gerçek model çağrısı yapılmadı. Sırada UI-006 kalan inceleme akışı, CORE-009 canlı inbox ve UI-007 editör geliştirmeleri var.
 
 1. `D:\WebGpt` içinde `git status --short` ve `git log -5 --oneline` ile durumu kontrol et.
 2. `npm install` (gerekiyorsa), ardından `npm run typecheck` ve `npm test` çalıştır.
 3. Codex App Server ve OpenCode Server köprüleri tamamlandı; [permissions.md](permissions.md) desteklenen kapsamları açıklar. Varsayılan exec adaptörleri interaktif izin desteklemez. Modelsiz yerel kontrol: `npm run smoke:opencode`.
-4. Antigravity ve Claude API anahtarlı headless görev adaptörleri, ortak sonuç zarfı ve UI ajan ayarları eklendi. `agentmesh.hybrid.example.json` plan/uygulama/review zincirini gösterir. Sırada yapılandırılmış test raporları (UI-006), canlı inbox (CORE-009), editör (UI-007), ACP ve config revizyonları (CORE-013) var. Gerçek kod/araç/resume smoke'ları (CORE-008) hâlâ açık.
+4. Antigravity ve Claude API anahtarlı headless görev adaptörleri, ortak sonuç zarfı, test raporları ve UI ajan ayarları eklendi. `agentmesh.hybrid.example.json` plan/uygulama/review zincirini gösterir. Sırada kalan inceleme akışı (UI-006), canlı inbox (CORE-009), editör (UI-007), ACP ve config revizyonları (CORE-013) var. Gerçek kod/araç/resume smoke'ları (CORE-008) hâlâ açık.
 5. **Her tamamlanan geliştirmeyi ayrı Git commit'iyle kaydet.** Commit'ten önce ilgili testleri çalıştır; `docs/TASKS.md` kutularını güncelle. Kullanıcı istemedikçe otomatik push/deploy/ana dal dışı entegrasyon merge'i yapma.
 
 ### Faydalı komutlar

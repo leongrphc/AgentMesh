@@ -120,6 +120,8 @@ async function main(): Promise<void> {
       return {
         id: task.id, agentId: task.agentId, status: task.status,
         summary: task.summary, error: task.error, sessionId: task.sessionId,
+        tests: task.tests,
+        testsStale: !!task.tests?.length && !!changes && task.testDigest !== changes.digest,
         worktree: task.worktree,
         reviewDigest: task.review?.digest,
         changedPaths: changes?.changedPaths,

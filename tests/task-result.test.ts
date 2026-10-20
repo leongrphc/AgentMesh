@@ -17,3 +17,18 @@ test("structured output rejects foreign recipients, reserved keys, duplicates, b
     assert.throws(() => normalizeTaskResult({ summary: JSON.stringify({ ...envelope(), ...patch }) }, ["reviewer"]));
   }
 });
+
+test("structured test evidence validates statuses and bounds and redacts diagnostics", () => {
+  const tests = [{ name: "Unit tests", status: "passed", command: "npm test", details: "Result for user@example.com" },
+    { name: "Integration", status: "not_run", details: "Missing database" }, { name: "Lint", status: "failed" }];
+  const output = normalizeTaskResult({ summary: JSON.stringify({ ...envelope(), tests }) }, ["reviewer"]);
+  assert.equal(output.tests?.[0]?.status, "passed");
+  assert.equal(output.tests?.[1]?.status, "not_run");
+  assert.ok(!output.tests?.[0]?.details?.includes("user@example.com"));
+  for (const invalid of [null, {}, new Array(33).fill(tests[0]), [{ name: "x", status: "unknown" }],
+    [{ name: "x", status: ["passed"] }], [{ name: "", status: "passed" }],
+    [{ name: "x", status: "passed", command: "x".repeat(2001) }],
+    [{ name: "x", status: "passed", details: "x".repeat(8193) }]]) {
+    assert.throws(() => normalizeTaskResult({ summary: JSON.stringify({ ...envelope(), tests: invalid }) }), /Test|test/);
+  }
+});

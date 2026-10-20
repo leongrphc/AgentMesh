@@ -226,6 +226,7 @@ export class DesktopService {
       }
       await delay(1000, undefined, { signal: input.signal });
       return { summary: `${input.task.title} tamamlandı (demo).${permissionNote}`,
+        tests: [{ name: "Gerçek proje testleri", status: "not_run", details: "Demo yalnızca orkestrasyon akışını gösterir; proje testleri çalıştırılmadı." }],
         facts: [{ key: `${input.task.id}.result`, value: "Demo doğrulaması başarılı" }],
         messages: [{ to: "*", kind: "handoff", body: `${input.task.title} sonucu hazır.` }] };
     });
@@ -272,6 +273,7 @@ export class DesktopService {
     const lease = manager.reopen(this.config!.repoPath, task.worktree);
     const inspection = manager.inspect(lease.path, task.allowedPaths);
     return { taskId, title: task.title, inspection, expectedDigest: task.review?.digest,
+      tests: task.tests, testsStale: !!task.tests?.length && task.testDigest !== inspection.digest,
       canApprove: !this.running && !this.terminals.active && task.status === "pending_review" && !inspection.violations.length
         && inspection.changedPaths.length > 0 && inspection.digest === task.review?.digest };
   }

@@ -168,5 +168,6 @@ export function buildPrompt(input: AgentExecution): string {
     "Sonunda yapılan değişiklikleri ve test sonuçlarını kısaca açıkla.",
     `Projedeki mesaj alıcıları: ${JSON.stringify(input.knownAgentIds ?? [])}. Genel yayın alıcısı: *.`,
     'Son yanıtı şu JSON zarfıyla ver: {"agentmeshVersion":1,"summary":"Yapılanlar, doğrulananlar ve çalıştırılamayan testler","facts":[{"key":"karar.anahtari","value":"Karar veya sonuç"}],"messages":[{"to":"*","kind":"handoff","body":"Sonraki ajana aktarılacak bilgi"}]}. Facts ve messages boş dizi olabilir. task. ve system. ile başlayan anahtarlar ayrılmıştır.',
+    'Testleri isteğe bağlı "tests" dizisiyle raporla (en fazla 32): {"name":"Birim testleri","status":"passed|failed|not_run","command":"npm test","details":"Sonuç veya çalıştırılamama nedeni"}. Yalnızca gerçekten çalıştırıp başarılı gördüğün testlere passed yaz; çalıştırılmayanları not_run olarak belirt.',
   ].join("\n\n");
 }

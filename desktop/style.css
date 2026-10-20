@@ -110,6 +110,17 @@
 .provider-test label { display: flex; flex-direction: column; gap: 7px; font-size: 12px; margin-bottom: 12px; }
 .provider-test-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 .agent-settings-fields { border: 0; padding: 0; margin: 0; min-width: 0; }
+.test-reports { margin: 20px 0; font-size: 12px; line-height: 1.7; }
+.test-reports h3 { font-size: 14px; margin-bottom: 8px; }
+.test-reports>p { color: var(--muted); }
+.test-reports ul { padding: 0; list-style: none; }
+.test-reports li { padding: 12px 0; border-bottom: 1px solid var(--line); overflow-wrap: anywhere; }
+.test-report-heading { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px; }
+.test-report-status.passed { color: var(--teal); }
+.test-report-status.failed { color: #f0a9a3; }
+.test-report-status.not_run { color: var(--gold); }
+.test-reports code { display: block; white-space: pre-wrap; overflow-wrap: anywhere; margin-top: 6px; }
+.test-reports li p { white-space: pre-wrap; margin-top: 6px; }
 .agent-settings-fields:disabled { opacity: .65; }
 .agent-settings-fields label { min-width: 0; }
 .agent-settings [role="status"],.agent-card dd { overflow-wrap: anywhere; }

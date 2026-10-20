@@ -1,5 +1,6 @@
 import type { AgentResult } from "../core/contracts.js";
 import { record } from "./jsonl-rpc.js";
+import { normalizeTestReports } from "../core/test-reports.js";
 
 /** Versioned handoff envelope; ordinary prose remains a valid summary. */
 export function normalizeTaskResult(base: AgentResult, recipients?: readonly string[]): AgentResult {
@@ -26,5 +27,6 @@ export function normalizeTaskResult(base: AgentResult, recipients?: readonly str
       || typeof message.body !== "string" || !message.body.trim() || message.body.length > 16384) throw new Error("Geçersiz ajan mesajı veya proje dışı alıcı");
     return { to: message.to, kind: message.kind as "handoff" | "question" | "progress", body: message.body };
   });
-  return { summary: value.summary.trim(), sessionId: base.sessionId, facts, messages };
+  const tests = normalizeTestReports(value.tests);
+  return { summary: value.summary.trim(), sessionId: base.sessionId, facts, messages, ...(tests ? { tests } : {}) };
 }
