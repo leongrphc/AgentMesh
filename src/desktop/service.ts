@@ -192,7 +192,7 @@ export class DesktopService {
     this.abort = new AbortController();
     // Defer execution so busy is visible before the first synchronous domain event.
     this.running = Promise.resolve().then(() => this.engine!.run(this.config!.projectId,
-      this.state().maxParallel, this.abort!.signal)).then(() => {}, (error: unknown) => {
+      this.state().maxParallel, this.abort!.signal, false)).then(() => {}, (error: unknown) => {
         this.events.push({ at: new Date().toISOString(), text: safeLog(String(error)) });
       }).finally(() => { this.running = undefined; this.abort = undefined; this.publish(); });
     this.publish();

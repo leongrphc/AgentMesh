@@ -30,6 +30,7 @@ import { validateContextKeys } from "./context.js";
 import { prepareContext } from "./context-package.js";
 import { historyPage } from "./history-page.js";
 import { eventStream } from "./journal.js";
+import { materializeHistory } from "./materialize-history.js";
 
 export interface ProjectSnapshot {
   project: Project;
@@ -62,8 +63,12 @@ export class Orchestrator {
   private readonly controllers = new Map<string, AbortController>();
   private readonly subscribers = new Set<(notice: OrchestratorNotice) => void>();
   private readonly permissions: PermissionBroker;
+  private readonly diskHistory: boolean;
+  private readonly packageCounts = new Map<string, number>();
+  private readonly resolvedCounts = new Map<string, number>();
 
   constructor(private readonly journal: EventStore, private readonly worktrees?: WorktreeManager) {
+    this.diskHistory = !!(journal.scan && journal.contextHistoryPage && journal.contextPackagesPage && journal.resolvedContextPage);
     this.permissions = new PermissionBroker((event) => this.emit(event));
     const unresolved = new Map<string, Extract<DomainEvent, { type: "permission.requested" }>>();
     for (const { payload } of eventStream(journal)) {
@@ -179,8 +184,8 @@ export class Orchestrator {
 
   historyCounts(projectId: string) {
     if (!this.projects.has(projectId)) throw new Error("Proje bulunamadı");
-    return { resolvedDecisions: this.resolvedContext.get(projectId)?.length ?? 0,
-      contextPackages: Object.fromEntries([...this.tasks.values()].filter(task => task.projectId === projectId).map(task => [task.id, task.contextPackages?.length ?? 0])) };
+    return { resolvedDecisions: this.resolvedCounts.get(projectId) ?? 0,
+      contextPackages: Object.fromEntries([...this.tasks.values()].filter(task => task.projectId === projectId).map(task => [task.id, this.packageCounts.get(task.id) ?? 0])) };
   }
 
   resolvedContextPage(projectId: string, before?: number) {
@@ -199,18 +204,19 @@ export class Orchestrator {
   snapshot(projectId: string, includeHistory = true): ProjectSnapshot {
     const project = this.projects.get(projectId);
     if (!project) throw new Error(`Proje bulunamadı: ${projectId}`);
+    const history = includeHistory && this.diskHistory ? materializeHistory(this.journal, projectId) : undefined;
     return {
       project: { ...project },
       tasks: [...this.tasks.values()]
         .filter((task) => task.projectId === projectId)
         .map((task) => {
-          if (includeHistory) return structuredClone(task);
+          if (includeHistory) return structuredClone({ ...task, ...(history?.packages.has(task.id) ? { contextPackages: history.packages.get(task.id) } : {}) });
           const { contextPackages: _packages, ...current } = task;
           return structuredClone(current);
         }),
       context: structuredClone(Object.fromEntries(this.facts.get(projectId) ?? [])),
-      contextHistory: includeHistory ? structuredClone(Object.fromEntries(this.factHistory.get(projectId) ?? [])) : {},
-      contextConflicts: structuredClone([...this.contextConflicts.get(projectId)?.values() ?? []].filter(conflict => includeHistory || conflict.status === "pending")),
+      contextHistory: history?.facts ?? (includeHistory ? structuredClone(Object.fromEntries(this.factHistory.get(projectId) ?? [])) : {}),
+      contextConflicts: history?.conflicts ?? structuredClone([...this.contextConflicts.get(projectId)?.values() ?? []].filter(conflict => includeHistory || conflict.status === "pending")),
       messages: this.messages.filter((message) => message.projectId === projectId).map((x) => ({ ...x })),
       deliveries: [...this.deliveries.values()].filter((delivery) => this.tasks.get(delivery.taskId)?.projectId === projectId).map((delivery) => ({ ...delivery })),
       inboxes: [...this.tasks.values()].filter((task) => task.projectId === projectId).map((task) => {
@@ -329,7 +335,7 @@ export class Orchestrator {
     return commit;
   }
 
-  async run(projectId: string, maxParallel = this.projects.get(projectId)?.maxParallel ?? 2, signal?: AbortSignal): Promise<ProjectSnapshot> {
+  async run(projectId: string, maxParallel = this.projects.get(projectId)?.maxParallel ?? 2, signal?: AbortSignal, includeHistory = true): Promise<ProjectSnapshot> {
     if (!Number.isInteger(maxParallel) || maxParallel < 1) throw new Error("maxParallel >= 1 olmalı");
     if (!this.projects.has(projectId)) throw new Error(`Proje bulunamadı: ${projectId}`);
     const cancelRemaining = () => {
@@ -345,20 +351,20 @@ export class Orchestrator {
       while (true) {
         if (signal?.aborted) break;
         if ([...this.contextConflicts.get(projectId)?.values() ?? []].some((conflict) => conflict.status === "pending")) break;
-        const tasks = this.snapshot(projectId).tasks;
+        const tasks = this.snapshot(projectId, false).tasks;
         for (const task of tasks.filter((item) => item.status === "pending")) {
           if (task.dependsOn.some((id) => {
             const status = this.requireTask(id).status;
             return status === "failed" || status === "blocked" || status === "needs_review" || status === "cancelled";
           })) this.emit({ type: "task.blocked", projectId, taskId: task.id });
         }
-        const available = this.snapshot(projectId).tasks.filter((task) =>
+        const available = this.snapshot(projectId, false).tasks.filter((task) =>
           task.status === "pending" && task.dependsOn.every((id) => this.requireTask(id).status === "completed"),
         );
         if (available.length === 0) break;
         await Promise.all(available.slice(0, maxParallel).map((task) => this.runTask(task)));
       }
-      return this.snapshot(projectId);
+      return this.snapshot(projectId, includeHistory);
     } finally {
       signal?.removeEventListener("abort", cancelRemaining);
     }
@@ -368,7 +374,7 @@ export class Orchestrator {
     if (this.requireTask(task.id).status !== "pending") return;
     const adapter = this.adapters.get(task.agentId);
     if (!adapter) throw new Error(`Ajan kayıtlı değil: ${task.agentId}`);
-    const snapshot = this.snapshot(task.projectId);
+    const snapshot = this.snapshot(task.projectId, false);
     let controller: AbortController | undefined;
     const executionId = randomUUID();
     let permissionEnd: "execution_ended" | "disconnect" = "execution_ended";
@@ -585,7 +591,8 @@ export class Orchestrator {
         break;
       case "task.context.prepared": {
         const task = this.requireTask(event.taskId);
-        (task.contextPackages ??= []).push(structuredClone(event.package));
+        this.packageCounts.set(task.id, (this.packageCounts.get(task.id) ?? 0) + 1);
+        if (!this.diskHistory) (task.contextPackages ??= []).push(structuredClone(event.package));
         break;
       }
       case "task.completed": {
@@ -649,13 +656,15 @@ export class Orchestrator {
         break;
       case "context.updated": {
         const facts = this.facts.get(event.projectId) ?? new Map<string, Fact>();
-        const history = this.factHistory.get(event.projectId) ?? new Map<string, Fact[]>();
-        const versions = history.get(event.fact.key) ?? [];
-        const fact = { ...event.fact, revision: versions.length + 1 };
-        versions.push(fact); history.set(fact.key, versions);
+        const fact = { ...event.fact, revision: (facts.get(event.fact.key)?.revision ?? 0) + 1 };
+        if (!this.diskHistory) {
+          const history = this.factHistory.get(event.projectId) ?? new Map<string, Fact[]>();
+          const versions = history.get(event.fact.key) ?? [];
+          versions.push(fact); history.set(fact.key, versions);
+          this.factHistory.set(event.projectId, history);
+        }
         facts.set(fact.key, fact);
         this.facts.set(event.projectId, facts);
-        this.factHistory.set(event.projectId, history);
         break;
       }
       case "context.conflict.created": {
@@ -666,6 +675,11 @@ export class Orchestrator {
       }
       case "context.conflict.resolved": {
         const conflict = this.contextConflicts.get(event.projectId)!.get(event.conflictId)!;
+        this.resolvedCounts.set(event.projectId, (this.resolvedCounts.get(event.projectId) ?? 0) + 1);
+        if (this.diskHistory) {
+          this.contextConflicts.get(event.projectId)!.delete(event.conflictId);
+          break;
+        }
         conflict.status = "resolved";
         conflict.resolution = { choice: event.choice, revision: event.revision, at: event.at };
         const resolved = this.resolvedContext.get(event.projectId) ?? [];

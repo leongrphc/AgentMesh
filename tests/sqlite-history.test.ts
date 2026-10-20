@@ -7,6 +7,7 @@ import { DatabaseSync } from "node:sqlite";
 import { Journal } from "../src/core/journal.js";
 import { SqliteJournal } from "../src/core/sqlite-journal.js";
 import { Orchestrator } from "../src/core/orchestrator.js";
+import { MockAgent } from "../src/adapters/mock.js";
 import type { DomainEvent } from "../src/core/contracts.js";
 
 test("indexed SQLite history matches replay pages, including interleaved projects and late resolutions", () => {
@@ -45,6 +46,8 @@ test("indexed SQLite history matches replay pages, including interleaved project
       }
     } finally { inspect.close(); }
     const diskEngine = new Orchestrator(db), replayEngine = new Orchestrator(memory);
+    assert.deepEqual(diskEngine.snapshot("p"), replayEngine.snapshot("p"));
+    assert.deepEqual(diskEngine.snapshot("other"), replayEngine.snapshot("other"));
     db.all = () => { throw new Error("History reads must not reload all events"); };
     for (const projectId of ["p", "other"]) for (const before of [undefined, 48, 28, 8, 1, 200]) {
       assert.deepEqual(diskEngine.contextHistoryPage(projectId, "contract' OR 1=1 --", before), replayEngine.contextHistoryPage(projectId, "contract' OR 1=1 --", before));
@@ -66,4 +69,42 @@ test("indexed SQLite history matches replay pages, including interleaved project
     db.close();
     assert.throws(() => db.resolvedContextPage("p"), /kapalı/);
   } finally { db.close(); rmSync(root, { recursive: true, force: true }); }
+});
+
+test("compact execution never rebuilds history, while explicit exports restore it from disk", async () => {
+  const root = mkdtempSync(join(tmpdir(), "mesh-compact-run-"));
+  const journal = new SqliteJournal(join(root, "events.sqlite"));
+  try {
+    journal.append({ type: "project.created", project: { id: "p", workspaceRoot: root } });
+    journal.append({ type: "task.created", task: { id: "t", projectId: "p", agentId: "a", title: "Task", instruction: "Task", dependsOn: [], allowedPaths: [] } });
+    for (let i = 0; i < 30; i++) journal.append({ type: "context.updated", projectId: "p", fact: { key: "contract", value: "accepted", sourceTaskId: "t", updatedAt: "2026-01-01" } });
+    const engine = new Orchestrator(journal);
+    const scan = journal.scan.bind(journal);
+    journal.scan = () => { throw new Error("Unexpected full scan"); };
+    engine.registerAgent(new MockAgent("a", input => {
+      assert.equal(input.context.contract?.revision, 30);
+      return { summary: "done", facts: [{ key: "contract", value: "proposal" }] };
+    }));
+    const compact = await engine.run("p", 2, undefined, false);
+    assert.equal(compact.tasks[0]!.status, "completed");
+    assert.equal(compact.contextConflicts.length, 1);
+    engine.resolveContext("p", compact.contextConflicts[0]!.id, 30, "accept");
+    assert.equal(engine.snapshot("p", false).context.contract?.revision, 31);
+    assert.equal(engine.snapshot("p", false).contextConflicts.length, 0);
+    assert.deepEqual(engine.historyCounts("p"), { resolvedDecisions: 1, contextPackages: { t: 1 } });
+    assert.equal(engine.resolvedContextPage("p").entries[0]!.proposal.value, "proposal");
+    assert.equal(engine.contextHistoryPage("p", "contract").entries[0]!.revision, 31);
+    assert.equal(engine.contextPackagesPage("p", "t").entries[0]!.entries[0]!.revision, 30);
+    assert.throws(() => engine.snapshot("p"), /Unexpected full scan/);
+    journal.scan = scan;
+    const full = engine.snapshot("p");
+    assert.equal(full.contextHistory.contract?.length, 31);
+    assert.equal(full.contextConflicts[0]!.status, "resolved");
+    assert.equal(full.tasks[0]!.contextPackages?.length, 1);
+    full.contextConflicts[0]!.proposal.value = "external mutation";
+    full.contextHistory.contract![0]!.value = "external mutation";
+    assert.equal(engine.snapshot("p").contextHistory.contract![0]!.value, "accepted");
+    assert.equal(engine.snapshot("p").contextConflicts[0]!.proposal.value, "proposal");
+    assert.deepEqual(new Orchestrator(journal).snapshot("p"), engine.snapshot("p"));
+  } finally { journal.close(); rmSync(root, { recursive: true, force: true }); }
 });

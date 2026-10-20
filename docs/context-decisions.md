@@ -80,3 +80,14 @@ SQLite `scan()` olayları sıra numarasıyla tek tek verir; çağrı tüketilmey
 Orkestratör durum ve çözümlenmemiş izinleri tek geçişte çıkarır. Tarama bittikten sonra belirsiz mesaj teslimleri, reddedilecek eski izinler ve kesintiye uğrayan görevler journal'a yazılır; okuma açıkken kurtarma yazımı yapılmaz. Tekrar açılış aynı kurtarma olaylarını çoğaltmaz. Masaüstü son olay listesini proje kapsamında SQL LIMIT 200 ile okur. Yapılandırma kontrolleri geçmiş dizilerini kopyalamayan kompakt snapshot kullanır.
 
 Bu değişiklik geçici tüm-olay dizilerini ve gereksiz geçmiş kopyalarını kaldırır; sürekli tutulan görev/mesaj/context projeksiyonlarını sabit bellekli hale getirmez. Journal açılışındaki toplam tarama hâlâ geçmiş uzunluğuyla artar. Bu yüzden checkpoint ve kanıtı koruyan arşivleme açık kalır. JSONL geliştirme deposu eski bellek tabanlı yolu destekler.
+
+
+## Context geçmişinin bellekte tutulması
+
+SQLite gibi akış taraması ve üç geçmiş sayfası okumasını destekleyen depolarda orkestratör eski context içeriklerini kalıcı projeksiyonda saklamaz. Her anahtarın son kabul edilmiş değeri/sürümü, yalnızca bekleyen öneriler, proje başına çözülen karar sayısı ve görev başına paket sayısı tutulur. Çözülen önerinin içeriği projeksiyondan çıkarılır; journal'da korunur. Paketler görev kaydına sürekli eklenmez; sayfalı okuma diske gider. JSONL ve bu okuma yetenekleri olmayan depolar önceki bellek tabanlı davranışı sürdürür.
+
+`snapshot(projectId, false)` tarihçe taramaz. Zamanlayıcı, ajan girdisi ve masaüstü çalıştırma sonucu bu kompakt yolu kullanır. Açıkça istenen tam `snapshot(projectId)` ve CLI çıktıları geçmişi proje kapsamında diskten yeniden oluşturur; kaynak önerilerin oluşturulma sırası, sürümler ve deneme paketleri eski tam snapshot ile aynıdır. Tam dışa aktarım büyük veri için geçici yüksek bellek kullanabilir; kullanıcı değişiklikleri depoya veya sonraki çıktıya yansımaz.
+
+Bu sınır context geçmişi içerikleri içindir. Görevler, güncel kararlar, bekleyen öneriler, mesajlar ve teslim kayıtları sayıları arttıkça bellek kullanmaya devam eder. Başlangıç tarama süresi hâlâ olay sayısına bağlıdır; checkpoint/arşivleme ve genel saklama politikası henüz tamamlanmadı.
+
+Doğrulama: SQLite ve bellek replay tam snapshot eşitliği; normal çalıştırma/karar çözümü sırasında tam taramayı yasaklayan test; kabul edilen yeni sürüm ve paket sayılarının doğrulanması; geçmişin yalnızca açık tam snapshot isteğinde yeniden kurulması; yeniden açılış ve dışarıdan değişiklik izolasyonu.
