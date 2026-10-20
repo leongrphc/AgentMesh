@@ -22,6 +22,7 @@ const api: DesktopAPI = {
   readFile: (taskId, path) => ipcRenderer.invoke("mesh:read-file", taskId, path),
   saveFile: (taskId, path, content, digest) => ipcRenderer.invoke("mesh:save-file", taskId, path, content, digest),
   createTask: (task) => ipcRenderer.invoke("mesh:create-task", task),
+  saveAgent: (agent) => ipcRenderer.invoke("mesh:save-agent", agent),
   setParallelism: (value) => ipcRenderer.invoke("mesh:parallelism", value),
   decidePermission: (requestId, executionId, digest, decision) => ipcRenderer.invoke("mesh:permission", requestId, executionId, digest, decision),
   checkAgents: () => ipcRenderer.invoke("mesh:check-agents"),

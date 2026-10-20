@@ -4,8 +4,16 @@ export interface Config {
   projectId: string;
   repoPath: string;
   maxParallel?: number;
-  agents: Array<{ id: string; provider: "codex" | "opencode" | "antigravity" | "claude"; model?: string; transport?: "exec" | "app-server" | "server" }>;
+  agents: AgentConfig[];
   tasks: AgentTask[];
+}
+
+export interface AgentConfig {
+  id: string;
+  provider: "codex" | "opencode" | "antigravity" | "claude";
+  model?: string;
+  role?: string;
+  transport?: "exec" | "app-server" | "server";
 }
 
 export function validate(config: Config): void {
@@ -17,8 +25,9 @@ export function validate(config: Config): void {
   }
   const registered = new Set<string>();
   for (const agent of config.agents) {
-    if (!agent || typeof agent.id !== "string" || !agent.id.trim() || !["codex", "opencode", "antigravity", "claude"].includes(agent.provider) || registered.has(agent.id)
-      || (agent.model !== undefined && typeof agent.model !== "string")
+    if (!agent || typeof agent.id !== "string" || !agent.id.trim() || agent.id.length > 200 || !["codex", "opencode", "antigravity", "claude"].includes(agent.provider) || registered.has(agent.id)
+      || (agent.model !== undefined && (typeof agent.model !== "string" || !agent.model.trim() || agent.model.length > 200))
+      || (agent.role !== undefined && (typeof agent.role !== "string" || !agent.role.trim() || agent.role.length > 2000))
       || (agent.transport !== undefined && !["exec", "app-server", "server"].includes(agent.transport))
       || (agent.transport === "app-server" && agent.provider !== "codex")
       || (agent.transport === "server" && (agent.provider !== "opencode" || (agent.model !== undefined && !/^[^/\s]+\/[^\s]+$/.test(agent.model))))) {

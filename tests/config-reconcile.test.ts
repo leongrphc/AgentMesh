@@ -39,7 +39,7 @@ test("desktop rejects drift before adding tasks, preserves UI tasks and previous
     assert.equal(service.state().snapshot.tasks.length, 2);
     assert.equal(service.state().snapshot.tasks[0]!.instruction, definition.instruction);
     save({ ...initial, agents: [initial.agents[0]!] });
-    assert.throws(() => service.openConfig(file), /ui-task.*b.*eksik/);
+    assert.throws(() => service.openConfig(file), /Config ajan ayarları kayıtlı sürümden farklı/);
     service.setParallelism(3);
     await service.close();
     save(initial); service.openConfig(file);

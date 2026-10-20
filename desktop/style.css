@@ -109,6 +109,12 @@
 .provider-test>p { font-size: 12px; line-height: 1.7; color: var(--muted); margin: 10px 0 16px; }
 .provider-test label { display: flex; flex-direction: column; gap: 7px; font-size: 12px; margin-bottom: 12px; }
 .provider-test-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.agent-settings-fields { border: 0; padding: 0; margin: 0; min-width: 0; }
+.agent-settings-fields:disabled { opacity: .65; }
+.agent-settings-fields label { min-width: 0; }
+.agent-settings [role="status"],.agent-card dd { overflow-wrap: anywhere; }
+.native-mode .agent-settings { display: none; }
+@media (max-width: 600px) { .agent-settings .provider-test-fields { grid-template-columns: 1fr; } }
 .provider-test input,.provider-test select,.provider-test textarea { color: #dce5ed; background: #1e2c38; border: 1px solid #465461; border-radius: 5px; padding: 9px; font: inherit; width: 100%; }
 .provider-test-actions { display: flex; align-items: center; gap: 12px; font-size: 12px; }
 .provider-test-actions small { margin-right: auto; }

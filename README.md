@@ -60,6 +60,8 @@ Demo akışı: mimar görevi → backend ile frontend **paralel** → reviewer. 
 
 ## Gerçek Codex/OpenCode CLI çalıştırma
 
+Ajan merkezindeki **Proje ajanları** formu ile ajan ekleyebilir; henüz çalışmamış ajanların sağlayıcı, bağlantı, model ve rol talimatını değiştirebilirsiniz. Ayarlar proje günlüğünde saklanır, CLI tarafından da okunur ve kaynak JSON dosyasını değiştirmez. Çalışma geçmişi bulunan ajanlar için farklı kimlikle yeni ajan ekleyin. Kaynak config'in ajan listesi kayıtlı kaynak veya etkin ayarlarla uyuşmazsa açılış reddedilir. CLI dry-run yalnızca kaynak dosyayı gösterir; kalıcı ayarlar gerçek işlem öncesinde çözülür.
+
 `agentmesh.config.example.json` dosyasını kopyalayıp **ilk commit'i yapılmış, temiz bir Git reposuna** göre `repoPath`, görevler ve `allowedPaths` desenlerini düzenleyin. Henüz Git başlatılmadıysa başka bir repo seçebilirsiniz.
 
 ```powershell

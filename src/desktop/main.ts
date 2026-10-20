@@ -5,6 +5,7 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { DesktopService } from "./service.js";
 import { safeLog } from "../core/safe-log.js";
 import type { TaskDraft } from "./contracts.js";
+import type { AgentConfig } from "../core/config.js";
 import type { ProviderMessageInput } from "../adapters/provider-message.js";
 
 protocol.registerSchemesAsPrivileged([{ scheme: "agentmesh", privileges: { standard: true, secure: true, supportFetchAPI: true } }]);
@@ -184,6 +185,27 @@ async function createWindow() {
           clearInterval(check); clearTimeout(timeout); resolve(true);
         } }, 50);
       })`);
+      await window.webContents.executeJavaScript(`(async () => {
+        const form = document.querySelector('[data-testid="agent-settings-form"]');
+        const set = (name, value, prototype) => {
+          const field = form.querySelector('[name="' + name + '"]');
+          Object.getOwnPropertyDescriptor(prototype, 'value').set.call(field, value);
+          field.dispatchEvent(new Event('input', { bubbles: true }));
+        };
+        set('agentId', 'smoke-agent', HTMLInputElement.prototype);
+        set('agentModel', 'demo-model', HTMLInputElement.prototype);
+        set('agentRole', 'Test kapsamını incele', HTMLTextAreaElement.prototype);
+        await new Promise(r => setTimeout(r, 100));
+        form.requestSubmit();
+        for (let i = 0; i < 100; i++) {
+          const state = await window.agentmesh.state();
+          const agent = state.agents.find(a => a.id === 'smoke-agent');
+          if (agent?.role === 'Test kapsamını incele' && agent?.model === 'demo-model'
+            && form.querySelector('[role="status"]')?.textContent.includes('kaydedildi')) return;
+          await new Promise(r => setTimeout(r, 50));
+        }
+        throw new Error('Ajan ayarları formu veya IPC kaydı doğrulanamadı');
+      })()`);
       writeFileSync(join(root, "desktop-agents.png"), (await window.capturePage()).toPNG());
       await window.webContents.executeJavaScript(`(async () => {
         const input = document.querySelector('[aria-label="Test mesajı"]');
@@ -326,6 +348,7 @@ app.whenReady().then(async () => {
     return service.saveFile(taskId as string, path as string, content as string, digest as string);
   });
   handle("mesh:create-task", (task) => service.createTask(task as TaskDraft));
+  handle("mesh:save-agent", (agent) => service.saveAgent(agent as AgentConfig));
   handle("mesh:parallelism", (value) => {
     if (typeof value !== "number") throw new Error("Geçersiz paralellik");
     service.setParallelism(value);

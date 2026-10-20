@@ -6,7 +6,8 @@ import { setTimeout as delay } from "node:timers/promises";
 import { SqliteJournal } from "../core/sqlite-journal.js";
 import { Orchestrator } from "../core/orchestrator.js";
 import { WorktreeManager } from "../core/worktrees.js";
-import { validate, reconcileTasks, type Config } from "../core/config.js";
+import { validate, reconcileTasks, type Config, type AgentConfig } from "../core/config.js";
+import { cleanAgent, resolveAgentSettings, validateAgentEdit } from "../core/agent-settings.js";
 import { MockAgent } from "../adapters/mock.js";
 import { configuredAdapter } from "../adapters/registry.js";
 import type { PermissionDecision } from "../core/permissions.js";
@@ -51,6 +52,7 @@ export class DesktopService {
   private journalPath?: string;
   private engine?: Orchestrator;
   private config?: Config;
+  private sourceAgents: AgentConfig[] = [];
   private demo = true;
   private running?: Promise<void>;
   private abort?: AbortController;
@@ -116,21 +118,11 @@ export class DesktopService {
     const reused = this.journalPath === normalized && this.journal;
     const journal = reused || new SqliteJournal(path);
     try {
+      const sourceAgents = structuredClone(config.agents);
+      config = resolveAgentSettings(config, journal.all());
       const engine = new Orchestrator(journal, new WorktreeManager());
       for (const agent of config.agents) {
-        engine.registerAgent(demo ? new MockAgent(agent.id, async (input) => {
-          input.onOutput?.({ channel: "stdout", data: { text: `${input.task.title} başladı` } });
-          let permissionNote = "";
-          if (input.task.id === "plan" && input.requestPermission) {
-            const decision = await input.requestPermission({ provider: "mock", sessionId: "demo-session", nativeRequestId: "demo-command",
-              kind: "command", description: "Demo: npm test için izin akışını dene. Gerçek komut çalıştırılmayacak." });
-            permissionNote = decision === "allow_once" ? " Demo izni verildi; gerçek komut çalıştırılmadı." : " Demo izni reddedildi; gerçek komut çalıştırılmadı.";
-          }
-          await delay(1000, undefined, { signal: input.signal });
-          return { summary: `${input.task.title} tamamlandı (demo).${permissionNote}`,
-            facts: [{ key: `${input.task.id}.result`, value: "Demo doğrulaması başarılı" }],
-            messages: [{ to: "*", kind: "handoff", body: `${input.task.title} sonucu hazır.` }] };
-        }) : configuredAdapter(agent));
+        engine.registerAgent(this.makeAdapter(agent, demo));
       }
       let existing;
       try { existing = engine.snapshot(config.projectId); }
@@ -141,11 +133,13 @@ export class DesktopService {
       const tasks = engine.snapshot(config.projectId).tasks;
       const reserved = journal.all().flatMap(({ payload }) => payload.type === "task.created" && payload.task.projectId !== config.projectId ? [payload.task.id] : []);
       for (const task of reconcileTasks(config, tasks, reserved)) engine.addTask(task);
+      engine.configureAgents(config.projectId, config.agents, sourceAgents);
       if (!reused) this.journal?.close();
       this.journal = journal;
       this.journalPath = normalized;
       this.engine = engine;
       this.config = config;
+      this.sourceAgents = sourceAgents;
       this.demo = demo;
       this.events = journal.all().filter(({ payload }) =>
         (payload.type === "project.created" ? payload.project.id : payload.type === "task.created" ? payload.task.projectId : payload.projectId) === config.projectId)
@@ -199,6 +193,42 @@ export class DesktopService {
       dependsOn: draft.dependsOn, allowedPaths: draft.allowedPaths, projectId: this.config!.projectId };
     validate({ ...this.config!, tasks: [...this.state().snapshot.tasks, task] });
     this.engine!.addTask(task);
+  }
+
+  saveAgent(draft: AgentConfig): void {
+    if (!this.config || !this.engine) throw new Error("Önce proje açın");
+    if (this.running || this.healthAbort || this.messageAbort) throw new Error("Ajan ayarlarından önce aktif işlemi bitirin");
+    this.requireClosedTerminals();
+    if (!draft || typeof draft !== "object" || Array.isArray(draft)) throw new Error("Geçersiz ajan");
+    // Pick only supported fields; credentials and renderer-supplied extras never enter the journal.
+    const agent = cleanAgent(draft);
+    const agents = this.config.agents.filter((item) => item.id !== agent.id).concat(agent);
+    const config = { ...this.config, agents, tasks: this.state().snapshot.tasks };
+    validate(config);
+    validateAgentEdit(this.config.agents, agent, config.tasks);
+    const adapter = this.makeAdapter(agent, this.demo);
+    this.engine.configureAgents(config.projectId, agents, this.sourceAgents);
+    this.engine.replaceAgent(adapter);
+    this.config = { ...this.config, agents };
+    delete this.health[agent.id];
+    this.publish();
+  }
+
+  private makeAdapter(agent: AgentConfig, demo: boolean) {
+    if (!demo) return configuredAdapter(agent);
+    return new MockAgent(agent.id, async (input) => {
+      input.onOutput?.({ channel: "stdout", data: { text: `${input.task.title} başladı` } });
+      let permissionNote = "";
+      if (input.task.id === "plan" && input.requestPermission) {
+        const decision = await input.requestPermission({ provider: "mock", sessionId: "demo-session", nativeRequestId: "demo-command",
+          kind: "command", description: "Demo: npm test için izin akışını dene. Gerçek komut çalıştırılmayacak." });
+        permissionNote = decision === "allow_once" ? " Demo izni verildi; gerçek komut çalıştırılmadı." : " Demo izni reddedildi; gerçek komut çalıştırılmadı.";
+      }
+      await delay(1000, undefined, { signal: input.signal });
+      return { summary: `${input.task.title} tamamlandı (demo).${permissionNote}`,
+        facts: [{ key: `${input.task.id}.result`, value: "Demo doğrulaması başarılı" }],
+        messages: [{ to: "*", kind: "handoff", body: `${input.task.title} sonucu hazır.` }] };
+    });
   }
 
   setParallelism(value: number): void {

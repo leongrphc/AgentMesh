@@ -8,6 +8,7 @@ import { configuredAdapter } from "./adapters/registry.js";
 import { validate, reconcileTasks, type Config } from "./core/config.js";
 import { diagnosticReport } from "./core/diagnostics.js";
 import { safeLog } from "./core/safe-log.js";
+import { resolveAgentSettings } from "./core/agent-settings.js";
 
 async function main(): Promise<void> {
   const args = process.argv.slice(2);
@@ -27,12 +28,9 @@ async function main(): Promise<void> {
     throw new Error("Kullanım: npm run live -- --config .\\agentmesh.config.json [--execute [--stream] | --review | --approve TASK --digest SHA256 | --retry TASK]");
   }
   const configFile = resolve(configArg);
-  const config = JSON.parse(readFileSync(configFile, "utf8")) as Config;
+  let config = JSON.parse(readFileSync(configFile, "utf8")) as Config;
   validate(config);
   const needsDesktop = config.agents.some((agent) => agent.transport && agent.transport !== "exec");
-  if (executing && needsDesktop) {
-    throw new Error("Etkileşimli izin kararları için bu config'i masaüstü uygulamasında açın; CLI yalnızca exec transport çalıştırır");
-  }
   const repoPath = isAbsolute(config.repoPath)
     ? realpathSync(config.repoPath) : realpathSync(resolve(dirname(configFile), config.repoPath));
   if (!executing && !reviewing && !approving && !retrying && !diagnostics) {
@@ -60,6 +58,11 @@ async function main(): Promise<void> {
       return;
     }
     const manager = new WorktreeManager();
+    const sourceAgents = structuredClone(config.agents);
+    config = resolveAgentSettings(config, journal.all());
+    if (executing && config.agents.some((agent) => agent.transport && agent.transport !== "exec")) {
+      throw new Error("Etkileşimli izin kararları için bu config'i masaüstü uygulamasında açın; CLI yalnızca exec transport çalıştırır");
+    }
     const engine = new Orchestrator(journal, manager);
     if (streaming) engine.subscribe((notice) => {
       console.log(JSON.stringify(notice));
@@ -80,6 +83,7 @@ async function main(): Promise<void> {
     if (executing) {
       const reserved = journal.all().flatMap(({ payload }) => payload.type === "task.created" && payload.task.projectId !== config.projectId ? [payload.task.id] : []);
       for (const task of reconcileTasks(config, existing.tasks, reserved)) engine.addTask(task);
+      engine.configureAgents(config.projectId, config.agents, sourceAgents);
     }
     if (approving) {
       const taskId = args[args.indexOf("--approve") + 1];

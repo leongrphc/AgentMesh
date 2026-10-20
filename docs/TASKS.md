@@ -70,7 +70,8 @@ Codex, OpenCode, Claude, Antigravity ve diğer API modellerini **tek IDE içinde
   - [x] OpenCode bağlantı seçimi: varsayılan etkileşimli terminal ve Space Bunny Free; alternatif CLI run/HTTP Server tek mesaj. Native terminal ayrı geçici dizinde açılır, pencere içinde genişler, kapatma/uygulama çıkışında süreç ve geçici dizin temizlenir. Normal kullanıcı yetkileri ve native izin ekranları açıkça belirtilir.
   - [x] Demo dahil ajan merkezinde gerçek tek mesaj testi: Codex/OpenCode, isteğe bağlı model, 2000 karakter mesaj, yanıt/süre/hata görünümü ve iptal. Projeden ayrı geçici dizin, Codex salt okunur ephemeral thread ve shell kapatma, OpenCode deny-all test session; 90 sn sınırı. Prompt/yanıt journal'a eklenmez. Test formu Electron smoke'unda doğrulanır; otomatik smoke gerçek generation göndermez.
   - [x] Config'teki CLI ajanları için provider/transport/model/rol/izin yeteneği görünümü, açık bağlantı kontrolü, Codex hesap kaydı/giriş gerekliliği; OpenCode exec sürümü veya Server bağlı sağlayıcı bildirimi. Kontrol generation göndermez; sonuç kimlik/token içermez. Transport/model kombinasyonları ayrı kontrol edilir.
-  - [ ] UI'dan ajan ekleme/model/rol ayarı ve SDK/API bağlantıları. Gerçek model erişimi/token geçerliliği CORE-008 altında doğrulanacak.
+  - [x] UI'dan ajan ekleme, provider/transport/model ve rol talimatı düzenleme. Ayarlar proje journal'ında kalıcı; CLI aynı ayarları okur. Rol otomatik görev istemine aktarılır. Çalışma geçmişi/session/worktree bulunan ajanın ayarı kilitlenir; farklı kimlikle yeni ajan eklenebilir. Kaynak JSON değiştirilmez. Demo mock olarak kalır.
+  - [ ] SDK/API bağlantıları. Gerçek model erişimi/token geçerliliği CORE-008 altında doğrulanacak.
 - [x] **UI-004:** Task Board: görev oluşturma, bağımlılık çizimi (100 göreve kadar SVG; büyük projelerde liste), kalıcı 1–8 paralellik limiti, durum, iptal, tekrar dene, son 200 olay ve seçili görev filtresi. Oluşturulan görevler/paralellik SQLite replay ile korunur; gerçek Electron form smoke testi eklendi.
 - [x] **UI-005:** Shared Context ve ajan mesajlarını kaynak görevleriyle görünür kılma; masaüstü sekmeleri.
 - [ ] **UI-006:** Diff/test önizleme, SHA-256 onayı, merge conflict çözme/yeniden deneme ekranı.
@@ -84,7 +85,8 @@ Codex, OpenCode, Claude, Antigravity ve diğer API modellerini **tek IDE içinde
 - [ ] **CORE-012:** Güvenli log saklama/retention, hata teşhisi, oturum sağlığı ve yeniden başlatma kurtarma senaryoları.
 - [ ] **CORE-013 / Config uyumu:** Kayıtlı görev ve ajan tanımlarını açık güncelleme akışıyla uzlaştırma.
   - [x] Desktop yeniden açma ve CLI execute öncesi toplu görev kontrolü: aynı ID'de başlık/talimat/ajan/bağımlılık/kapsam farkı alan adlarıyla reddedilir; ham talimat hata metnine alınmaz. UI görevleri korunur; eksik ajan eşlemesi ve başka projedeki görev ID çakışması yeni görev eklenmeden reddedilir. Dizi sırası anlamsız fark üretmez; tekrarlı bağımlılıklar config doğrulamasında reddedilir. Başarısız açılış eski projeyi/journal'ı kullanılabilir bırakır.
-  - [ ] Farkları karşılaştıran güncelleme ekranı ve güvenli görev revizyonu; provider/model/transport değişikliklerinin geçmiş native session kimliğiyle uyumunu kalıcı ajan bağlaması üzerinden doğrulama. Şimdilik görev farkında orijinal tanımı geri yüklemek veya yeni görev kimliği kullanmak gerekir.
+  - [x] Ajan tanımları `project.agents.configured` olayıyla kalıcı bağlandı; masaüstü ve CLI aynı çözümlemeyi kullanır. Kaynak config değişirse kayıtlı kaynak veya etkin ajan listesiyle eşleşmesi gerekir; uyumsuz değişiklik reddedilir. Kullanılmış ajan bağlantısı/rolü ve oturumlu pending retry değiştirilemez.
+  - [ ] Farkları karşılaştıran güncelleme ekranı ve güvenli görev revizyonu. Şimdilik görev farkında orijinal tanımı geri yüklemek veya yeni görev kimliği kullanmak gerekir. Eski journal'ların ilk bağlaması mevcut config üzerinden yapılır; daha önce kaydedilmemiş provider/model geçmişi geriye dönük kanıtlanamaz.
 - [ ] **UI-007 / Editör devamı:** Dosya/klasör oluşturma, disk değişikliği izleme, çoklu dosya sekmeleri ve kaydedilmemiş taslak kurtarma. Monaco paket boyutu/ilk yükleme optimizasyonu; şu anda editör ayrı ve tembel yüklenen yaklaşık 2.6 MB chunk.
 
 ### P2 — Hibrit sağlayıcılar ve ileri orkestrasyon
@@ -104,10 +106,12 @@ Codex, OpenCode, Claude, Antigravity ve diğer API modellerini **tek IDE içinde
 
 ## Devam ederken
 
+20 Ekim goal çalışması: UI-003 ajan ayarları ve CORE-013 kalıcı ajan bağlaması ilk adımı tamamlandı. **63/63 test**, TypeScript ve yeni ajan formunu kaydeden Electron smoke başarılı. Gerçek model çağrısı yapılmadı. Sırada UI-006 yapılandırılmış test raporları ve kalan inceleme akışı, CORE-009 canlı inbox ve UI-007 editör geliştirmeleri var.
+
 1. `D:\WebGpt` içinde `git status --short` ve `git log -5 --oneline` ile durumu kontrol et.
 2. `npm install` (gerekiyorsa), ardından `npm run typecheck` ve `npm test` çalıştır.
 3. Codex App Server ve OpenCode Server köprüleri tamamlandı; [permissions.md](permissions.md) desteklenen kapsamları açıklar. Varsayılan exec adaptörleri interaktif izin desteklemez. Modelsiz yerel kontrol: `npm run smoke:opencode`.
-4. Antigravity ve Claude API anahtarlı headless görev adaptörleri ve ortak sonuç zarfı eklendi. `agentmesh.hybrid.example.json` plan/uygulama/review zincirini gösterir. Sırada UI'dan ajan ayarları (UI-003), canlı inbox (CORE-009), ACP ve config/session uyumu (CORE-013) var. Gerçek kod/araç/resume smoke'ları (CORE-008) hâlâ açık.
+4. Antigravity ve Claude API anahtarlı headless görev adaptörleri, ortak sonuç zarfı ve UI ajan ayarları eklendi. `agentmesh.hybrid.example.json` plan/uygulama/review zincirini gösterir. Sırada yapılandırılmış test raporları (UI-006), canlı inbox (CORE-009), editör (UI-007), ACP ve config revizyonları (CORE-013) var. Gerçek kod/araç/resume smoke'ları (CORE-008) hâlâ açık.
 5. **Her tamamlanan geliştirmeyi ayrı Git commit'iyle kaydet.** Commit'ten önce ilgili testleri çalıştır; `docs/TASKS.md` kutularını güncelle. Kullanıcı istemedikçe otomatik push/deploy/ana dal dışı entegrasyon merge'i yapma.
 
 ### Faydalı komutlar

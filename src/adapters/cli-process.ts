@@ -157,6 +157,7 @@ export function buildPrompt(input: AgentExecution): string {
   const context = Object.values(input.context)
     .map((fact) => ({ key: fact.key, value: fact.value, sourceTaskId: fact.sourceTaskId }));
   return [
+    ...(input.agentRole ? [`Ajan rolü: ${input.agentRole}`] : []),
     `Proje: ${input.task.projectId}`,
     `Görev: ${input.task.title} (${input.task.id})`,
     `Talimat: ${input.task.instruction}`,

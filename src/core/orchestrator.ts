@@ -15,6 +15,9 @@ import type {
 } from "./contracts.js";
 import type { EventStore } from "./journal.js";
 import type { WorktreeManager } from "./worktrees.js";
+import type { AgentConfig } from "./config.js";
+import { validate } from "./config.js";
+import { validateAgentEdit } from "./agent-settings.js";
 
 export interface ProjectSnapshot {
   project: Project;
@@ -34,6 +37,7 @@ export class Orchestrator {
   private readonly facts = new Map<string, Map<string, Fact>>();
   private readonly messages: AgentMessage[] = [];
   private readonly adapters = new Map<string, AgentAdapter>();
+  private readonly agentSettings = new Map<string, AgentConfig[]>();
   private readonly controllers = new Map<string, AbortController>();
   private readonly subscribers = new Set<(notice: OrchestratorNotice) => void>();
   private readonly permissions: PermissionBroker;
@@ -58,6 +62,20 @@ export class Orchestrator {
 
   registerAgent(adapter: AgentAdapter): void {
     if (this.adapters.has(adapter.id)) throw new Error(`Ajan zaten kayıtlı: ${adapter.id}`);
+    this.adapters.set(adapter.id, adapter);
+  }
+
+  configureAgents(projectId: string, agents: AgentConfig[], sourceAgents: AgentConfig[]): void {
+    if (!this.projects.has(projectId)) throw new Error("Proje bulunamadı");
+    if (this.controllers.size) throw new Error("Önce çalışan görevleri durdurun");
+    const snapshot = this.snapshot(projectId);
+    validate({ projectId, repoPath: snapshot.project.workspaceRoot, agents, tasks: snapshot.tasks });
+    for (const agent of agents) validateAgentEdit(this.agentSettings.get(projectId) ?? [], agent, snapshot.tasks);
+    this.emit({ type: "project.agents.configured", projectId, agents: structuredClone(agents), sourceAgents: structuredClone(sourceAgents) });
+  }
+
+  replaceAgent(adapter: AgentAdapter): void {
+    if (this.controllers.size) throw new Error("Önce çalışan görevleri durdurun");
     this.adapters.set(adapter.id, adapter);
   }
 
@@ -240,6 +258,7 @@ export class Orchestrator {
         context: snapshot.context,
         inbox: snapshot.messages.filter((message) => message.to === task.agentId || message.to === "*"),
         knownAgentIds: [...new Set(snapshot.tasks.map((item) => item.agentId))],
+        agentRole: this.agentSettings.get(task.projectId)?.find((agent) => agent.id === task.agentId)?.role,
         sessionId: task.sessionId,
         signal: controller.signal,
         onSession: (sessionId) => {
@@ -356,6 +375,9 @@ export class Orchestrator {
     switch (event.type) {
       case "project.created":
         this.projects.set(event.project.id, { ...event.project });
+        break;
+      case "project.agents.configured":
+        this.agentSettings.set(event.projectId, structuredClone(event.agents));
         break;
       case "project.parallelism.updated":
         this.projects.get(event.projectId)!.maxParallel = event.maxParallel;

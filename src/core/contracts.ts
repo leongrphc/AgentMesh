@@ -1,4 +1,5 @@
 import type { PermissionDecision, PermissionProposal, PermissionSource } from "./permissions.js";
+import type { AgentConfig } from "./config.js";
 /** Provider bağımsız dahili sözleşmeler. ACP veya MCP wire formatı değildir. */
 export type TaskStatus =
   | "pending"
@@ -45,6 +46,7 @@ export interface AgentExecution {
   context: Readonly<Record<string, Fact>>;
   inbox: ReadonlyArray<AgentMessage>;
   knownAgentIds?: readonly string[];
+  agentRole?: string;
   sessionId?: string;
   onSession?: (sessionId: string) => void;
   signal?: AbortSignal;
@@ -90,6 +92,7 @@ export interface TaskRecord extends AgentTask {
 
 export type DomainEvent =
   | { type: "project.created"; project: Project }
+  | { type: "project.agents.configured"; projectId: string; agents: AgentConfig[]; sourceAgents: AgentConfig[] }
   | { type: "project.parallelism.updated"; projectId: string; maxParallel: number }
   | { type: "permission.requested"; projectId: string; taskId: string; executionId: string; requestId: string; provider: string; kind: "command" | "file"; digest: string; expiresAt: string }
   | { type: "permission.resolved"; projectId: string; taskId: string; executionId: string; requestId: string; decision: PermissionDecision; source: PermissionSource }

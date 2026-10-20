@@ -6,6 +6,7 @@ import type { PermissionRequest, PermissionDecision } from "../core/permissions.
 import type { ProviderHealth } from "../adapters/provider-health.js";
 import type { TerminalInfo, TerminalOutput } from "./terminals.js";
 import type { ProviderMessageInput, ProviderMessageResult } from "../adapters/provider-message.js";
+import type { AgentConfig } from "../core/config.js";
 
 export type TaskDraft = Omit<AgentTask, "projectId">;
 
@@ -21,7 +22,7 @@ export interface DesktopState {
   snapshot: ProjectSnapshot;
   busy: boolean;
   demo: boolean;
-  agents: Array<{ id: string; provider: string; model?: string; transport?: "exec" | "app-server" | "server"; interactivePermissions?: boolean }>;
+  agents: Array<AgentConfig & { interactivePermissions?: boolean }>;
   permissions: PermissionRequest[];
   health: Record<string, ProviderHealth>;
   checkingAgents: boolean;
@@ -51,6 +52,7 @@ export interface DesktopAPI {
   readFile(taskId: string, path: string): Promise<WorkspaceFile>;
   saveFile(taskId: string, path: string, content: string, digest: string): Promise<WorkspaceFile>;
   createTask(task: TaskDraft): Promise<void>;
+  saveAgent(agent: AgentConfig): Promise<void>;
   setParallelism(value: number): Promise<void>;
   decidePermission(requestId: string, executionId: string, digest: string, decision: PermissionDecision): Promise<void>;
   checkAgents(): Promise<void>;
