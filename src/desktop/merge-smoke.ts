@@ -44,11 +44,11 @@ export async function mergeSmoke(window: BrowserWindow, service: DesktopService)
   await window.webContents.executeJavaScript(`(async () => {
     const wait = async (find) => {
       for (let i = 0; i < 200; i++) { const value = find(); if (value) return value; await new Promise(r => setTimeout(r, 50)); }
-      throw new Error('Merge smoke arayüzü zaman aşımı');
+      throw new Error('Merge smoke arayüzü zaman aşımı: ' + find.toString());
     };
     (await wait(() => [...document.querySelectorAll('.task-row')].find(e => e.textContent.includes('Smoke second')))).click();
     await wait(() => document.querySelector('.task-detail h3')?.textContent === 'Smoke second');
-    (await wait(() => [...document.querySelectorAll('.detail-actions button')].find(e => e.textContent.includes('Değişiklikleri incele')))).click();
+    (await wait(() => [...document.querySelectorAll('.detail-actions button')].find(e => !e.disabled && e.textContent.includes('Değişiklikleri incele')))).click();
     (await wait(() => [...document.querySelectorAll('.merge-resolution button')].find(e => !e.disabled && e.textContent.includes('Çözümü görev alanında aç')))).click();
     await wait(() => document.querySelector('.merge-file-list button'));
     document.querySelector('[aria-label="İncelemeyi kapat"]').click();
@@ -89,11 +89,11 @@ export async function mergeSmoke(window: BrowserWindow, service: DesktopService)
   await window.webContents.executeJavaScript(`(async () => {
     const wait = async (find) => {
       for (let i = 0; i < 200; i++) { const value = find(); if (value) return value; await new Promise(r => setTimeout(r, 50)); }
-      throw new Error('Merge smoke arayüzü zaman aşımı');
+      throw new Error('Merge smoke arayüzü zaman aşımı: ' + find.toString());
     };
-    (await wait(() => [...document.querySelectorAll('.detail-actions button')].find(e => e.textContent.includes('Değişiklikleri incele')))).click();
-    (await wait(() => document.querySelector('.merge-file-list button'))).click();
-    const editor = await wait(() => document.querySelector('[aria-label="Çakışma çözümü"]'));
+    (await wait(() => [...document.querySelectorAll('.detail-actions button')].find(e => !e.disabled && e.textContent.includes('Değişiklikleri incele')))).click();
+    (await wait(() => document.querySelector('.merge-file-list button:not(:disabled)'))).click();
+    const editor = await wait(() => document.querySelector('[aria-label="Çakışma çözümü"]:not(:disabled)'));
     if (!editor.value.includes('<<<<<<< HEAD')) throw new Error('Çakışma içeriği açılmadı');
     Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set.call(editor, 'UI resolved\\n');
     editor.dispatchEvent(new Event('input', {bubbles:true}));
@@ -147,7 +147,16 @@ export async function mergeSmoke(window: BrowserWindow, service: DesktopService)
     throw new Error('Context kararı kaydedilmedi');
   })()`);
   const decided = service.state().snapshot;
-  if (decided.context["smoke.contract"]?.value !== "second" || decided.contextHistory["smoke.contract"]?.length !== 2) throw new Error("Context geçmişi doğrulanamadı");
+  if (decided.context["smoke.contract"]?.value !== "second" || service.contextHistory(decided.project.id, decided.project.workspaceRoot, "smoke.contract").entries.length !== 2) throw new Error("Context geçmişi doğrulanamadı");
+  await window.webContents.executeJavaScript(`(async () => {
+    const item = [...document.querySelectorAll('.context-item')].find(node => node.querySelector('code')?.textContent === 'smoke.contract');
+    item.querySelector('details').open = true;
+    for (let i = 0; i < 100; i++) {
+      if (item.querySelectorAll('li').length === 2 && item.querySelector('li b')?.textContent === 'Sürüm 2') return;
+      await new Promise(resolve => setTimeout(resolve, 50));
+    }
+    throw new Error('Context geçmişi IPC üzerinden yüklenmedi');
+  })()`);
   console.log("Context smoke başarılı: karşılaştırma, başlatma engeli ve sürüm bağlı kullanıcı kararı doğrulandı");
   console.log("Merge smoke başarılı: gerçek Git çakışması, renderer çözümü, IPC kaydı ve digest onayı doğrulandı");
 }

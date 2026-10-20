@@ -47,3 +47,11 @@ Seçim yalnızca yeni context paketini sınırlar. Devam ettirilen native oturum
 Doğrulama: deterministik seçim/hash, dolaylı bağımlılıklar, açık/boş seçim, eksik anahtar, UTF-8 boyut/kayıt sınırları, config drift, mutable girdi, tekrar deneme ve journal replay testleri. Electron smoke form → IPC → görev → bağımlılık paketi ve sürüm detayını doğrular; gerçek model çağırmaz.
 
 Açık kapsam: büyük geçmişler için sayfalama/retention ve anahtar bazında çakışma etki analizi.
+
+## Masaüstünde geçmişi sayfalama
+
+Sürüm geçmişi, ilgili anahtarın ayrıntısı açıldığında yüklenir. Her sayfa en fazla 20 kaydı en yeniden eskiye gösterir; **Daha eski**, **Daha yeni** ve **En yeni sürümler** düğmeleriyle gezinilir. Yeni kararlar okunmakta olan eski sayfanın aralığını değiştirmez. İstek `before` sürümünü dışlayan bir üst sınır kullanır; yeni sürümleri görmek için en yeni sayfayı yeniden açın. Hatalı okumalar ekranda gösterilir ve tekrar denenebilir.
+
+Masaüstü durum yayınlarında `contextHistory` boş bırakılır; tarihçe ayrı `contextHistory(projectId, workspaceRoot, key, before?)` IPC çağrısıyla gelir. Proje veya çalışma kökü değişmişse eski pencerenin isteği reddedilir. Panel kapanır veya proje değişirse bekleyen cevabın UI'ı güncellemesi engellenir. Çekirdeğin varsayılan tam snapshot'ı ve CLI `--context` çıktısı uyumluluk için geçmişi içermeye devam eder.
+
+Bu adım sürüm geçmişinin renderer aktarımını ve listelenmesini sınırlar; journal boyutunu veya çekirdeğin replay belleğini sınırlamaz. Kabul edilmiş sürümler, görev paketlerinin anahtar/sürüm kanıtını yeniden kurabilmek için silinmez. Çözülen kararlar ve görev paketleri için sayfalama, arşivleme/retention ve diskten sorgulama sonraki işlerdir.

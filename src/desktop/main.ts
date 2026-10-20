@@ -452,6 +452,10 @@ app.whenReady().then(async () => {
   });
   handle("mesh:create-task", (task) => service.createTask(task as TaskDraft));
   handle("mesh:send-message", (message) => service.sendMessage(message as MessageDraft));
+  handle("mesh:context-history", (projectId, workspaceRoot, key, before) => {
+    if ([projectId, workspaceRoot, key].some(value => typeof value !== "string") || (before !== undefined && typeof before !== "number")) throw new Error("Geçersiz context geçmişi isteği");
+    return service.contextHistory(projectId as string, workspaceRoot as string, key as string, before as number | undefined);
+  });
   handle("mesh:resolve-context", (id, revision, choice, value) => {
     if (typeof id !== "string" || typeof revision !== "number" || !["keep", "accept", "custom"].includes(String(choice))
       || (value !== undefined && typeof value !== "string")) throw new Error("Geçersiz context kararı");

@@ -163,7 +163,17 @@ export class Orchestrator {
     this.emit({ type: "task.created", task: structuredClone(task) });
   }
 
-  snapshot(projectId: string): ProjectSnapshot {
+  contextHistoryPage(projectId: string, key: string, before?: number): import("./contracts.js").ContextHistoryPage {
+    if (!this.projects.has(projectId)) throw new Error("Proje bulunamadı");
+    if (typeof key !== "string" || !key || key.length > 160 || (before !== undefined && (!Number.isSafeInteger(before) || before < 1))) throw new Error("Geçersiz context geçmişi isteği");
+    const history = this.factHistory.get(projectId)?.get(key) ?? [];
+    const end = Math.min(history.length, (before ?? history.length + 1) - 1);
+    const start = Math.max(0, end - 20);
+    return { entries: structuredClone(history.slice(start, end).reverse()), latestRevision: history.length,
+      ...(start > 0 ? { nextBefore: start + 1 } : {}) };
+  }
+
+  snapshot(projectId: string, includeHistory = true): ProjectSnapshot {
     const project = this.projects.get(projectId);
     if (!project) throw new Error(`Proje bulunamadı: ${projectId}`);
     return {
@@ -172,7 +182,7 @@ export class Orchestrator {
         .filter((task) => task.projectId === projectId)
         .map((task) => structuredClone(task)),
       context: structuredClone(Object.fromEntries(this.facts.get(projectId) ?? [])),
-      contextHistory: structuredClone(Object.fromEntries(this.factHistory.get(projectId) ?? [])),
+      contextHistory: includeHistory ? structuredClone(Object.fromEntries(this.factHistory.get(projectId) ?? [])) : {},
       contextConflicts: structuredClone([...this.contextConflicts.get(projectId)?.values() ?? []]),
       messages: this.messages.filter((message) => message.projectId === projectId).map((x) => ({ ...x })),
       deliveries: [...this.deliveries.values()].filter((delivery) => this.tasks.get(delivery.taskId)?.projectId === projectId).map((delivery) => ({ ...delivery })),

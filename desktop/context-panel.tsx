@@ -1,6 +1,38 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { DesktopAPI, DesktopState } from "../src/desktop/contracts.js";
-import type { ContextChoice, ContextConflict, Fact } from "../src/core/contracts.js";
+import type { ContextChoice, ContextConflict, Fact, ContextHistoryPage } from "../src/core/contracts.js";
+
+function History({ fact, state, api }: { fact: Fact; state: DesktopState; api: DesktopAPI }) {
+  const [open, setOpen] = useState(false);
+  const [cursors, setCursors] = useState<number[]>([]);
+  const [refresh, setRefresh] = useState(0);
+  const [page, setPage] = useState<ContextHistoryPage>();
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const before = cursors.at(-1);
+  const { id, workspaceRoot } = state.snapshot.project;
+  useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+    setLoading(true); setError(""); setPage(undefined);
+    void api.contextHistory(id, workspaceRoot, fact.key, before).then(result => {
+      if (!cancelled) setPage(result);
+    }, reason => { if (!cancelled) setError(String(reason)); }).finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, [open, id, workspaceRoot, fact.key, before, refresh, api]);
+  return <details onToggle={event => setOpen(event.currentTarget.open)}><summary>Sürüm geçmişi · {fact.revision ?? 0}</summary>
+    {loading && <p role="status">Sürümler yükleniyor…</p>}
+    {error && <p role="alert" className="file-error">{error}</p>}
+    {page && <><ol>{page.entries.map(version => <li key={version.revision}><b>Sürüm {version.revision}</b><p>{version.value}</p><small>{version.sourceTaskId} · {version.updatedAt}</small></li>)}</ol>
+      {!page.entries.length && <p>Bu aralıkta sürüm yok.</p>}
+      {page.latestRevision !== fact.revision && <p>Yeni sürümler var. En yeni sürümleri açarak yenileyin.</p>}</>}
+    <div className="context-actions">
+      <button disabled={loading || !cursors.length} onClick={() => setCursors(previous => previous.slice(0, -1))}>Daha yeni</button>
+      <button disabled={loading || !page?.nextBefore} onClick={() => { if (page?.nextBefore) setCursors(previous => [...previous, page.nextBefore!]); }}>Daha eski</button>
+      <button disabled={loading} onClick={() => { setCursors([]); setRefresh(value => value + 1); }}>En yeni sürümler</button>
+    </div>
+  </details>;
+}
 
 function Conflict({ conflict, current, api, busy }: { conflict: ContextConflict; current: Fact; api: DesktopAPI; busy: boolean }) {
   const [value, setValue] = useState(conflict.proposal.value);
@@ -32,7 +64,7 @@ function Conflict({ conflict, current, api, busy }: { conflict: ContextConflict;
 }
 
 export function ContextPanel({ state, api }: { state: DesktopState; api: DesktopAPI }) {
-  const { context, contextHistory, contextConflicts } = state.snapshot;
+  const { context, contextConflicts } = state.snapshot;
   const pending = contextConflicts.filter((conflict) => conflict.status === "pending");
   const resolved = contextConflicts.filter((conflict) => conflict.status === "resolved");
   return <div className="context-panel">
@@ -40,11 +72,7 @@ export function ContextPanel({ state, api }: { state: DesktopState; api: Desktop
     {pending.map((conflict) => <Conflict key={conflict.id} conflict={conflict} current={context[conflict.key]!} api={api} busy={state.busy} />)}
     {Object.values(context).map((fact) => <article className="context-item" key={fact.key}>
       <code>{fact.key}</code><p>{fact.value}</p><small>Sürüm {fact.revision} · Kaynak: {fact.sourceTaskId}</small>
-      <details><summary>Sürüm geçmişi · {contextHistory[fact.key]?.length ?? 0}</summary>
-        <ol>{(contextHistory[fact.key] ?? []).map((version) => <li key={version.revision}>
-          <b>Sürüm {version.revision}</b><p>{version.value}</p><small>{version.sourceTaskId} · {version.updatedAt}</small>
-        </li>)}</ol>
-      </details>
+      <History fact={fact} state={state} api={api} />
     </article>)}
     {!Object.keys(context).length && <p className="empty">Ajanların paylaştığı sonuçlar burada görünecek.</p>}
     {!!resolved.length && <details className="context-item"><summary>Çözülen kararlar · {resolved.length}</summary>

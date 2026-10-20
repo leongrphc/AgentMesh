@@ -33,6 +33,12 @@ export interface Fact {
   revision?: number;
 }
 
+export interface ContextHistoryPage {
+  entries: Fact[];
+  latestRevision: number;
+  nextBefore?: number;
+}
+
 export type ContextChoice = "keep" | "accept" | "custom";
 export interface ContextConflict {
   id: string;

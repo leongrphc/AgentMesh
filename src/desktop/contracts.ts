@@ -35,6 +35,7 @@ export interface DesktopState {
 }
 
 export interface DesktopAPI {
+  contextHistory(projectId: string, workspaceRoot: string, key: string, before?: number): Promise<import("../core/contracts.js").ContextHistoryPage>;
   resolveContext(conflictId: string, revision: number, choice: ContextChoice, value?: string): Promise<void>;
   sendMessage(message: MessageDraft): Promise<string>;
   openProviderTerminal(model?: string): Promise<TerminalInfo>;

@@ -74,13 +74,20 @@ export class DesktopService {
 
   state(): DesktopState {
     if (!this.engine || !this.config) throw new Error("Önce proje açın");
-    return structuredClone({ snapshot: this.engine.snapshot(this.config.projectId), busy: !!this.running,
+    const snapshot = this.engine.snapshot(this.config.projectId, false);
+    return structuredClone({ snapshot, busy: !!this.running,
       demo: this.demo, agents: this.config.agents.map((agent) => ({ ...agent,
         liveMessages: this.demo || (agent.provider === "codex" && agent.transport === "app-server"),
         interactivePermissions: this.demo || (agent.provider === "codex" && agent.transport === "app-server") || (agent.provider === "opencode" && agent.transport === "server") })),
       permissions: this.engine.pendingPermissions(this.config.projectId), events: this.events,
       health: this.health, checkingAgents: !!this.healthAbort, testingProvider: this.testingProvider,
-      maxParallel: this.engine.snapshot(this.config.projectId).project.maxParallel ?? this.config.maxParallel ?? 2 });
+      maxParallel: snapshot.project.maxParallel ?? this.config.maxParallel ?? 2 });
+  }
+
+  contextHistory(projectId: string, workspaceRoot: string, key: string, before?: number) {
+    if (!this.engine || !this.config || projectId !== this.config.projectId
+      || workspaceRoot !== this.engine.snapshot(projectId, false).project.workspaceRoot) throw new Error("Proje değişti; context geçmişini yeniden açın");
+    return this.engine.contextHistoryPage(projectId, key, before);
   }
 
   openDemo(): DesktopState {

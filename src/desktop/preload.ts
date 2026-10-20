@@ -4,6 +4,7 @@ import type { DesktopAPI, DesktopState } from "./contracts.js";
 const api: DesktopAPI = {
   sendMessage: (message) => ipcRenderer.invoke("mesh:send-message", message),
   resolveContext: (id, revision, choice, value) => ipcRenderer.invoke("mesh:resolve-context", id, revision, choice, value),
+  contextHistory: (projectId, workspaceRoot, key, before) => ipcRenderer.invoke("mesh:context-history", projectId, workspaceRoot, key, before),
   openProviderTerminal: (model) => ipcRenderer.invoke("mesh:provider-terminal", model),
   testProvider: (input) => ipcRenderer.invoke("mesh:test-provider", input),
   cancelProviderTest: () => ipcRenderer.invoke("mesh:cancel-provider-test"),
