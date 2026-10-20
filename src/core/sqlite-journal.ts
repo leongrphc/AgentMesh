@@ -80,6 +80,11 @@ export class SqliteJournal implements EventStore {
     return [...this.scan()];
   }
 
+  activeEventCount(): number {
+    this.assertOpen();
+    return (this.db.prepare("SELECT COUNT(*) AS count FROM main.events").get() as { count: number }).count;
+  }
+
   readEvent(id: string): StoredEvent | undefined {
     this.assertOpen();
     const row = this.db.prepare("SELECT id, at, payload FROM events WHERE id = ?").get(id);

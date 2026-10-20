@@ -1,10 +1,12 @@
 import type { AgentTask } from "./contracts.js";
 import { validateContextKeys } from "./context.js";
+import { validateJournalMaintenance, type JournalMaintenancePolicy } from "./journal-maintenance.js";
 
 export interface Config {
   projectId: string;
   repoPath: string;
   maxParallel?: number;
+  journalMaintenance?: JournalMaintenancePolicy;
   agents: AgentConfig[];
   tasks: AgentTask[];
 }
@@ -24,6 +26,7 @@ export function validate(config: Config): void {
   if (config.maxParallel !== undefined && (!Number.isInteger(config.maxParallel) || config.maxParallel < 1 || config.maxParallel > 8)) {
     throw new Error("maxParallel 1-8 aralığında olmalı");
   }
+  validateJournalMaintenance(config.journalMaintenance);
   const registered = new Set<string>();
   for (const agent of config.agents) {
     if (!agent || typeof agent.id !== "string" || !agent.id.trim() || agent.id.length > 200 || !["codex", "opencode", "antigravity", "claude"].includes(agent.provider) || registered.has(agent.id)

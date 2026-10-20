@@ -10,6 +10,7 @@ import { diagnosticReport } from "./core/diagnostics.js";
 import { safeLog } from "./core/safe-log.js";
 import { resolveAgentSettings } from "./core/agent-settings.js";
 import { verifyJournalArchive } from "./core/journal-archive.js";
+import { maintainJournal } from "./core/journal-maintenance.js";
 
 async function main(): Promise<void> {
   const args = process.argv.slice(2);
@@ -49,6 +50,7 @@ async function main(): Promise<void> {
   if (!executing && !reviewing && !approving && !retrying && !diagnostics && !contextReview && !resolvingContext && !archiving && !checkpointing && !compacting) {
     console.log(JSON.stringify({
       dryRun: true, repoPath, projectId: config.projectId,
+      journalMaintenance: config.journalMaintenance,
       agents: config.agents, tasks: config.tasks.map(({ id, agentId, dependsOn, allowedPaths, contextKeys }) => ({ id, agentId, dependsOn, allowedPaths, contextKeys })),
       instruction: needsDesktop
         ? "Bu config etkileşimli izin gerektirir; çalıştırmak için masaüstü uygulamasında açın. CLI --review, --approve ve --retry komutları kullanılabilir."
@@ -182,7 +184,12 @@ async function main(): Promise<void> {
       };
     });
     const pendingContextDecisions = snapshot.contextConflicts.filter((conflict) => conflict.status === "pending").map(({ id, key }) => ({ id, key }));
-    console.log(JSON.stringify({ dbPath, mode: reviewing ? "review" : "execute", reports, pendingContextDecisions }, null, streaming ? 0 : 2));
+    let maintenance;
+    if (executing && config.journalMaintenance) {
+      try { maintenance = maintainJournal(journal, engine, dbPath, config.journalMaintenance); }
+      catch (error) { maintenance = { status: "failed", error: safeLog(String(error)) }; }
+    }
+    console.log(JSON.stringify({ dbPath, mode: reviewing ? "review" : "execute", reports, pendingContextDecisions, maintenance }, null, streaming ? 0 : 2));
     if (reports.some((task) => task.status === "cancelled")) process.exitCode = 130;
     else if (reports.some((task) => task.status === "failed" || task.status === "blocked" || task.status === "needs_review")) process.exitCode = 1;
     else if (pendingContextDecisions.length) process.exitCode = 2;

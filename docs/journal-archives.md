@@ -53,6 +53,20 @@ Bağlı arşiv artık isteğe bağlı yedek değil, journal'ın **zorunlu parça
 
 Küçültme şemayı **v3** yapar; v2'ye kadar destekleyen eski uygulamalar bu dosyayı açamaz. Küçültülmemiş journal ve bağımsız arşivler v2 kalır. Fiziksel aktif alan VACUUM ve WAL checkpoint ile geri alınır. Çıktıda `compacted: true` aktarımın commit edildiğini, `vacuumed` alanı fiziksel bakımın da tamamlanıp tamamlanmadığını gösterir. Bakım başarısızsa `maintenanceError` döner; aktarım geri alınmış gibi raporlanmaz.
 
-Politika elle başlatılan, geçmişi silmeyen rotasyondur. Arşivlerin toplam disk kullanımı azalmaz; ikinci rotasyon eski arşivi de içerdiğinden eski kopyalar ayrıca yer tutabilir. Otomatik yaş/boyut eşiği ve arşiv silme yoktur. Arşiv doğrulaması açılışta bütün arşivi okur; checkpoint durum replay'ini azaltır ama bu bütünlük okumasını kaldırmaz. Mesaj/görev projeksiyonlarının bellek politikası ayrı açık iştir.
+Rotasyon geçmişi silmez. Arşivlerin toplam disk kullanımı azalmaz; ikinci rotasyon eski arşivi de içerdiğinden eski kopyalar ayrıca yer tutabilir. Otomatik yaş/boyut eşiği ve arşiv silme yoktur. Arşiv doğrulaması açılışta bütün arşivi okur; checkpoint durum replay'ini azaltır ama bu bütünlük okumasını kaldırmaz. Mesaj üst bilgileri/görev projeksiyonlarının bellek politikası ayrı açık iştir.
+
+## İsteğe bağlı otomatik bakım
+
+Config dosyasına şu alan eklenebilir; varsayılan olarak otomatik bakım kapalıdır:
+
+```json
+"journalMaintenance": { "maxActiveEvents": 50000 }
+```
+
+Eşik 100–10.000.000 arasında bir tam sayıdır ve yalnızca aktif journal'daki olay sayısına uygulanır. Arşivdeki geçmiş eşiğe dahil edilmez. Masaüstü projeyi açarken, görev çalıştırması bittiğinde, başka projeye geçerken ve kapanırken kontrol eder. CLI yalnızca `--execute` sonrasında kontrol eder; dry-run, inceleme, tanı ve açık arşiv komutları otomatik bakım başlatmaz. Çalışan görev/inbox veya bekleyen izin varsa checkpoint kapısı bakımı reddeder. Olay başına kontrol veya arka plan zamanlayıcısı yoktur; uzun bir çalıştırma boyunca eşik aşılabilir.
+
+Eşiğe ulaşılınca checkpoint oluşturulur; journal'ın yanındaki `archives` klasöründe zaman damgası ve rastgele kimlik içeren yeni bir dosyaya doğrulanmış arşiv alınır ve aktif journal küçültülür. Bu arşiv uygulamanın çalışması için zorunludur. Mevcut arşivler silinmez veya üzerine yazılmaz. Ayarı kaldırmak gelecekteki otomatik bakımı kapatır; mevcut arşiv bağlantısını kaldırmaz.
+
+Bakım hatası görev sonucunu değiştirmez. Masaüstü olay listesinde, CLI sonuç JSON'undaki `maintenance` alanında raporlanır. Doğrulanmış rotasyon sonrasında fiziksel küçültme başarısızsa bağlantı korunur ve `maintenanceError` raporlanır. Büyük geçmişlerde senkron doğrulama/kopyalama arayüzün açılışını veya kapanışını uzatabilir. Bu politika aktif dosyayı küçültür; toplam disk kotası, yaşa göre silme ve arşiv kopyası sayısı sınırı sağlamaz.
 
 Doğrulama: aktif dosyada olay kalmaması ve boyutun azalması; tam snapshot ve sıra eşitliği; arşivden öneri + aktif çözüm eşlemesi; iki dosyaya yayılan sayfalar; yeniden açılış/yazım/ikinci rotasyon; salt okunur arşiv; eksik/bozuk arşiv reddi; transaction hata enjeksiyonunda rollback; CLI ve masaüstünde yeni görev/ayarların korunması.

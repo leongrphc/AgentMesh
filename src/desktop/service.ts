@@ -18,6 +18,7 @@ import type { DesktopState, DesktopReview, TaskDraft } from "./contracts.js";
 import { Terminals } from "./terminals.js";
 import { sendProviderMessage, validateProviderMessage, type ProviderMessageInput, type ProviderMessageResult } from "../adapters/provider-message.js";
 import type { MessageDraft } from "../core/contracts.js";
+import { maintainJournal } from "../core/journal-maintenance.js";
 
 export class DesktopService {
   readonly terminals = new Terminals();
@@ -162,7 +163,7 @@ export class DesktopService {
       const reserved = journal.reservedTaskIds(config.projectId);
       for (const task of reconcileTasks(config, tasks, reserved)) engine.addTask(task);
       engine.configureAgents(config.projectId, config.agents, sourceAgents);
-      if (!reused) this.journal?.close();
+      if (!reused) { this.maintainJournal(); this.journal?.close(); }
       this.journal = journal;
       this.journalPath = normalized;
       this.engine = engine;
@@ -181,6 +182,7 @@ export class DesktopService {
         this.events = this.events.slice(-200);
         this.publish();
       });
+      this.maintainJournal();
       this.publish();
       return this.state();
     } catch (error) { if (!reused) journal.close(); throw error; }
@@ -198,7 +200,7 @@ export class DesktopService {
     this.running = Promise.resolve().then(() => this.engine!.run(this.config!.projectId,
       this.state().maxParallel, this.abort!.signal, false)).then(() => {}, (error: unknown) => {
         this.events.push({ at: new Date().toISOString(), text: safeLog(String(error)) });
-      }).finally(() => { this.running = undefined; this.abort = undefined; this.publish(); });
+      }).finally(() => { this.running = undefined; this.abort = undefined; this.maintainJournal(); this.publish(); });
     this.publish();
   }
 
@@ -416,12 +418,25 @@ export class DesktopService {
     }
   }
 
+  private maintainJournal() {
+    if (!this.journal || !this.engine || !this.config?.journalMaintenance || !this.journalPath || this.running) return;
+    try {
+      const result = maintainJournal(this.journal, this.engine, this.journalPath, this.config.journalMaintenance);
+      if (result.status === "compacted") this.events.push({ at: new Date().toISOString(),
+        text: result.maintenanceError ? `Journal arşivlendi; fiziksel küçültme tamamlanamadı: ${safeLog(result.maintenanceError)}` : `Journal bakımı: ${result.activeEvents} aktif olay doğrulanan arşive taşındı.` });
+    } catch (error) {
+      this.events.push({ at: new Date().toISOString(), text: `Journal bakımı tamamlanamadı: ${safeLog(String(error))}` });
+    }
+    this.events = this.events.slice(-200);
+  }
+
   async close() {
     this.messageAbort?.abort(); await this.messageRun?.catch(() => {});
     await this.terminals.closeAll();
     for (const root of this.providerTerminalRoots.values()) rmSync(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
     this.providerTerminalRoots.clear();
     this.healthAbort?.abort(); this.healthAbort = undefined; this.abort?.abort(); await this.running;
+    this.maintainJournal();
     this.journal?.close(); this.journal = undefined; this.journalPath = undefined;
   }
 }
