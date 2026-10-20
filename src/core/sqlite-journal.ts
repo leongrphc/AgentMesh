@@ -1,9 +1,10 @@
 import { randomUUID } from "node:crypto";
 import { closeSync, existsSync, mkdirSync, openSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { dirname } from "node:path";
+import { dirname, resolve } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import type { DomainEvent, StoredEvent, ContextConflict } from "./contracts.js";
 import type { EventStore } from "./journal.js";
+import { fingerprintEvents, verifyJournalArchive } from "./journal-archive.js";
 
 /** Single-writer SQLite journal. A lock file prevents two orchestration processes writing concurrently. */
 export class SqliteJournal implements EventStore {
@@ -142,6 +143,38 @@ export class SqliteJournal implements EventStore {
     finally {
       closeSync(this.lockFd);
       rmSync(this.lockPath, { force: true });
+    }
+  }
+
+  archive(destination: string) {
+    this.assertOpen();
+    const path = resolve(destination);
+    if (["", "-wal", "-shm", ".lock"].some(suffix => existsSync(path + suffix))) throw new Error("Arşiv hedefi zaten mevcut; yeni bir dosya adı kullanın");
+    mkdirSync(dirname(path), { recursive: true });
+    closeSync(openSync(path, "wx", 0o600));
+    let target: SqliteJournal | undefined;
+    try {
+      target = new SqliteJournal(path);
+      const source = fingerprintEvents(this.db);
+      target.db.exec("BEGIN IMMEDIATE");
+      try {
+        const insert = target.db.prepare("INSERT INTO events(sequence, id, at, project_id, payload) VALUES (?, ?, ?, ?, ?)");
+        for (const row of this.db.prepare("SELECT sequence, id, at, project_id, payload FROM events ORDER BY sequence").iterate()) {
+          insert.run(row.sequence!, row.id!, row.at!, row.project_id!, row.payload!);
+        }
+        const manifest = { format: 1, algorithm: "sha256-event-rows-v1", createdAt: new Date().toISOString(), ...source };
+        target.db.exec("CREATE TABLE archive_manifest (id INTEGER PRIMARY KEY CHECK(id = 1), manifest TEXT NOT NULL)");
+        target.db.prepare("INSERT INTO archive_manifest(id, manifest) VALUES (1, ?)").run(JSON.stringify(manifest));
+        target.db.exec("COMMIT");
+      } catch (error) { target.db.exec("ROLLBACK"); throw error; }
+      target.close(); target = undefined;
+      const verified = verifyJournalArchive(path);
+      if (verified.digest !== source.digest) throw new Error("Arşiv kaynak journal ile eşleşmiyor");
+      return { path, ...verified };
+    } catch (error) {
+      target?.close();
+      rmSync(path, { force: true });
+      throw error;
     }
   }
 

@@ -78,7 +78,8 @@ function serverScript(mode: string): string {
 
 function adapter(mode: string) {
   return new CodexAppServerAdapter("a", { conversationOnly: mode === "conversation", clientFactory: (options) => new JsonlRpcClient({ ...options,
-    executable: process.execPath, args: ["-e", serverScript(mode)], timeoutMs: 5000, requestTimeoutMs: 1000 }) });
+    // Cold child startup under the parallel Windows suite can exceed one second.
+    executable: process.execPath, args: ["-e", serverScript(mode)], timeoutMs: 10000, requestTimeoutMs: 3000 }) });
 }
 
 test("Codex message test uses ephemeral read-only thread and sends only the user message", async () => {

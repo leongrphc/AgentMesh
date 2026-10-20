@@ -9,6 +9,7 @@ import { validate, reconcileTasks, type Config } from "./core/config.js";
 import { diagnosticReport } from "./core/diagnostics.js";
 import { safeLog } from "./core/safe-log.js";
 import { resolveAgentSettings } from "./core/agent-settings.js";
+import { verifyJournalArchive } from "./core/journal-archive.js";
 
 async function main(): Promise<void> {
   const args = process.argv.slice(2);
@@ -20,10 +21,18 @@ async function main(): Promise<void> {
   const diagnostics = args.includes("--diagnostics");
   const contextReview = args.includes("--context");
   const resolvingContext = args.includes("--resolve-context");
-  if ([reviewing, approving, retrying, executing, diagnostics, contextReview, resolvingContext].filter(Boolean).length > 1) {
+  const archiving = args.includes("--archive");
+  const verifyingArchive = args.includes("--verify-archive");
+  if ([reviewing, approving, retrying, executing, diagnostics, contextReview, resolvingContext, archiving, verifyingArchive].filter(Boolean).length > 1) {
     throw new Error("İnceleme, çalıştırma ve karar komutlarını ayrı kullanın");
   }
   if (streaming && !executing) throw new Error("--stream yalnızca --execute ile kullanılabilir");
+  const archiveArg = args[args.indexOf(archiving ? "--archive" : "--verify-archive") + 1];
+  if ((archiving || verifyingArchive) && (!archiveArg || archiveArg.startsWith("--"))) throw new Error("Arşiv komutu için dosya yolu gerekli");
+  if (verifyingArchive) {
+    console.log(JSON.stringify({ verified: true, path: resolve(archiveArg!), ...verifyJournalArchive(resolve(archiveArg!)) }, null, 2));
+    return;
+  }
   const configIndex = args.indexOf("--config");
   const configArg = args[configIndex + 1];
   if (configIndex < 0 || !configArg) {
@@ -35,7 +44,7 @@ async function main(): Promise<void> {
   const needsDesktop = config.agents.some((agent) => agent.transport && agent.transport !== "exec");
   const repoPath = isAbsolute(config.repoPath)
     ? realpathSync(config.repoPath) : realpathSync(resolve(dirname(configFile), config.repoPath));
-  if (!executing && !reviewing && !approving && !retrying && !diagnostics && !contextReview && !resolvingContext) {
+  if (!executing && !reviewing && !approving && !retrying && !diagnostics && !contextReview && !resolvingContext && !archiving) {
     console.log(JSON.stringify({
       dryRun: true, repoPath, projectId: config.projectId,
       agents: config.agents, tasks: config.tasks.map(({ id, agentId, dependsOn, allowedPaths, contextKeys }) => ({ id, agentId, dependsOn, allowedPaths, contextKeys })),
@@ -43,6 +52,7 @@ async function main(): Promise<void> {
         ? "Bu config etkileşimli izin gerektirir; çalıştırmak için masaüstü uygulamasında açın. CLI --review, --approve ve --retry komutları kullanılabilir."
         : "--execute [--stream]: ajanları çalıştır, --review: diff görüntüle, --approve TASK --digest SHA256: onayla, --retry TASK: görevi yeniden kuyruğa al.",
       contextInstruction: "--context: sürüm ve çakışmaları incele; --resolve-context ID --revision N --choice keep|accept|custom: karar ver. custom için --value-file UTF8_FILE gerekir.",
+      archiveInstruction: "--archive YENI_DOSYA.sqlite: journal'ın doğrulanan tam kopyasını oluşturur; kaynak kayıtlarını silmez. --verify-archive DOSYA.sqlite config gerektirmeden doğrular.",
     }, null, 2));
     return;
   }
@@ -51,8 +61,13 @@ async function main(): Promise<void> {
   }
   const repoKey = createHash("sha256").update(repoPath.toLowerCase()).digest("hex").slice(0, 16);
   const dbPath = join(dirname(repoPath), ".agentmesh-data", repoKey, "events.sqlite");
+  if (archiving && !existsSync(dbPath)) throw new Error("Arşivlenecek journal bulunamadı; önce projeyi açın");
   const journal = new SqliteJournal(dbPath);
   try {
+    if (archiving) {
+      console.log(JSON.stringify({ archived: true, ...journal.archive(archiveArg!) }, null, 2));
+      return;
+    }
     if (diagnostics) {
       const events = journal.scan(config.projectId);
       console.log(JSON.stringify(diagnosticReport(events), null, 2));

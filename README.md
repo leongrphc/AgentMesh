@@ -149,3 +149,5 @@ Monaco motoru ilk dosya açılışında veya taslak kurtarmada yüklenir; dosya 
 **Ortak context** sekmesi kararların sürüm geçmişini ve çakışan önerileri gösterir. Farklı bir değer mevcut kararın üzerine yazılmaz; kullanıcı seçimi beklenir. Bekleyen kararlar yeni görevleri durdurur. CLI ile `--context` ve `--resolve-context` kullanılabilir. [Karar akışı ve SQLite sürüm 2 geçişi](docs/context-decisions.md).
 
 Yeni görevlerde **Ortak context kapsamı** ile karar anahtarları seçilebilir. Bağımlılık özetleri otomatik eklenir; paket 128 kayıt/256 KiB ile sınırlıdır. Görev detayındaki **Hazırlanan context** her denemenin anahtar/sürüm listesini gösterir. CLI tanımında `contextKeys`, raporda `contextPackages` kullanılır. [Paket politikası ve sınırlar](docs/context-decisions.md#Görev-context-paketleri).
+
+Journal arşivi: `npm run live -- --config agentmesh.config.json --archive yeni-arsiv.sqlite`. Doğrulama: `npm run live -- --verify-archive yeni-arsiv.sqlite`. Kaynak olayları silinmez; Git/worktree dosyaları dahil değildir. [Arşiv ve kurtarma kapsamı](docs/journal-archives.md).
