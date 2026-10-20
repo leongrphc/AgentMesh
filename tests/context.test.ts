@@ -28,8 +28,8 @@ test("SQLite context upgrade preserves old events and rejects unknown future sch
     assert.equal(upgraded.all().length, 1); upgraded.close();
     const check = new DatabaseSync(path);
     assert.equal((check.prepare("PRAGMA user_version").get() as { user_version: number }).user_version, 2);
-    check.exec("PRAGMA user_version=3"); check.close();
-    assert.throws(() => new SqliteJournal(path), /desteklenmiyor: 3/);
+    check.exec("PRAGMA user_version=4"); check.close();
+    assert.throws(() => new SqliteJournal(path), /desteklenmiyor: 4/);
     const repair = new DatabaseSync(path); repair.exec("PRAGMA user_version=2"); repair.close();
     const reopened = new SqliteJournal(path); assert.equal(reopened.all().length, 1); reopened.close();
   } finally { rmSync(root, { recursive: true, force: true }); }

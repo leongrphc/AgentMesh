@@ -96,5 +96,9 @@ test("CLI archives without task recovery and verifies without config or provider
     const reopened = new SqliteJournal(path);
     try { assert.ok(reopened.loadCheckpoint()); assert.equal(new Orchestrator(reopened).snapshot("p", false).tasks[0]!.status, "needs_review"); }
     finally { reopened.close(); }
+    const linkedArchive = join(root, "linked.sqlite");
+    assert.equal(cli("--config", config, "--compact", linkedArchive).compacted, true);
+    assert.equal(cli("--config", config, "--context").contextConflicts.length, 0);
+    assert.equal(cli("--verify-archive", linkedArchive).eventCount, 4);
   } finally { journal.close(); rmSync(root, { recursive: true, force: true }); }
 });

@@ -24,12 +24,13 @@ async function main(): Promise<void> {
   const archiving = args.includes("--archive");
   const verifyingArchive = args.includes("--verify-archive");
   const checkpointing = args.includes("--checkpoint");
-  if ([reviewing, approving, retrying, executing, diagnostics, contextReview, resolvingContext, archiving, verifyingArchive, checkpointing].filter(Boolean).length > 1) {
+  const compacting = args.includes("--compact");
+  if ([reviewing, approving, retrying, executing, diagnostics, contextReview, resolvingContext, archiving, verifyingArchive, checkpointing, compacting].filter(Boolean).length > 1) {
     throw new Error("İnceleme, çalıştırma ve karar komutlarını ayrı kullanın");
   }
   if (streaming && !executing) throw new Error("--stream yalnızca --execute ile kullanılabilir");
-  const archiveArg = args[args.indexOf(archiving ? "--archive" : "--verify-archive") + 1];
-  if ((archiving || verifyingArchive) && (!archiveArg || archiveArg.startsWith("--"))) throw new Error("Arşiv komutu için dosya yolu gerekli");
+  const archiveArg = args[args.indexOf(compacting ? "--compact" : archiving ? "--archive" : "--verify-archive") + 1];
+  if ((archiving || verifyingArchive || compacting) && (!archiveArg || archiveArg.startsWith("--"))) throw new Error("Arşiv komutu için dosya yolu gerekli");
   if (verifyingArchive) {
     console.log(JSON.stringify({ verified: true, path: resolve(archiveArg!), ...verifyJournalArchive(resolve(archiveArg!)) }, null, 2));
     return;
@@ -45,7 +46,7 @@ async function main(): Promise<void> {
   const needsDesktop = config.agents.some((agent) => agent.transport && agent.transport !== "exec");
   const repoPath = isAbsolute(config.repoPath)
     ? realpathSync(config.repoPath) : realpathSync(resolve(dirname(configFile), config.repoPath));
-  if (!executing && !reviewing && !approving && !retrying && !diagnostics && !contextReview && !resolvingContext && !archiving && !checkpointing) {
+  if (!executing && !reviewing && !approving && !retrying && !diagnostics && !contextReview && !resolvingContext && !archiving && !checkpointing && !compacting) {
     console.log(JSON.stringify({
       dryRun: true, repoPath, projectId: config.projectId,
       agents: config.agents, tasks: config.tasks.map(({ id, agentId, dependsOn, allowedPaths, contextKeys }) => ({ id, agentId, dependsOn, allowedPaths, contextKeys })),
@@ -55,6 +56,7 @@ async function main(): Promise<void> {
       contextInstruction: "--context: sürüm ve çakışmaları incele; --resolve-context ID --revision N --choice keep|accept|custom: karar ver. custom için --value-file UTF8_FILE gerekir.",
       archiveInstruction: "--archive YENI_DOSYA.sqlite: journal'ın doğrulanan tam kopyasını oluşturur; kaynak kayıtlarını silmez. --verify-archive DOSYA.sqlite config gerektirmeden doğrular.",
       checkpointInstruction: "--checkpoint: kurtarma sonrası mevcut durumun açılış önbelleğini kaydeder; olayları silmez ve ajan çalıştırmaz.",
+      compactInstruction: "--compact YENI_ARSIV.sqlite: doğrulanan arşive bağlanır ve aktif journal'ı küçültür. Bağlı arşiv artık çalışma için zorunludur.",
     }, null, 2));
     return;
   }
@@ -63,7 +65,7 @@ async function main(): Promise<void> {
   }
   const repoKey = createHash("sha256").update(repoPath.toLowerCase()).digest("hex").slice(0, 16);
   const dbPath = join(dirname(repoPath), ".agentmesh-data", repoKey, "events.sqlite");
-  if ((archiving || checkpointing) && !existsSync(dbPath)) throw new Error("Journal bulunamadı; önce projeyi açın");
+  if ((archiving || checkpointing || compacting) && !existsSync(dbPath)) throw new Error("Journal bulunamadı; önce projeyi açın");
   const journal = new SqliteJournal(dbPath);
   try {
     if (archiving) {
@@ -100,6 +102,11 @@ async function main(): Promise<void> {
     }
     if (checkpointing) {
       console.log(JSON.stringify({ checkpointed: true, ...engine.checkpoint() }, null, 2));
+      return;
+    }
+    if (compacting) {
+      engine.checkpoint();
+      console.log(JSON.stringify(journal.compact(archiveArg!), null, 2));
       return;
     }
     if (executing) {

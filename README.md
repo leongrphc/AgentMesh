@@ -153,3 +153,5 @@ Yeni görevlerde **Ortak context kapsamı** ile karar anahtarları seçilebilir.
 Journal arşivi: `npm run live -- --config agentmesh.config.json --archive yeni-arsiv.sqlite`. Doğrulama: `npm run live -- --verify-archive yeni-arsiv.sqlite`. Kaynak olayları silinmez; Git/worktree dosyaları dahil değildir. [Arşiv ve kurtarma kapsamı](docs/journal-archives.md).
 
 Açılış checkpoint'i: `npm run live -- --config agentmesh.config.json --checkpoint`. Sonraki açılış yalnızca yeni olayları replay eder; geçersiz checkpoint tam replay ile kurtarılır. Kaynak journal silinmez veya küçültülmez. [Checkpoint davranışı](docs/journal-archives.md#replay-checkpoint).
+
+Aktif journal küçültme: `npm run live -- --config agentmesh.config.json --compact yeni-bagli-arsiv.sqlite`. Doğrulanan arşiv, geçmişi okumak için zorunlu hale gelir; dosyayı silmeyin veya taşımayın. Küçültülen journal şema v3 kullanır. [Rotasyon ve sınırlar](docs/journal-archives.md#aktif-journalı-küçültme).

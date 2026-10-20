@@ -2,6 +2,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { closeSync, existsSync, mkdirSync, openSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { DatabaseSync } from "node:sqlite";
+import { pathToFileURL } from "node:url";
 import type { DomainEvent, StoredEvent, ContextConflict } from "./contracts.js";
 import type { EventStore } from "./journal.js";
 import { fingerprintEvents, verifyJournalArchive } from "./journal-archive.js";
@@ -12,6 +13,8 @@ export class SqliteJournal implements EventStore {
   private readonly lockPath: string;
   private readonly lockFd: number;
   private closed = false;
+  private archiveAlias?: "history0" | "history1";
+  private activeScans = 0;
 
   constructor(path: string, legacyJsonl?: string) {
     mkdirSync(dirname(path), { recursive: true });
@@ -22,7 +25,7 @@ export class SqliteJournal implements EventStore {
       this.db = opened = new DatabaseSync(path);
       this.db.exec("PRAGMA busy_timeout=5000; PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON;");
       const version = this.db.prepare("PRAGMA user_version").get() as { user_version: number };
-      if (version.user_version > 2) throw new Error(`SQLite schema desteklenmiyor: ${version.user_version}`);
+      if (version.user_version > 3) throw new Error(`SQLite schema desteklenmiyor: ${version.user_version}`);
       if (version.user_version < 1) {
         this.db.exec(`BEGIN IMMEDIATE;
           CREATE TABLE IF NOT EXISTS events (
@@ -38,9 +41,9 @@ export class SqliteJournal implements EventStore {
       }
       // v2 adds decision/conflict event semantics. Old binaries must not ignore pending decisions.
       if (version.user_version === 1) this.db.exec("BEGIN IMMEDIATE; PRAGMA user_version=2; COMMIT;");
-      if (legacyJsonl && existsSync(legacyJsonl)) this.importJsonlOnce(legacyJsonl);
       // Derived indexes only: old writers maintain them automatically; event schema stays v2.
       this.db.exec(`
+        CREATE TABLE IF NOT EXISTS journal_archive (id INTEGER PRIMARY KEY CHECK(id = 1), path TEXT NOT NULL, digest TEXT NOT NULL, through_sequence INTEGER NOT NULL, event_count INTEGER NOT NULL);
         CREATE TABLE IF NOT EXISTS replay_checkpoint (id INTEGER PRIMARY KEY CHECK(id = 1), format INTEGER NOT NULL, sequence INTEGER NOT NULL, source_id TEXT, state TEXT NOT NULL, digest TEXT NOT NULL);
         CREATE TRIGGER IF NOT EXISTS invalidate_checkpoint_update AFTER UPDATE ON events BEGIN DELETE FROM replay_checkpoint; END;
         CREATE TRIGGER IF NOT EXISTS invalidate_checkpoint_delete AFTER DELETE ON events BEGIN DELETE FROM replay_checkpoint; END;
@@ -50,6 +53,19 @@ export class SqliteJournal implements EventStore {
         CREATE INDEX IF NOT EXISTS events_history_task ON events(project_id, json_extract(payload, '$.type'), json_extract(payload, '$.taskId'), sequence);
         CREATE INDEX IF NOT EXISTS events_history_conflict ON events(project_id, json_extract(payload, '$.type'), json_extract(payload, '$.conflict.id'), sequence);
       `);
+      const link = this.db.prepare("SELECT path, digest, through_sequence, event_count FROM journal_archive WHERE id = 1").get() as
+        { path: string; digest: string; through_sequence: number; event_count: number } | undefined;
+      if (version.user_version === 3 && !link) throw new Error("Arşiv bağlantısı eksik; journal açılamadı");
+      if (link) {
+        if (version.user_version !== 3) throw new Error("Arşiv bağlantısı ve journal şeması uyumsuz");
+        const verified = verifyJournalArchive(link.path);
+        if (verified.digest !== link.digest || verified.lastSequence !== link.through_sequence || verified.eventCount !== link.event_count) throw new Error("Bağlı arşiv doğrulanamadı");
+        const overlap = this.db.prepare("SELECT 1 FROM main.events WHERE sequence <= ? LIMIT 1").get(link.through_sequence);
+        if (overlap) throw new Error("Aktif journal ile arşiv sıraları çakışıyor");
+        this.attachArchive(link.path, "history0");
+        this.setHistoryView("history0"); this.archiveAlias = "history0";
+      }
+      if (legacyJsonl && existsSync(legacyJsonl) && !link) this.importJsonlOnce(legacyJsonl);
     } catch (error) {
       try { opened?.close(); } catch { /* Preserve the original open/migration error. */ }
       closeSync(this.lockFd);
@@ -68,7 +84,10 @@ export class SqliteJournal implements EventStore {
     const { last } = this.db.prepare("SELECT COALESCE(MAX(sequence), 0) AS last FROM events").get() as { last: number };
     const rows = this.db.prepare(`SELECT id, at, payload FROM events WHERE sequence > ? AND sequence <= ?${projectId === undefined ? "" : " AND project_id = ?"} ORDER BY sequence`)
       .iterate(...(projectId === undefined ? [afterSequence, last] : [afterSequence, last, projectId]));
-    for (const row of rows) yield { id: row.id as string, at: row.at as string, payload: JSON.parse(row.payload as string) as DomainEvent };
+    this.activeScans++;
+    try {
+      for (const row of rows) yield { id: row.id as string, at: row.at as string, payload: JSON.parse(row.payload as string) as DomainEvent };
+    } finally { this.activeScans--; }
   }
 
   scanAfter(sequence: number) { return this.scan(undefined, sequence); }
@@ -225,13 +244,60 @@ export class SqliteJournal implements EventStore {
     }
   }
 
+  /** Explicit lossless rotation: the verified archive becomes a required part of this journal. */
+  compact(destination: string) {
+    this.assertOpen();
+    if (this.activeScans) throw new Error("Journal taraması bitmeden küçültme yapılamaz");
+    const archive = this.archive(destination);
+    if (archive.lastSequence === null) throw new Error("Boş journal küçültülemez; oluşturulan boş arşiv korunuyor");
+    const next = this.archiveAlias === "history0" ? "history1" : "history0";
+    const previous = this.archiveAlias;
+    this.attachArchive(archive.path, next);
+    try {
+      this.db.exec("BEGIN IMMEDIATE");
+      try {
+        const checkpoint = this.db.prepare("SELECT * FROM replay_checkpoint WHERE id = 1").get();
+        this.db.prepare("INSERT OR REPLACE INTO journal_archive(id, path, digest, through_sequence, event_count) VALUES (1, ?, ?, ?, ?)")
+          .run(archive.path, archive.digest, archive.lastSequence, archive.eventCount);
+        this.db.prepare("DELETE FROM main.events WHERE sequence <= ?").run(archive.lastSequence);
+        if (checkpoint) this.db.prepare("INSERT OR REPLACE INTO replay_checkpoint(id, format, sequence, source_id, state, digest) VALUES (1, ?, ?, ?, ?, ?)")
+          .run(checkpoint.format!, checkpoint.sequence!, checkpoint.source_id!, checkpoint.state!, checkpoint.digest!);
+        this.db.exec("PRAGMA user_version=3");
+        this.setHistoryView(next);
+        this.db.exec("COMMIT");
+      } catch (error) { this.db.exec("ROLLBACK"); throw error; }
+    } catch (error) { this.db.exec(`DETACH DATABASE ${next}`); throw error; }
+    this.archiveAlias = next;
+    if (previous) this.db.exec(`DETACH DATABASE ${previous}`);
+    let vacuumed = true;
+    let maintenanceError: string | undefined;
+    try {
+      this.db.exec("DROP VIEW temp.events; VACUUM main;");
+      const wal = this.db.prepare("PRAGMA main.wal_checkpoint(TRUNCATE)").get() as { busy: number };
+      if (wal.busy) { vacuumed = false; maintenanceError = "Aktarım tamamlandı; WAL küçültme başka bir okuyucuyu bekliyor"; }
+    }
+    catch (error) { vacuumed = false; maintenanceError = String(error); } // Rotation is already committed; never misreport it as rolled back.
+    finally { this.setHistoryView(next); }
+    return { compacted: true, archive, vacuumed, ...(maintenanceError ? { maintenanceError } : {}) };
+  }
+
+  private attachArchive(path: string, alias: "history0" | "history1") {
+    this.db.prepare(`ATTACH DATABASE ? AS ${alias}`).run(pathToFileURL(resolve(path)).href + "?mode=ro");
+  }
+
+  private setHistoryView(alias: "history0" | "history1") {
+    this.db.exec(`DROP VIEW IF EXISTS temp.events;
+      CREATE TEMP VIEW events AS SELECT sequence, id, at, project_id, payload FROM ${alias}.events
+      UNION ALL SELECT sequence, id, at, project_id, payload FROM main.events;`);
+  }
+
   private insert(entry: StoredEvent): void {
     const projectId = entry.payload.type === "project.created"
       ? entry.payload.project.id
       : entry.payload.type === "task.created"
         ? entry.payload.task.projectId
         : entry.payload.projectId;
-    this.db.prepare("INSERT INTO events(id, at, project_id, payload) VALUES (?, ?, ?, ?) ON CONFLICT(id) DO NOTHING")
+    this.db.prepare("INSERT INTO main.events(id, at, project_id, payload) VALUES (?, ?, ?, ?) ON CONFLICT(id) DO NOTHING")
       .run(entry.id, entry.at, projectId, JSON.stringify(entry.payload));
   }
 
