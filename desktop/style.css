@@ -45,6 +45,12 @@
 .directory-label code { overflow-wrap: anywhere; }
 .directory-label button { padding: 1px 7px; }
 .file-editor { min-width: 0; background: #15232e; }
+.file-tabs { display: flex; overflow-x: auto; border-bottom: 1px solid var(--line); }
+.file-tabs:empty { display: none; }
+.file-tabs>div { display: flex; flex-shrink: 0; border-right: 1px solid var(--line); }
+.file-tabs button { border: 0; border-radius: 0; background: transparent; font-size: 11px; padding: 9px; }
+.file-tabs [role=tab] { max-width: 250px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.file-tabs [aria-selected=true] { background: #2b4451; color: var(--teal); }
 .editor-toolbar { display: flex; justify-content: space-between; gap: 12px; align-items: center; min-height: 40px; border-bottom: 1px solid var(--line); padding: 5px 12px; }
 .editor-toolbar code { font-size: 10px; color: var(--teal); overflow-wrap: anywhere; }
 .editor-toolbar>div { display: flex; gap: 7px; }

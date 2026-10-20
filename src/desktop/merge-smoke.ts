@@ -8,6 +8,7 @@ import { SqliteJournal } from "../core/sqlite-journal.js";
 import { Orchestrator } from "../core/orchestrator.js";
 import { WorktreeManager } from "../core/worktrees.js";
 import type { DesktopService } from "./service.js";
+import { editorSmoke } from "./editor-smoke.js";
 
 /** Only invoked by the explicit desktop smoke flag, in that process's isolated fixture directory. */
 export async function mergeSmoke(window: BrowserWindow, service: DesktopService) {
@@ -48,7 +49,7 @@ export async function mergeSmoke(window: BrowserWindow, service: DesktopService)
     (await wait(() => [...document.querySelectorAll('.task-row')].find(e => e.textContent.includes('Smoke second')))).click();
     await wait(() => document.querySelector('.task-detail h3')?.textContent === 'Smoke second');
     (await wait(() => [...document.querySelectorAll('.detail-actions button')].find(e => e.textContent.includes('Değişiklikleri incele')))).click();
-    (await wait(() => [...document.querySelectorAll('.merge-resolution button')].find(e => e.textContent.includes('Çözümü görev alanında aç')))).click();
+    (await wait(() => [...document.querySelectorAll('.merge-resolution button')].find(e => !e.disabled && e.textContent.includes('Çözümü görev alanında aç')))).click();
     await wait(() => document.querySelector('.merge-file-list button'));
     document.querySelector('[aria-label="İncelemeyi kapat"]').click();
     await wait(() => !document.querySelector('.review-dialog'));
@@ -74,6 +75,8 @@ export async function mergeSmoke(window: BrowserWindow, service: DesktopService)
     document.querySelector('.file-workspace').scrollIntoView({block:'center'});
     await new Promise(resolve => { const timer = setTimeout(resolve, 500); requestAnimationFrame(() => requestAnimationFrame(() => { clearTimeout(timer); resolve(); })); });
   })()`);
+  if (service.readFile("second", "src/smoke-folder/new.ts").content !== "") throw new Error("Yeni dosya diskte doğrulanamadı");
+  await editorSmoke(window, service);
   const bounds = await window.webContents.executeJavaScript(`(() => {
     const r = document.querySelector('.file-workspace').getBoundingClientRect();
     return {x:r.x + scrollX, y:r.y + scrollY, width:r.width, height:r.height, scale:1};
@@ -83,7 +86,6 @@ export async function mergeSmoke(window: BrowserWindow, service: DesktopService)
     const shot = await window.webContents.debugger.sendCommand("Page.captureScreenshot", {format:"png", captureBeyondViewport:true, clip:bounds});
     writeFileSync(resolve("dist", "desktop-create-file.png"), Buffer.from(shot.data, "base64"));
   } finally { window.webContents.debugger.detach(); }
-  if (service.readFile("second", "src/smoke-folder/new.ts").content !== "") throw new Error("Yeni dosya diskte doğrulanamadı");
   await window.webContents.executeJavaScript(`(async () => {
     const wait = async (find) => {
       for (let i = 0; i < 200; i++) { const value = find(); if (value) return value; await new Promise(r => setTimeout(r, 50)); }

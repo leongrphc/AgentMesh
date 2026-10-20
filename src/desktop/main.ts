@@ -14,6 +14,7 @@ protocol.registerSchemesAsPrivileged([{ scheme: "agentmesh", privileges: { stand
 const origin = "agentmesh://desktop";
 const windowSmoke = process.argv.includes("--window-smoke-test");
 const nativeTuiSmoke = process.argv.includes("--opencode-tui-smoke-test");
+const editorSmokeOnly = process.argv.includes("--editor-smoke-test");
 const smoke = process.argv.includes("--smoke-test") || windowSmoke || nativeTuiSmoke;
 if (smoke) {
   const smokeProfile = resolve(".agentmesh", "desktop-smoke", String(process.pid), "electron-profile");
@@ -43,6 +44,7 @@ async function createWindow() {
     if (checkingClose) return;
     checkingClose = true;
     void (async () => {
+      await current.webContents.executeJavaScript(`window.dispatchEvent(new Event('agentmesh:flush-drafts'))`).catch(() => {});
       const dirty = await current.webContents.executeJavaScript(`document.documentElement.dataset.unsaved === 'true'`).catch(() => false);
       if (dirty) {
         const result = await dialog.showMessageBox(current, { type: "question", title: "Kaydedilmemiş değişiklikler",
@@ -63,6 +65,10 @@ async function createWindow() {
   if (windowSmoke && !window.isVisible()) throw new Error("Masaüstü penceresi görünür değil");
   if (smoke) {
     try {
+      if (editorSmokeOnly) {
+        await mergeSmoke(window, service);
+        await service.close(); app.exit(0); return;
+      }
       await window.webContents.executeJavaScript(`new Promise((resolve, reject) => {
         const timeout = setTimeout(() => reject(new Error('Renderer hazır değil')), 10000);
         const check = setInterval(() => { if (document.querySelector('[data-testid="start"]')) {
@@ -75,7 +81,7 @@ async function createWindow() {
         const timeout = setTimeout(() => reject(new Error('Monaco veya dosya ağacı açılmadı')), 10000);
         const check = setInterval(() => {
           const file = [...document.querySelectorAll('.file-tree>button')].find((button) => button.textContent.includes('DEMO.md'));
-          if (document.querySelector('.monaco-editor') && file) {
+          if (document.querySelector('.monaco-host') && file) {
             file.click(); clearInterval(check); clearTimeout(timeout); resolve(true);
           }
         }, 50);

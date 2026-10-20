@@ -75,7 +75,7 @@ function App() {
   }
 
   function canLeaveFile() {
-    return !editorDirty || window.confirm("Kaydedilmemiş dosya değişiklikleri silinsin mi?");
+    return !editorDirty || window.confirm("Kaydedilmemiş değişiklikler var. Yerel kurtarma kaydı mevcutsa dönüşte açılır. Yine de devam edilsin mi?");
   }
 
   if (!state) return <main className="loading"><b>AgentMesh</b><p>{error || "Çalışma alanı açılıyor…"}</p></main>;
@@ -137,7 +137,7 @@ function App() {
           {["failed", "cancelled", "blocked", "needs_review"].includes(task.status) && <button disabled={state.busy || pending} onClick={() => act(() => api.retry(task.id))}>Yeniden kuyruğa al</button>}</div>
         </>}</aside></div>
       </section>
-      {task && <Suspense fallback={<p className="empty">Editör hazırlanıyor…</p>}><FileEditor key={`${project.id}:${project.workspaceRoot}:${task.id}:${task.worktree?.path ?? "repo"}`} taskId={task.id} api={api} busy={state.busy} onDirty={setEditorDirty} /></Suspense>}
+      {task && <Suspense fallback={<p className="empty">Editör hazırlanıyor…</p>}><FileEditor key={`${project.id}:${project.workspaceRoot}:${task.id}:${task.worktree?.path ?? "repo"}`} taskId={task.id} scope={JSON.stringify([project.id, project.workspaceRoot, task.id, task.worktree?.path ?? "repo"])} api={api} busy={state.busy} onDirty={setEditorDirty} /></Suspense>}
       <Suspense fallback={<p className="empty">Terminal hazırlanıyor…</p>}><TerminalPanel key={`${project.id}:${project.workspaceRoot}`} api={api} taskId={task?.id} busy={state.busy}
         available={state.demo || !!task?.worktree && !["running", "completed"].includes(task.status)} /></Suspense>
       <section className="activity"><div className="activity-header"><div role="tablist" aria-label="Proje kayıtları">{([

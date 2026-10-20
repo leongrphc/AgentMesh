@@ -93,7 +93,8 @@ Codex, OpenCode, Claude, Antigravity ve diğer API modellerini **tek IDE içinde
   - [ ] Farkları karşılaştıran güncelleme ekranı ve güvenli görev revizyonu. Şimdilik görev farkında orijinal tanımı geri yüklemek veya yeni görev kimliği kullanmak gerekir. Eski journal'ların ilk bağlaması mevcut config üzerinden yapılır; daha önce kaydedilmemiş provider/model geçmişi geriye dönük kanıtlanamaz.
 - [ ] **UI-007 / Editör devamı:**
   - [x] Dosya/klasör oluşturma ve dosya ağacını yenileme. Durdurulmuş worktree, allowedPaths ve korunan yol kontrolü; mevcut öğeyi ezmeyen exclusive oluşturma. Klasörler izinli dosya kalıplarının üst yollarıyla sınırlı, üst klasörler önce oluşturulmalı. Taslak korunur; yeni öğe ağaçtan açılır. Gerçek Electron form → IPC → disk doğrulaması.
-  - [ ] Disk değişikliği izleme, çoklu dosya sekmeleri ve kaydedilmemiş taslak kurtarma.
+  - [x] En fazla 20 Monaco sekmesi; sekmeler arasında taslak/undo/imleç korunur. Açık dosyalar ve mevcut klasör 3 saniyelik kontrollü polling ile izlenir; temiz dosya yenilenir, taslak varsa disk farkı gösterilir ve eski digest kaydı reddedilir.
+  - [x] Proje/görev/worktree kapsamında yerel taslak kurtarma; 300 ms gecikmeli kayıt, kapanış/geçişte flush, 4 MiB kapsam sınırı ve kota hatası görünümü. Renderer yeniden yüklemede iki taslağı kurtarma, ayrı dosyalara kaydetme ve disk çakışması Electron smoke kapsamındadır. [Editör kapsamı](editor.md).
   - [ ] Monaco paket boyutu/ilk yükleme optimizasyonu; şu anda editör ayrı ve tembel yüklenen yaklaşık 2.6 MB chunk.
 
 ### P2 — Hibrit sağlayıcılar ve ileri orkestrasyon
@@ -113,7 +114,7 @@ Codex, OpenCode, Claude, Antigravity ve diğer API modellerini **tek IDE içinde
 
 ## Devam ederken
 
-20 Ekim goal çalışması: UI-003 ajan ayarları, CORE-013 kalıcı ajan bağlaması ilk adımı, UI-006 test raporu/merge çözüm akışı ve CORE-009 kalıcı inbox/Codex canlı teslim eklendi. **75/75 tam süit ve genişletilmiş worktree servis testleri**, TypeScript ve canlı mesaj/gerçek Git çakışma çözümünü doğrulayan Electron smoke başarılı. Gerçek model çağrısı yapılmadı. UI-007 dosya/klasör oluşturma eklendi; sırada çoklu sekmeler, taslak kurtarma/disk izleme ve kalan native canlı teslim kabul işleri var.
+20 Ekim goal çalışması: UI-003 ajan ayarları, CORE-013 kalıcı ajan bağlaması ilk adımı, UI-006 test raporu/merge çözüm akışı ve CORE-009 kalıcı inbox/Codex canlı teslim eklendi. **77/77 tam süit**, TypeScript ve canlı mesaj/gerçek Git çakışma çözümünü doğrulayan Electron smoke başarılı. Gerçek model çağrısı yapılmadı. UI-007 dosya/klasör oluşturma, çoklu sekmeler, taslak kurtarma ve disk izleme eklendi. Monaco yükleme optimizasyonu ve kalan native canlı teslim kabul işleri açık.
 
 1. `D:\WebGpt` içinde `git status --short` ve `git log -5 --oneline` ile durumu kontrol et.
 2. `npm install` (gerekiyorsa), ardından `npm run typecheck` ve `npm test` çalıştır.
@@ -151,7 +152,7 @@ npm run live -- --config agentmesh.config.example.json
 
 ## Bilinen sınırlar / tamamlandı sanılmaması gerekenler
 
-- Grafik masaüstü kabuğu, Monaco editör, Task Board ve görev PTY terminalleri var. Editör mevcut dosyaları düzenler, yeni dosya/klasör oluşturur. Çoklu sekmeler, taslak kurtarma ve dosya izleyicisi henüz yok.
+- Grafik masaüstü kabuğu, Monaco editör, Task Board ve görev PTY terminalleri var. Editör mevcut dosyaları düzenler, yeni dosya/klasör oluşturur. Çoklu sekmeler, yerel taslak kurtarma ve 3 saniyelik disk kontrolü var; işletim sistemi dosya olayı aboneliği kullanılmıyor.
 - Gerçek kısa yanıtlar: Codex, Antigravity ve native TUI üzerinden OpenCode Space Bunny Free. Gerçek çok ajanlı kod/araç/resume uçtan uca kabulü henüz yapılmadı; Claude API anahtarıyla model erişimi doğrulanmadı.
 - OpenCode için OS seviyesinde izolasyon kanıtlanmadı; mevcut `allowedPaths` denetimi işlem sonrasındadır.
 - Codex App Server ve OpenCode Server için araç onayı köprüleri var; canlı ajan mesajları Codex App Server ve demo için uygulandı, diğer otomatik bağlantılarda sonraki isteme bırakılır. OpenCode Server şu an 1.19.x v1 şemasına bağlıdır ve yalnızca bash/read/edit kapsamlarını sunar. Log filtresi bilinen biçimleri tanır; keyfi kişisel veri için garanti vermez.
