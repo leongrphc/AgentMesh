@@ -60,3 +60,14 @@ Bu adım sürüm geçmişinin renderer aktarımını ve listelenmesini sınırla
 **Çözülen kararlar** ve görev detayındaki **Hazırlanan context** de açıldığında en fazla 20 kayıt yükler. Kararlar önerinin oluşturulma zamanına göre değil, çözüm olayının journal sırasına göre listelenir. Bu nedenle eskiden bekleyen bir önerinin bugün çözülmesi eski sayfalarda atlama oluşturmaz. Paketler görevin çalıştırma denemelerinin sırasını kullanır. Her ikisinde yeni kayıtlar üstte, cursor dışlayan sıra numarasıdır; sayfa cevapları bağımsız kopyalardır.
 
 Masaüstü kompakt snapshot'ında yalnızca bekleyen context çatışmaları kalır; görevlerin `contextPackages` dizileri taşınmaz. `historyCounts` ayrı sayıları sağlar. `resolvedContext` ve `contextPackages` okuma çağrıları proje/çalışma kökü kapsamını doğrular; paket okuması ayrıca görevin aynı projede olmasını gerektirir. CLI ve çekirdeğin varsayılan tam snapshot'ı değişmez. Bu sayfalama kayıt silmez, kayıt sayısı sınırı uygular; tüm proje verileri için sabit toplam byte veya bellek sınırı sağlamaz.
+
+
+## SQLite üzerinden geçmiş okuma
+
+SQLite journal, sürüm/çözüm/paket sayfalarını doğrudan `events` tablosundan okur. Proje + olay türü + anahtar/görev/öneri kimliği indeksleri kullanılır; sayfa sonuçlarında en fazla 20 olay JSON olarak çözümlenir. Çözülen kararın kaynak önerisi aynı projeden, çözüm olayından önceki kayıttan alınır. Sürümler mevcut replay kuralı gibi kabul edilmiş olayların sırasından hesaplanır; olay içindeki eski revision alanına güvenilmez.
+
+Yeni indeksler türetilmiş verilerdir. Var olan v2 journal açıldığında eklenir; olaylar değiştirilmez, şema sürümü artırılmaz. Eski uygulamalar da normal SQLite yazımı sırasında bu indeksleri günceller. JSONL geliştirme deposu bellek üzerinden aynı sayfa sözleşmesini sürdürür. SQLite kapanmışsa geçmiş okuması hata verir; sessiz eski veri dönüşü yapılmaz.
+
+Sayfa sorgusu bütün journal'ı `all()` ile yüklemez. Bununla birlikte toplam sayısı için COUNT ve eski sayfalarda OFFSET kullanılır; eski sayfalara erişim sabit maliyetli değildir. Orkestratör açılışta hâlâ tam replay yapar ve tam snapshot uyumluluğu için geçmişi bellekte tutar. Bu adım başlangıç belleğini veya journal disk boyutunu sınırlamaz; kanıtı koruyan arşivleme/checkpoint politikası açık iştir.
+
+Doğrulama: iki projede iç içe 47 sürüm/paket/öneri, ters sırada çözümler, tüm sayfalarda SQLite–JSONL eşitliği, eski veritabanına indeks eklenirken olayların korunması, SQL parametre bağlama, sayfa sınırları, kapalı depo, snapshot kopyaları ve indeksli sorgu planları. Toplu yazmada bir zorunlu alan hatası varsa tüm işlem geri alınır; yalnızca aynı olay kimliğinin yeniden içe aktarımı atlanır.

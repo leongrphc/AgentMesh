@@ -168,6 +168,7 @@ export class Orchestrator {
   contextHistoryPage(projectId: string, key: string, before?: number): import("./contracts.js").ContextHistoryPage {
     if (!this.projects.has(projectId)) throw new Error("Proje bulunamadı");
     if (typeof key !== "string" || !key || key.length > 160 || (before !== undefined && (!Number.isSafeInteger(before) || before < 1))) throw new Error("Geçersiz context geçmişi isteği");
+    if (this.journal.contextHistoryPage) return this.journal.contextHistoryPage(projectId, key, before);
     const history = this.factHistory.get(projectId)?.get(key) ?? [];
     const end = Math.min(history.length, (before ?? history.length + 1) - 1);
     const start = Math.max(0, end - 20);
@@ -183,12 +184,14 @@ export class Orchestrator {
 
   resolvedContextPage(projectId: string, before?: number) {
     if (!this.projects.has(projectId)) throw new Error("Proje bulunamadı");
+    if (this.journal.resolvedContextPage) return this.journal.resolvedContextPage(projectId, before);
     return historyPage(this.resolvedContext.get(projectId) ?? [], before);
   }
 
   contextPackagesPage(projectId: string, taskId: string, before?: number) {
     const task = this.requireTask(taskId);
     if (task.projectId !== projectId) throw new Error("Görev başka projeye ait");
+    if (this.journal.contextPackagesPage) return this.journal.contextPackagesPage(projectId, taskId, before);
     return historyPage(task.contextPackages ?? [], before);
   }
 

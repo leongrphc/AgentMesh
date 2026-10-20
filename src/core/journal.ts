@@ -1,9 +1,12 @@
 import { appendFileSync, existsSync, mkdirSync, readFileSync } from "node:fs";
 import { dirname } from "node:path";
 import { randomUUID } from "node:crypto";
-import type { DomainEvent, StoredEvent } from "./contracts.js";
+import type { DomainEvent, StoredEvent, ContextHistoryPage, HistoryPage, ContextConflict, ContextPackage } from "./contracts.js";
 
 export interface EventStore {
+  contextHistoryPage?(projectId: string, key: string, before?: number): ContextHistoryPage;
+  resolvedContextPage?(projectId: string, before?: number): HistoryPage<ContextConflict>;
+  contextPackagesPage?(projectId: string, taskId: string, before?: number): HistoryPage<ContextPackage>;
   all(): readonly StoredEvent[];
   append(payload: DomainEvent): StoredEvent;
   appendBatch(payloads: readonly DomainEvent[]): readonly StoredEvent[];
