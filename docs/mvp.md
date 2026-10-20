@@ -51,7 +51,9 @@
 ## Aşama 3 — Hibrit genişleme
 
 - [ ] Claude Agent SDK için izinli API anahtarı adaptörü.
+- [x] Claude headless CLI harness / API anahtarı ve Antigravity resmî CLI için otomatik görev adaptörleri; ortak sonuç zarfı, session saklama, context/mesaj devri ve Git/SQLite zincir testi.
 - [ ] Antigravity Python SDK için güvenli sidecar, anahtar/kurumsal auth.
+  - [x] Resmî CLI mevcut olduğundan ilk bağlantı Python sidecar gerektirmeden yapıldı; SDK callback/policy alternatifi ileri aşama.
 - [ ] Doğrudan API agent harness (OpenAI / Anthropic / Google / uyumlu API).
 - [ ] Manuel ve yarı otonom görev oluşturma; yönetici ajan değişimi.
 - [ ] Bütçe, hız limiti, model seçimi ve başarısızlık politikaları.

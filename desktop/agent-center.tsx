@@ -1,13 +1,13 @@
 import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import type { DesktopAPI, DesktopState } from "../src/desktop/contracts.js";
-import type { ProviderMessageResult } from "../src/adapters/provider-message.js";
+import type { ProviderMessageInput, ProviderMessageResult } from "../src/adapters/provider-message.js";
 import type { TerminalInfo } from "../src/desktop/terminals.js";
 const NativeTerminal = lazy(() => import("./terminal.js").then((module) => ({ default: module.TerminalView })));
 
 export function AgentCenter({ state, api, onClose }: { state: DesktopState; api: DesktopAPI; onClose: () => void }) {
   const dialog = useRef<HTMLDialogElement>(null);
   const [error, setError] = useState("");
-  const [provider, setProvider] = useState<"codex" | "opencode">("codex");
+  const [provider, setProvider] = useState<ProviderMessageInput["provider"]>("codex");
   const [model, setModel] = useState("");
   const [transport, setTransport] = useState<"terminal" | "exec" | "server">("terminal");
   const [native, setNative] = useState<TerminalInfo>();
@@ -29,7 +29,7 @@ export function AgentCenter({ state, api, onClose }: { state: DesktopState; api:
       {error && <p className="file-error" role="alert">{error}</p>}
       <section className="provider-test" aria-labelledby="provider-test-title">
         <h3 id="provider-test-title">Gerçek mesaj testi</h3>
-        <p>Codex veya OpenCode hesabına mesaj gönder, yanıtı burada gör. Demo projesinde de gerçek sağlayıcı kullanılır; kullanım maliyeti oluşabilir. Her gönderim bağımsız bir konuşmadır.</p>
+        <p>Bir sağlayıcıya mesaj gönder, yanıtı burada gör. Demo projesinde de gerçek sağlayıcı kullanılır; kullanım maliyeti oluşabilir. Tek mesaj testleri bağımsız konuşmalardır.</p>
         <form onSubmit={async (event) => {
           event.preventDefault(); setError(""); setResult(undefined); setSending(true); setSentMessage(message);
           try {
@@ -41,7 +41,7 @@ export function AgentCenter({ state, api, onClose }: { state: DesktopState; api:
           }
           catch (e) { setError(String(e)); } finally { setSending(false); }
         }}>
-          <div className="provider-test-fields"><label>Sağlayıcı<select aria-label="Test sağlayıcısı" value={provider} disabled={sending || !!native} onChange={(e) => { setProvider(e.target.value as "codex" | "opencode"); setModel(e.target.value === "opencode" ? "opencode/space-bunny-free" : ""); }}><option value="codex">Codex · App Server</option><option value="opencode">OpenCode</option></select></label>
+          <div className="provider-test-fields"><label>Sağlayıcı<select aria-label="Test sağlayıcısı" value={provider} disabled={sending || !!native} onChange={(e) => { setProvider(e.target.value as ProviderMessageInput["provider"]); setModel(e.target.value === "opencode" ? "opencode/space-bunny-free" : ""); }}><option value="codex">Codex · App Server</option><option value="opencode">OpenCode</option><option value="antigravity">Antigravity · CLI</option><option value="claude">Claude · API anahtarı</option></select></label>
           <label>Model (isteğe bağlı)<input aria-label="Test modeli" value={model} disabled={sending || !!native} maxLength={200} placeholder={provider === "opencode" ? "provider/model veya varsayılan" : "Sağlayıcı varsayılanı"} onChange={(e) => setModel(e.target.value)} /></label></div>
           {provider === "opencode" && <label>Bağlantı<select aria-label="OpenCode test bağlantısı" value={transport} disabled={sending || !!native} onChange={(e) => setTransport(e.target.value as typeof transport)}><option value="terminal">Etkileşimli terminal · Free modeller için</option><option value="exec">CLI run · tek mesaj</option><option value="server">HTTP Server · tek mesaj</option></select></label>}
           {provider === "opencode" && transport !== "terminal" && <p className="terminal-note">Bazı Free modeller tek mesaj bağlantısını reddedebilir. Böyle bir hatada Etkileşimli terminal seçeneğini kullanın.</p>}

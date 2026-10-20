@@ -2,7 +2,7 @@
 
 Codex, OpenCode, Claude, Antigravity ve API tabanlı modelleri bir orkestratör etrafında birleştirmeyi hedefleyen **hibrit, çoklu ajan IDE** projesi.
 
-> Durum: **MVP masaüstü prototipi**. Electron/React arayüzünde proje seçimi, görevler, ajan durumları, canlı olaylar, Monaco dosya editörü, görev PTY terminalleri ve ortak context/mesajlar var. SQLite orkestratör, Git worktree ve Codex/OpenCode CLI adaptörleriyle çalışır. Varsayılan demo modelleri çağırmaz.
+> Durum: **MVP masaüstü prototipi**. Electron/React arayüzünde proje seçimi, görevler, ajan durumları, canlı olaylar, Monaco dosya editörü, görev PTY terminalleri ve ortak context/mesajlar var. SQLite orkestratör, Git worktree ve Codex/OpenCode/Antigravity/Claude headless adaptörleriyle çalışır. Claude bağlantısı API anahtarı kullanır. Varsayılan demo modelleri çağırmaz.
 
 ## Hızlı başlangıç
 
@@ -42,6 +42,8 @@ Worktree oluşmuş bir görevi seçip **Değişiklikleri incele** ile diff ve ye
 **Terminal** bölümünde durdurulmuş görev worktree’sinde en fazla dört kabuk açabilirsiniz. Komutlar kullanıcı hesabınızın yetkileriyle çalışır; ajan dosya kapsamı uygulanmaz. Ajan başlatma veya onaydan önce terminal süreçlerini, proje değiştirmeden önce tüm sekmeleri kapatın. Terminal çıktısı journal'a kaydedilmez. [Kapsam ve yaşam döngüsü](docs/terminals.md).
 
 **Ajan merkezini aç → Gerçek mesaj testi** ile Codex'e `Selam` gönderin. OpenCode için varsayılan **Etkileşimli terminal** ve **opencode/space-bunny-free** seçilir: **OpenCode terminalini aç**, native ekrana `Selam` yazıp Enter'a bas. Space Bunny Free bu yolda gerçek yanıtla doğrulandı; `run` ve Server bazı ücretsiz modellerde 403 verebilir. CLI run/HTTP Server tek mesaj seçenekleri ayrıca sunulur. Demo içinde de gerçek hesap kullanılır; maliyet/kota tüketebilir. Native terminal kendi devam eden konuşmasını ve izinlerini yönetir; kullanıcı yetkileriyle proje dışında çalışır. **Bağlantıları kontrol et** yalnızca modelsiz kontroldür. [Test kapsamı ve yerel sonuçlar](docs/provider-message.md).
+
+**Antigravity** ve **Claude · API anahtarı** da mesaj testinde seçilebilir. `agentmesh.hybrid.example.json`, Antigravity plan → Codex uygulama → Claude review görev zinciridir; `repoPath` değerini kendi temiz Git deponuza göre ayarlayın. Görev sonuçları, ortak kararlar ve hedefli devir mesajları otomatik kaydedilip sonraki ajana aktarılır; dosya değişiklikleri insan digest onayından sonra yayınlanır. Antigravity gerçek selamlama yanıtıyla doğrulandı; Claude için `ANTHROPIC_API_KEY` gerekir. [Sağlayıcı yolları, araştırma ve kalan kabul işleri](docs/providers.md).
 
 Projeyi yeniden açarken veya CLI `--execute` öncesinde aynı görev kimliğinin kayıtlı tanımıyla config karşılaştırılır. Başlık, talimat, ajan, bağımlılık veya kapsam değişmişse alan adlarıyla hata gösterilir; orijinal tanımı geri yükleyin ya da yeni görev kimliği kullanın. Arayüzden eklenmiş görevler korunur; bunların ajanları config içinde bulunmalıdır. Ajan provider/model/transport geçmişini uzlaştırma ekranı henüz yoktur (CORE-013).
 

@@ -44,6 +44,7 @@ export interface AgentExecution {
   workspaceRoot: string;
   context: Readonly<Record<string, Fact>>;
   inbox: ReadonlyArray<AgentMessage>;
+  knownAgentIds?: readonly string[];
   sessionId?: string;
   onSession?: (sessionId: string) => void;
   signal?: AbortSignal;

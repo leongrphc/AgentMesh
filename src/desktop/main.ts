@@ -188,7 +188,7 @@ async function createWindow() {
       await window.webContents.executeJavaScript(`(async () => {
         const input = document.querySelector('[aria-label="Test mesajı"]');
         const provider = document.querySelector('[aria-label="Test sağlayıcısı"]');
-        if (input?.value !== 'Selam' || provider?.options.length !== 2) throw new Error('Mesaj testi formu eksik');
+        if (input?.value !== 'Selam' || provider?.options.length !== 4) throw new Error('Mesaj testi formu eksik');
         document.querySelector('[data-testid="send-provider-message"]').click();
         for (let i = 0; i < 100; i++) {
           if (document.querySelector('.agent-center .file-error')?.textContent.includes('Smoke testinde gerçek model çağrısı kapalı')) return;

@@ -63,6 +63,8 @@ Context sadece özet sohbet değildir. Her kararın **kaynak görevi** bulunur. 
 
 ## Olaylar
 
+Otomatik adaptörler son yanıt için sürüm 1 zarfını ister: `agentmeshVersion`, `summary`, `facts` ve `messages`. Tüm sağlayıcılarda aynı doğrulama uygulanır; eski düz metin yanıtlar summary olarak çalışır. Proje alıcıları prompt'a eklenir, yabancı alıcılar ve ayrılmış `task.`/`system.` fact anahtarları reddedilir. Fact/message başına boyut ve en fazla 32 kayıt sınırı vardır. Kaynak görev/ajan/zaman damgası native modele bırakılmaz; orkestratör atar. Bu kayıtlar kod değişmişse digest onayına kadar yayınlanmaz. Karar sürümleri/çelişkileri ve çalışma sırasında canlı teslim ayrı açık işlerdir.
+
 Orkestratör journal'ındaki temel olaylar: `project.created`, `task.created`, `task.started`, `task.review.requested`, `task.review.approved`, `task.completed`, `task.failed`, `task.blocked`, `task.interrupted`, `task.cancelled`, `task.retried`, `context.updated`, `message.sent`.
 
 Örnek olay:

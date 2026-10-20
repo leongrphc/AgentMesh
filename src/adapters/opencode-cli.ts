@@ -2,6 +2,7 @@ import { existsSync } from "node:fs";
 import { join } from "node:path";
 import type { AgentAdapter, AgentExecution, AgentResult } from "../core/contracts.js";
 import { buildPrompt, parseAgentEvents, runJsonlProcess, type ProcessRunner } from "./cli-process.js";
+import { normalizeTaskResult } from "./task-result.js";
 
 export function defaultOpenCodeCommand(): string {
   if (process.platform !== "win32") return "opencode";
@@ -30,6 +31,6 @@ export class OpenCodeCliAdapter implements AgentAdapter {
       signal: input.signal,
       onOutput: input.onOutput,
     });
-    return parseAgentEvents(events);
+    return normalizeTaskResult(parseAgentEvents(events), input.knownAgentIds);
   }
 }

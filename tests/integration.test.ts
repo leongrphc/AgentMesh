@@ -13,6 +13,7 @@ import { OpenCodeCliAdapter } from "../src/adapters/opencode-cli.js";
 import { runJsonlProcess } from "../src/adapters/cli-process.js";
 import { DesktopService } from "../src/desktop/service.js";
 import { createHash } from "node:crypto";
+import { HeadlessCliAdapter } from "../src/adapters/headless-cli.js";
 import type { AgentAdapter, AgentTask, AgentExecution, AgentResult } from "../src/core/contracts.js";
 
 function git(repo: string, ...args: string[]) {
@@ -38,6 +39,59 @@ function task(id: string, agentId: string, allowedPaths: string[]): AgentTask {
     dependsOn: [], allowedPaths,
   };
 }
+
+test("Antigravity hands off persisted context to Claude across worktrees and exact human approval", async () => {
+  const f = repoFixture();
+  const db = join(f.root, "hybrid.sqlite");
+  const journal = new SqliteJournal(db);
+  try {
+    const engine = new Orchestrator(journal, new WorktreeManager());
+    engine.createProject({ id: "p", workspaceRoot: f.repo });
+    engine.registerAgent(new HeadlessCliAdapter("planner", "antigravity", { runner: async (spec) => {
+      assert.notEqual(spec.cwd, f.repo);
+      const session = { event: "init", conversation_id: "planner-session" }; spec.onEvent?.(session);
+      return { stderr: "", events: [session, { event: "result", result: { conversation_id: "planner-session", status: "SUCCESS", response: "Create src/feature.txt with the approved contract" } }] };
+    } }));
+    engine.registerAgent(new HeadlessCliAdapter("implementer", "claude", { runner: async (spec) => {
+      assert.match(spec.stdin!, /Create src\/feature.txt with the approved contract/);
+      writeFileSync(join(spec.cwd, "src", "feature.txt"), "hybrid output\n");
+      return { stderr: "", events: [{ type: "system", subtype: "init", session_id: "implementation-session" },
+        { type: "result", subtype: "success", is_error: false, session_id: "implementation-session", result: JSON.stringify({ agentmeshVersion: 1, summary: "Implementation complete",
+          facts: [{ key: "feature.contract", value: "hybrid output" }], messages: [{ to: "reviewer", kind: "handoff", body: "Review feature.contract" }] }) }] };
+    } }));
+    engine.registerAgent(new HeadlessCliAdapter("reviewer", "antigravity", { runner: async (spec) => {
+      assert.match(spec.stdin!, /Implementation complete/);
+      assert.match(spec.stdin!, /Review feature.contract/);
+      assert.equal(readFileSync(join(spec.cwd, "src", "feature.txt"), "utf8").trim(), "hybrid output");
+      return { stderr: "", events: [{ event: "result", result: { conversation_id: "review-session", status: "SUCCESS", response: "Reviewed" } }] };
+    } }));
+    engine.addTask(task("hybrid-plan", "planner", ["src/**"]));
+    engine.addTask({ ...task("hybrid-build", "implementer", ["src/**"]), dependsOn: ["hybrid-plan"] });
+    engine.addTask({ ...task("hybrid-review", "reviewer", ["src/**"]), dependsOn: ["hybrid-build"] });
+    const first = await engine.run("p");
+    const build = first.tasks.find((t) => t.id === "hybrid-build")!;
+    assert.equal(build.status, "pending_review");
+    assert.equal(first.tasks.find((t) => t.id === "hybrid-review")?.status, "pending");
+    assert.equal(first.context["task.hybrid-build.summary"], undefined);
+    assert.equal(first.context["feature.contract"], undefined);
+    assert.equal(first.messages.length, 0);
+    engine.approveTask(build.id, build.review!.digest);
+    const completed = await engine.run("p");
+    assert.ok(completed.tasks.every((t) => t.status === "completed"), JSON.stringify(completed.tasks));
+    assert.equal(git(f.repo, "status", "--porcelain"), "");
+    journal.close();
+    const restoredJournal = new SqliteJournal(db);
+    try {
+      const restored = new Orchestrator(restoredJournal).snapshot("p");
+      assert.equal(restored.context["task.hybrid-review.summary"]?.value, "Reviewed");
+      assert.equal(restored.context["feature.contract"]?.sourceTaskId, "hybrid-build");
+      assert.equal(restored.messages[0]?.to, "reviewer");
+      assert.equal(restored.messages[0]?.from, "implementer");
+      assert.equal(restored.tasks.find((t) => t.id === "hybrid-build")?.sessionId, "implementation-session");
+      assert.ok(restored.tasks.every((t) => t.status === "completed"));
+    } finally { restoredJournal.close(); }
+  } finally { journal.close(); f.cleanup(); }
+});
 
 test("desktop reloads real worktree review, rejects stale approval and integrates exact digest", async () => {
   const f = repoFixture();

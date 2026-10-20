@@ -239,6 +239,7 @@ export class Orchestrator {
         workspaceRoot,
         context: snapshot.context,
         inbox: snapshot.messages.filter((message) => message.to === task.agentId || message.to === "*"),
+        knownAgentIds: [...new Set(snapshot.tasks.map((item) => item.agentId))],
         sessionId: task.sessionId,
         signal: controller.signal,
         onSession: (sessionId) => {

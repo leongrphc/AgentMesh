@@ -4,11 +4,24 @@ import { JsonlRpcClient, record, type RpcOptions } from "./jsonl-rpc.js";
 import { defaultOpenCodeCommand } from "./opencode-cli.js";
 import { safeLog } from "../core/safe-log.js";
 import { OpenCodeServerClient, type OpenCodeServerOptions } from "./opencode-server-client.js";
+import { headlessCommand, type HeadlessProvider } from "./headless-cli.js";
 
 export interface ProviderHealth {
   status: "configured" | "needs_login" | "needs_setup" | "installed" | "unavailable";
   detail: string;
   checkedAt: string;
+}
+
+export async function probeHeadlessProvider(provider: HeadlessProvider, cwd: string, signal?: AbortSignal): Promise<ProviderHealth> {
+  const checkedAt = new Date().toISOString();
+  try {
+    const result = await promisify(execFile)(headlessCommand(provider), ["--version"], { cwd, signal, timeout: 7000, maxBuffer: 8192, windowsHide: true, shell: false });
+    const version = result.stdout.match(/\b\d+\.\d+\.\d+\b/)?.[0];
+    if (!version) throw new Error("No version");
+    if (provider === "claude" && !process.env.ANTHROPIC_API_KEY?.trim()) return { status: "needs_setup", checkedAt,
+      detail: `Claude CLI ${version} bulundu. Ürün entegrasyonu için ANTHROPIC_API_KEY gerekli; abonelik OAuth girişi kullanılmaz.` };
+    return { status: "installed", checkedAt, detail: `${provider === "antigravity" ? "Antigravity" : "Claude Code"} ${version} bulundu; giriş, model erişimi ve kota sınanmadı. Native headless politikaları geçerlidir; etkileşimli izin köprüsü yok.` };
+  } catch { return { status: "unavailable", checkedAt, detail: signal?.aborted ? "Kontrol iptal edildi." : `${provider} CLI açılamadı; kurulumu ve PATH ayarını kontrol edin.` }; }
 }
 type ClientFactory = (options: Omit<RpcOptions, "executable" | "args">) => JsonlRpcClient;
 

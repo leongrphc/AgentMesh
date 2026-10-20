@@ -10,7 +10,7 @@ import { validate, reconcileTasks, type Config } from "../core/config.js";
 import { MockAgent } from "../adapters/mock.js";
 import { configuredAdapter } from "../adapters/registry.js";
 import type { PermissionDecision } from "../core/permissions.js";
-import { probeCodex, probeOpenCode, probeOpenCodeServer, type ProviderHealth } from "../adapters/provider-health.js";
+import { probeCodex, probeOpenCode, probeOpenCodeServer, probeHeadlessProvider, type ProviderHealth } from "../adapters/provider-health.js";
 import { safeLog } from "../core/safe-log.js";
 import { listWorkspace, readWorkspaceFile, saveWorkspaceFile } from "../core/workspace-files.js";
 import type { DesktopState, DesktopReview, TaskDraft } from "./contracts.js";
@@ -221,6 +221,7 @@ export class DesktopService {
       for (const agent of state.agents) if (!probes.has(key(agent))) probes.set(key(agent),
         state.demo ? Promise.resolve({ status: "configured", checkedAt: new Date().toISOString(), detail: "Yerel mock ajan; model veya CLI çağrısı yapılmaz." })
           : agent.provider === "codex" ? probeCodex(state.snapshot.project.workspaceRoot, abort.signal)
+          : agent.provider === "antigravity" || agent.provider === "claude" ? probeHeadlessProvider(agent.provider, state.snapshot.project.workspaceRoot, abort.signal)
           : agent.transport === "server" ? probeOpenCodeServer(state.snapshot.project.workspaceRoot, agent.model, abort.signal)
           : probeOpenCode(state.snapshot.project.workspaceRoot, abort.signal));
       const results = await Promise.all(state.agents.map(async (agent) => [agent.id, await probes.get(key(agent))!] as const));

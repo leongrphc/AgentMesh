@@ -1,0 +1,15 @@
+{
+  "projectId": "hybrid-demo",
+  "repoPath": "../your-clean-git-project",
+  "maxParallel": 2,
+  "agents": [
+    { "id": "planner", "provider": "antigravity", "transport": "exec" },
+    { "id": "implementer", "provider": "codex", "transport": "app-server" },
+    { "id": "reviewer", "provider": "claude", "transport": "exec" }
+  ],
+  "tasks": [
+    { "id": "hybrid-plan", "projectId": "hybrid-demo", "agentId": "planner", "title": "Uygulama planı", "instruction": "README ve kaynakları incele. Dosya değiştirmeden küçük bir iyileştirme planını ve kabul koşullarını özetle.", "dependsOn": [], "allowedPaths": ["src/**", "tests/**"] },
+    { "id": "hybrid-implement", "projectId": "hybrid-demo", "agentId": "implementer", "title": "Planı uygula", "instruction": "Ortak context içindeki hybrid-plan sonucunu uygula. Kapsam dışı dosyalara dokunma. Yaptığın doğrulamaları ve çalıştıramadığın testleri açıkça belirt.", "dependsOn": ["hybrid-plan"], "allowedPaths": ["src/**", "tests/**"] },
+    { "id": "hybrid-review", "projectId": "hybrid-demo", "agentId": "reviewer", "title": "Sonucu incele", "instruction": "Ortak context ve onaylı kod üzerinden uygulamayı incele. Dosya değiştirmeden bulguları ve kalan riskleri bildir.", "dependsOn": ["hybrid-implement"], "allowedPaths": ["src/**", "tests/**"] }
+  ]
+}

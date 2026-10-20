@@ -1,5 +1,6 @@
 import { randomBytes } from "node:crypto";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync } from "node:fs";
+import { rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { CodexAppServerAdapter } from "./codex-app-server.js";
@@ -8,8 +9,9 @@ import { record } from "./jsonl-rpc.js";
 import { safeLog } from "../core/safe-log.js";
 import { sendOpenCodeCliMessage } from "./opencode-message.js";
 import type { ProcessRunner } from "./cli-process.js";
+import { HeadlessCliAdapter } from "./headless-cli.js";
 
-export interface ProviderMessageInput { provider: "codex" | "opencode"; message: string; model?: string; transport?: "exec" | "server" }
+export interface ProviderMessageInput { provider: "codex" | "opencode" | "antigravity" | "claude"; message: string; model?: string; transport?: "exec" | "server" }
 export interface ProviderMessageResult { provider: string; model?: string; transport?: "exec" | "server"; response: string; elapsedMs: number; checkedAt: string }
 interface MessageDependencies {
   codex?: (input: ProviderMessageInput, cwd: string, signal: AbortSignal) => Promise<string>;
@@ -18,7 +20,7 @@ interface MessageDependencies {
 }
 
 export function validateProviderMessage(input: ProviderMessageInput) {
-  if (!input || !["codex", "opencode"].includes(input.provider) || typeof input.message !== "string" || !input.message.trim() || input.message.length > 2000
+  if (!input || !["codex", "opencode", "antigravity", "claude"].includes(input.provider) || typeof input.message !== "string" || !input.message.trim() || input.message.length > 2000
     || (input.model !== undefined && (typeof input.model !== "string" || input.model.length > 200 || !input.model.trim()))) throw new Error("Sağlayıcı ve 1–2000 karakterlik mesaj gerekli");
   if (input.provider === "opencode" && input.model && !/^[^/\s]+\/[^\s]+$/.test(input.model)) throw new Error("OpenCode modeli provider/model biçiminde olmalı");
   if (input.transport !== undefined && (input.provider !== "opencode" || !["exec", "server"].includes(input.transport))) throw new Error("Geçersiz mesaj bağlantısı");
@@ -30,6 +32,7 @@ export async function sendProviderMessage(input: ProviderMessageInput, signal?: 
   const cwd = mkdtempSync(join(tmpdir(), "agentmesh-message-"));
   const started = Date.now();
   const bounded = AbortSignal.any([AbortSignal.timeout(90000), ...(signal ? [signal] : [])]);
+  let operationError: Error | undefined;
   try {
     let response: string;
     if (input.provider === "codex") {
@@ -42,6 +45,11 @@ export async function sendProviderMessage(input: ProviderMessageInput, signal?: 
         });
         response = result.summary;
       }
+    } else if (input.provider === "antigravity" || input.provider === "claude") {
+      response = (await new HeadlessCliAdapter("connection-test", input.provider, { model: input.model, conversationOnly: true }).execute({
+        workspaceRoot: cwd, signal: bounded, context: {}, inbox: [],
+        task: { id: "connection-test", projectId: "connection-test", agentId: "connection-test", title: "Bağlantı testi", instruction: input.message.trim(), dependsOn: [], allowedPaths: [] },
+      })).summary;
     } else if (input.transport !== "server") {
       response = await sendOpenCodeCliMessage(input, cwd, bounded, dependencies.cliRunner);
     } else {
@@ -84,7 +92,14 @@ export async function sendProviderMessage(input: ProviderMessageInput, signal?: 
     if (!response.trim()) throw new Error("Sağlayıcı boş yanıt döndürdü");
     return { provider: input.provider, model: input.model, ...(input.provider === "opencode" ? { transport: input.transport ?? "exec" } : {}), response: safeLog(response), elapsedMs: Date.now() - started, checkedAt: new Date().toISOString() };
   } catch (error) {
-    if (bounded.aborted) throw new Error(signal?.aborted ? "Mesaj testi iptal edildi" : "Mesaj testi 90 saniyede tamamlanmadı");
-    throw new Error(safeLog(error instanceof Error ? error.message : String(error), "storage"));
-  } finally { rmSync(cwd, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }); }
+    operationError = new Error(bounded.aborted ? signal?.aborted ? "Mesaj testi iptal edildi" : "Mesaj testi 90 saniyede tamamlanmadı"
+      : safeLog(error instanceof Error ? error.message : String(error), "storage"));
+    throw operationError;
+  } finally {
+    try { await rm(cwd, { recursive: true, force: true, maxRetries: 8, retryDelay: 100 }); }
+    catch {
+      if (operationError) operationError.message += " Geçici test dizini henüz temizlenemedi; native süreç dosya tutuyor olabilir.";
+      else throw new Error("Yanıt alındı ancak geçici test dizini temizlenemedi; native süreç dosya tutuyor olabilir.");
+    }
+  }
 }

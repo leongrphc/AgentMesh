@@ -1,6 +1,7 @@
 import { isAbsolute, matchesGlob, relative, resolve, sep } from "node:path";
 import type { AgentAdapter, AgentExecution, AgentResult } from "../core/contracts.js";
 import { buildPrompt } from "./cli-process.js";
+import { normalizeTaskResult } from "./task-result.js";
 import { JsonlRpcClient, record, type RpcOptions, type RpcRecord } from "./jsonl-rpc.js";
 
 type ClientFactory = (options: Omit<RpcOptions, "executable" | "args">) => JsonlRpcClient;
@@ -90,7 +91,8 @@ export class CodexAppServerAdapter implements AgentAdapter {
       turnId = returnedId;
       await completion;
       if (!summary.trim()) throw new Error("Codex turunda ajan sonucu bulunamadı");
-      return { sessionId: threadId, summary: summary.trim() };
+      const output = { sessionId: threadId, summary: summary.trim() };
+      return this.options.conversationOnly ? output : normalizeTaskResult(output, input.knownAgentIds);
     } finally { await client.close(); }
   }
 }

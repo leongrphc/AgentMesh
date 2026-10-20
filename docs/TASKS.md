@@ -1,6 +1,7 @@
 # AgentMesh IDE — görev listesi ve devam notları
 
-**Son güncelleme:** 18 Ekim 2026  
+**Son güncelleme:** 20 Ekim 2026
+
 **Çalışma alanı:** `D:\WebGpt`  
 **Dal:** `main`  
 **Karar:** C — Hibrit (CLI/SDK + doğrudan API)  
@@ -35,7 +36,7 @@ Codex, OpenCode, Claude, Antigravity ve diğer API modellerini **tek IDE içinde
 - [x] JSONL stdout/stderr ve journal olaylarını canlı `subscribe()` abonelerine iletme; CLI'da `--stream`.
 - [x] `AbortSignal`, `Ctrl+C`, kalıcı `cancelled`, geç gelen çıktının görev sonucunu tamamlamasını engelleme.
 - [x] Başarısız/iptal edilmiş/engellenmiş görevi `--retry TASK` ile açıkça yeniden kuyruğa alma.
-- [x] Mock ve yerel subprocess/Git worktree testleri; son başarılı doğrulama **52/52 test**, `npm run typecheck`, desktop build, Electron/Monaco/PTY/mesaj formu/native OpenCode TUI/izin paneli smoke ve modelsiz yerel OpenCode Server protokol smoke başarılı.
+- [x] Mock ve yerel subprocess/Git worktree testleri; 20 Ekim doğrulaması **60/60 test**, `npm run typecheck` ve `npm run desktop:smoke` başarılı. Desktop smoke build, Electron/sandbox/preload, Monaco, gerçek PTY ve demo görevlerini kapsar. Native OpenCode TUI ve modelsiz yerel OpenCode Server protokol smoke önceki çalışmada doğrulandı.
 
 ## Açık görevler — öncelik sırasıyla
 
@@ -78,6 +79,8 @@ Codex, OpenCode, Claude, Antigravity ve diğer API modellerini **tek IDE içinde
 - [ ] **CORE-009:** Ajan çalışırken gelen mesajların canlı teslimi, inbox cursor ve idempotency.
 - [ ] **CORE-010:** İzinleri çalıştırma **öncesinde** zorlayabilecek süreç/OS sandbox politikası; `allowedPaths` şu an yalnızca çalıştırma sonrasında denetleniyor. Native sağlayıcı/araç alt süreç ağacının iptal ve kapanış garantileri ayrıca sınanmalı; sahipli ana sunucuyu kapatmak tek başına OS izolasyonu değildir.
 - [ ] **CORE-011:** Kalıcı, sürümlü context/karar yönetimi; çakışan kararlar için doğrulama ve ilgili context paketini seçme.
+  - [x] Tüm otomatik adaptörlerde sürüm 1 sonuç zarfı: summary/facts/messages doğrulanır, alıcılar proje görev ajanlarıyla sınırlanır; boyut, tekrarlı anahtar ve ayrılmış system/task anahtarları denetlenir. Eski düz metin özetleri çalışır. Fact/mesaj kaynak kimlikleri modelden alınmaz; orkestratör atar. Sonuçlar diff onayından sonra transaction ile kaydedilir ve sonraki ajana aktarılır.
+  - [ ] Karar revizyonları, çelişki çözümü ve görevle ilgili context paketini seçme.
 - [ ] **CORE-012:** Güvenli log saklama/retention, hata teşhisi, oturum sağlığı ve yeniden başlatma kurtarma senaryoları.
 - [ ] **CORE-013 / Config uyumu:** Kayıtlı görev ve ajan tanımlarını açık güncelleme akışıyla uzlaştırma.
   - [x] Desktop yeniden açma ve CLI execute öncesi toplu görev kontrolü: aynı ID'de başlık/talimat/ajan/bağımlılık/kapsam farkı alan adlarıyla reddedilir; ham talimat hata metnine alınmaz. UI görevleri korunur; eksik ajan eşlemesi ve başka projedeki görev ID çakışması yeni görev eklenmeden reddedilir. Dizi sırası anlamsız fark üretmez; tekrarlı bağımlılıklar config doğrulamasında reddedilir. Başarısız açılış eski projeyi/journal'ı kullanılabilir bırakır.
@@ -86,10 +89,14 @@ Codex, OpenCode, Claude, Antigravity ve diğer API modellerini **tek IDE içinde
 
 ### P2 — Hibrit sağlayıcılar ve ileri orkestrasyon
 
-- [ ] **ADAPTER-001:** Claude Agent SDK / API anahtarı tabanlı uyumlu entegrasyon; sağlayıcı kullanım koşullarını doğrula.
-- [ ] **ADAPTER-002:** Antigravity'nin güncel, resmen desteklenen entegrasyon yolunu doğrula; uygunsa Python sidecar veya desteklenen bağlantı kur.
+- [ ] **ADAPTER-001:** Claude entegrasyonu ve SDK izin köprüsü.
+  - [x] Resmî headless CLI harness ile API anahtarlı otomatik görev adaptörü (`--bare`, `ANTHROPIC_API_KEY`), worktree, stdin JSON, native session/resume, sonuç doğrulaması ve context/mesaj devri. Ajan merkezinde test seçeneği ve modelsiz CLI kontrolü. Ürün bağlantısı abonelik OAuth'u sunmaz. Gerçek API anahtarlı generation henüz doğrulanmadı.
+  - [x] Headless oturum bildirimi stream/replay/terminal sonuç boyunca tekilleştirildi; erken kimlik saklama korundu. Claude terminal hata ayrıntıları başarılı ve başarısız süreç çıkışlarında maskelenerek korunur; iki regresyon testi eklendi.
+  - [ ] SDK canUseTool / interaktif izin köprüsü ve gerçek araç/resume kabul testi.
+- [x] **ADAPTER-002:** Resmî Antigravity `agy` headless CLI otomatik adaptörü; Python SDK alternatifi araştırıldı, Node çekirdeğine CLI doğrudan bağlandı. Init/conversation ID erken saklama, açık resume, SUCCESS result, sandbox talebi, worktree/diff/onay ve kalıcı context/mesaj devri. Yerel 1.4.0 kısa gerçek mesajla yanıt verdi. Kod/araç/resume ve sandbox kabul testleri ayrıca açık. [Araştırma ve sınırlar](providers.md).
 - [ ] **ADAPTER-003:** OpenAI/Anthropic/Google ve uyumlu modeller için doğrudan API adaptörleri ve kontrollü dosya/terminal tool-loop.
 - [ ] **ADAPTER-004:** ACP üzerinden başka coding ajanlarını; MCP üzerinden ortak araçları bağlama.
+  - [x] Resmî ACP kaynaklarında OpenCode, Gemini CLI, Qwen Code, Goose ve Copilot gibi adaylar araştırıldı; izin/capability/session/cancel kabul koşulları [providers.md](providers.md) içinde kaydedildi. Henüz ACP adaptörü uygulanmadı; Free model erişimi garanti sayılmaz.
 - [ ] **ORCH-001:** Yönetici ajan atama/değiştirme, planı görev DAG'ına dönüştürme, kullanıcı denetimiyle yeniden planlama.
 - [ ] **ORCH-002:** Bütçe/token/kota, rate-limit, timeout, eşzamanlılık, başarısızlık ve maliyet politikaları.
 - [ ] **ORCH-003:** Ajan bazlı yetki profilleri, kimlik bilgilerini OS credential store'da saklama, gizli bilgileri context'ten uzak tutma.
@@ -100,7 +107,7 @@ Codex, OpenCode, Claude, Antigravity ve diğer API modellerini **tek IDE içinde
 1. `D:\WebGpt` içinde `git status --short` ve `git log -5 --oneline` ile durumu kontrol et.
 2. `npm install` (gerekiyorsa), ardından `npm run typecheck` ve `npm test` çalıştır.
 3. Codex App Server ve OpenCode Server köprüleri tamamlandı; [permissions.md](permissions.md) desteklenen kapsamları açıklar. Varsayılan exec adaptörleri interaktif izin desteklemez. Modelsiz yerel kontrol: `npm run smoke:opencode`.
-4. Terminal (UI-002) tamamlandı. Sırada UI'dan ajan ayarları (UI-003), config uyumu (CORE-013) ve UI-006 çakışma çözümünün kalan kısmı var. Gerçek model/araç smoke'ları (CORE-008) hâlâ açık.
+4. Antigravity ve Claude API anahtarlı headless görev adaptörleri ve ortak sonuç zarfı eklendi. `agentmesh.hybrid.example.json` plan/uygulama/review zincirini gösterir. Sırada UI'dan ajan ayarları (UI-003), canlı inbox (CORE-009), ACP ve config/session uyumu (CORE-013) var. Gerçek kod/araç/resume smoke'ları (CORE-008) hâlâ açık.
 5. **Her tamamlanan geliştirmeyi ayrı Git commit'iyle kaydet.** Commit'ten önce ilgili testleri çalıştır; `docs/TASKS.md` kutularını güncelle. Kullanıcı istemedikçe otomatik push/deploy/ana dal dışı entegrasyon merge'i yapma.
 
 ### Faydalı komutlar
@@ -134,9 +141,9 @@ npm run live -- --config agentmesh.config.example.json
 ## Bilinen sınırlar / tamamlandı sanılmaması gerekenler
 
 - Grafik masaüstü kabuğu, Monaco editör, Task Board ve görev PTY terminalleri var. Editör mevcut dosyaları düzenler; yeni dosya/klasör oluşturma ve dosya izleyicisi henüz yok.
-- Codex/OpenCode CLI komutları ve sahte süreç akışları test edildi; gerçek ücretli/oturum açılmış model çalıştırması doğrulanmadı.
+- Gerçek kısa yanıtlar: Codex, Antigravity ve native TUI üzerinden OpenCode Space Bunny Free. Gerçek çok ajanlı kod/araç/resume uçtan uca kabulü henüz yapılmadı; Claude API anahtarıyla model erişimi doğrulanmadı.
 - OpenCode için OS seviyesinde izolasyon kanıtlanmadı; mevcut `allowedPaths` denetimi işlem sonrasındadır.
 - Codex App Server ve OpenCode Server için araç onayı köprüleri var; gerçek zamanlı *ajanlar arası* mesaj teslimi eksik. OpenCode Server şu an 1.19.x v1 şemasına bağlıdır ve yalnızca bash/read/edit kapsamlarını sunar. Log filtresi bilinen biçimleri tanır; keyfi kişisel veri için garanti vermez.
 - Git merge conflict otomatik çözülmüyor; korunmuş görev branch'i manuel inceleme gerektiriyor.
-- Claude, Antigravity ve doğrudan API sağlayıcıları hedef kapsamda; henüz çalışan adaptörleri yok.
+- Antigravity ve Claude headless görev adaptörleri var; interaktif izin köprüleri yok. Claude ürün bağlantısı API anahtarı ister. Doğrudan genel API harness ve ACP henüz uygulanmadı.
 - Native provider sohbetleri tek bir birleşik konuşma geçmişi değildir; paylaşılan veri yapılandırılmış görev/context/mesaj kayıtlarıdır.

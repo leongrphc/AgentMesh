@@ -77,8 +77,8 @@ API anahtarları SQLite içine düz metin koyulmaz; masaüstü işletim sistemi 
 | --- | --- | --- |
 | Codex | `exec --json` veya `app-server` stdio JSON-RPC (uygulandı); SDK ileride alternatif | App Server thread/turn ve tek isteklik komut/dosya onayı sağlar. Native oturum ID ayrı saklanır; kimlik doğrulama sağlayıcı ayarlarına bağlıdır. |
 | OpenCode | `run --format json` veya sahipli `serve --pure` HTTP/SSE (uygulandı); SDK/ACP alternatif hedef | Server 1.19.x v1 şeması, rastgele Basic auth/port, loopback ve dizin kontrolü. Son deny/ask oturum bloğu ve once/reject köprüsü; gerçek model smoke ayrıca açık. |
-| Claude | Claude Agent SDK / doğrudan Claude API | **Üçüncü taraf ürünlerde claude.ai giriş/abonelik kullanımına Anthropic'in önceden onay verilmedikçe izin vermediği belgeleniyor.** Uyumlu API anahtarı bağlantısı varsayılandır. |
-| Antigravity | Python `google-antigravity` SDK için yerel sidecar | SDK Python tabanlıdır; Gemini API anahtarı veya desteklenen kurumsal kimlik doğrulaması gerekir. |
+| Claude | Resmî headless CLI harness uygulandı; SDK callback'leri ileride | Ürün bağlantısı `--bare` ve `ANTHROPIC_API_KEY` kullanır; abonelik OAuth girişi sunulmaz. Init/session ve terminal success doğrulanır. |
+| Antigravity | Resmî `agy` CLI stream-json uygulandı; Python SDK alternatif | Erken conversation ID, açık resume ve SUCCESS sonucu. Native izin ayarları ve sandbox talebi; interaktif izin köprüsü yok. Gerçek kısa mesaj başarılı. |
 | Diğerleri | Resmî API SDK'sı veya ACP adaptörü | Model konuşması tek başına dosya/terminal kullanan kod ajanı değildir; gereken tool-loop'u adaptör sağlamalıdır. |
 
 **ACP** editör–ajan iletişiminde standartlaştırılabilen işlemler için kullanılır. **MCP** ajanlara ortak araçlar (context sorgulama, mesaj gönderme, görev durumu, dosya sorgulama) sunmak için kullanılabilir. **Bizim dahili event protokolümüz** ise görevler ve ajanlar arası orkestrasyon içindir. Üçü birbirinin yerine geçmez.

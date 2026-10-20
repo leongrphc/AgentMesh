@@ -5,6 +5,7 @@ import { buildPrompt } from "./cli-process.js";
 import { record, type RpcRecord } from "./jsonl-rpc.js";
 import { OpenCodeServerClient, type OpenCodeServerOptions } from "./opencode-server-client.js";
 import { safeLog } from "../core/safe-log.js";
+import { normalizeTaskResult } from "./task-result.js";
 
 export const openCodeSessionRules = [
   { permission: "*", pattern: "*", action: "deny" },
@@ -141,7 +142,7 @@ export class OpenCodeServerAdapter implements AgentAdapter {
         .map((part) => part.text as string).join("\n").trim();
       if (!summary) throw new Error("OpenCode ajan sonucu bulunamadı");
       complete = true;
-      return { sessionId, summary };
+      return normalizeTaskResult({ sessionId, summary }, input.knownAgentIds);
     } finally {
       for (const abort of pending.values()) abort.abort();
       if (sessionId && submitted && !complete && !input.signal?.aborted) await server.request(`/session/${encodeURIComponent(sessionId)}/abort`, "POST", {}, 1500).catch(() => {});

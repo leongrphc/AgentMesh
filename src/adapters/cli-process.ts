@@ -13,6 +13,8 @@ export interface ProcessSpec {
   maxOutputBytes?: number;
   signal?: AbortSignal;
   onOutput?: (output: AgentOutput) => void;
+  /** Internal native events, before display redaction; never forward directly to UI. */
+  onEvent?: (event: Record<string, unknown>) => void;
 }
 
 export interface ProcessResult {
@@ -60,6 +62,8 @@ export const runJsonlProcess: ProcessRunner = async (spec) => {
       const value: unknown = JSON.parse(line);
       if (value && typeof value === "object" && !Array.isArray(value)) {
         if (events.length < 20_000) events.push(value as Record<string, unknown>);
+        try { spec.onEvent?.(value as Record<string, unknown>); }
+        catch (error) { parseError = error instanceof Error ? error : new Error("CLI olay işleyicisi başarısız"); child.kill(); }
         report({ channel: "stdout", data: { text: safeLog(JSON.stringify(value)) } });
       } else if (rawOutput.length < 8192) rawOutput += line + "\n";
     } catch {
@@ -161,5 +165,7 @@ export function buildPrompt(input: AgentExecution): string {
     `Güncel ortak context: ${JSON.stringify(context)}`,
     `Sana gelen mesajlar: ${JSON.stringify(input.inbox.map(({ from, kind, body }) => ({ from, kind, body })))}`,
     "Sonunda yapılan değişiklikleri ve test sonuçlarını kısaca açıkla.",
+    `Projedeki mesaj alıcıları: ${JSON.stringify(input.knownAgentIds ?? [])}. Genel yayın alıcısı: *.`,
+    'Son yanıtı şu JSON zarfıyla ver: {"agentmeshVersion":1,"summary":"Yapılanlar, doğrulananlar ve çalıştırılamayan testler","facts":[{"key":"karar.anahtari","value":"Karar veya sonuç"}],"messages":[{"to":"*","kind":"handoff","body":"Sonraki ajana aktarılacak bilgi"}]}. Facts ve messages boş dizi olabilir. task. ve system. ile başlayan anahtarlar ayrılmıştır.',
   ].join("\n\n");
 }
