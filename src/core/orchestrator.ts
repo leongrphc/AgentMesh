@@ -67,6 +67,7 @@ export class Orchestrator {
   private readonly permissions: PermissionBroker;
   private readonly diskHistory: boolean;
   private readonly diskDeliveries: boolean;
+  private readonly diskMessages: boolean;
   private readonly packageCounts = new Map<string, number>();
   private readonly resolvedCounts = new Map<string, number>();
   private lastAppliedId: string | null = null;
@@ -74,6 +75,7 @@ export class Orchestrator {
   constructor(private readonly journal: EventStore, private readonly worktrees?: WorktreeManager) {
     this.diskHistory = !!(journal.scan && journal.contextHistoryPage && journal.contextPackagesPage && journal.resolvedContextPage);
     this.diskDeliveries = !!(journal.readDelivery && journal.scanDeliveries);
+    this.diskMessages = !!(journal.readEvent && journal.scanMessageReferences && journal.messageReferencePage && journal.messageCount && journal.findMessageReference);
     this.permissions = new PermissionBroker((event) => this.emit(event));
     const checkpoint = this.diskHistory && journal.scanAfter ? journal.loadCheckpoint?.() : undefined;
     const restored = checkpoint && this.restoreCheckpoint(checkpoint.state);
@@ -104,7 +106,7 @@ export class Orchestrator {
     if (!this.diskHistory || !this.journal.saveCheckpoint) throw new Error("Bu journal checkpoint desteklemiyor");
     if (this.controllers.size || this.inboxes.size || [...this.tasks.values()].some(task => task.status === "running")
       || [...this.projects.keys()].some(id => this.pendingPermissions(id).length)) throw new Error("Checkpoint için çalışan görevleri bitirin");
-    const state = { version: 3, diskDeliveries: this.diskDeliveries, projects: [...this.projects], tasks: [...this.tasks],
+    const state = { version: 4, diskMessages: this.diskMessages, diskDeliveries: this.diskDeliveries, projects: [...this.projects], tasks: [...this.tasks],
       facts: [...this.facts].map(([id, values]) => [id, [...values]]),
       conflicts: [...this.contextConflicts].map(([id, values]) => [id, [...values]]),
       messages: this.messages, deliveries: [...this.deliveries], agentSettings: [...this.agentSettings],
@@ -116,7 +118,8 @@ export class Orchestrator {
     try {
       const state = JSON.parse(serialized);
       const names = ["projects", "tasks", "facts", "conflicts", "messages", "deliveries", "agentSettings", "packageCounts", "resolvedCounts"];
-      if (state?.version !== 3 || state.diskDeliveries !== this.diskDeliveries || names.some(name => !Array.isArray(state[name]))) return false;
+      if (state?.version !== 4 || state.diskMessages !== this.diskMessages || state.diskDeliveries !== this.diskDeliveries || names.some(name => !Array.isArray(state[name]))) return false;
+      if (this.diskMessages && state.messages.length) return false;
       const pairs = (entries: unknown): Array<[string, any]> => {
         if (!Array.isArray(entries) || entries.some(entry => !Array.isArray(entry) || entry.length !== 2 || typeof entry[0] !== "string")
           || new Set(entries.map(entry => entry[0])).size !== entries.length) throw new Error("Geçersiz checkpoint haritası");
@@ -263,7 +266,7 @@ export class Orchestrator {
 
   historyCounts(projectId: string) {
     if (!this.projects.has(projectId)) throw new Error("Proje bulunamadı");
-    return { messages: this.messages.filter(message => message.projectId === projectId).length, messageRevision: this.lastAppliedId ?? "",
+    return { messages: this.diskMessages ? this.journal.messageCount!(projectId) : this.messages.filter(message => message.projectId === projectId).length, messageRevision: this.lastAppliedId ?? "",
       resolvedDecisions: this.resolvedCounts.get(projectId) ?? 0,
       contextPackages: Object.fromEntries([...this.tasks.values()].filter(task => task.projectId === projectId).map(task => [task.id, this.packageCounts.get(task.id) ?? 0])) };
   }
@@ -272,8 +275,8 @@ export class Orchestrator {
     if (!this.projects.has(projectId)) throw new Error("Proje bulunamadı");
     const task = taskId === undefined ? undefined : this.requireTask(taskId);
     if (task && task.projectId !== projectId) throw new Error("Görev başka projeye ait");
-    const messages = this.messages.filter(message => message.projectId === projectId && (!task || message.taskId === task.id || message.to === task.agentId || message.to === "*"));
-    const page = historyPage(messages, before);
+    const page = this.diskMessages ? this.journal.messageReferencePage!(projectId, task?.id, task?.agentId, before)
+      : historyPage(this.messages.filter(message => message.projectId === projectId && (!task || message.taskId === task.id || message.to === task.agentId || message.to === "*")), before);
     const entries = page.entries.map(message => ({ message: this.materializeMessage(message), deliveries: [] as MessageDelivery[], deliveryCount: 0 }));
     for (const entry of entries) {
       for (const delivery of this.deliveryRecords(task?.id, entry.message.id)) {
@@ -314,15 +317,18 @@ export class Orchestrator {
       context: structuredClone(Object.fromEntries(this.facts.get(projectId) ?? [])),
       contextHistory: history?.facts ?? (includeHistory ? structuredClone(Object.fromEntries(this.factHistory.get(projectId) ?? [])) : {}),
       contextConflicts: history?.conflicts ?? structuredClone([...this.contextConflicts.get(projectId)?.values() ?? []].filter(conflict => includeHistory || conflict.status === "pending")),
-      messages: includeHistory ? this.messages.filter((message) => message.projectId === projectId).map(message => this.materializeMessage(message)) : [],
+      messages: includeHistory ? [...this.messageRecords(projectId)].map(message => this.materializeMessage(message)) : [],
       deliveries: includeHistory ? [...this.deliveryRecords()].filter((delivery) => this.tasks.get(delivery.taskId)?.projectId === projectId).map((delivery) => ({ ...delivery })) : [],
       inboxes: [...this.tasks.values()].filter((task) => task.projectId === projectId).map((task) => {
-        const relevant = this.messagesFor(task);
         const statuses = new Map([...this.deliveryRecords(task.id)].map(delivery => [delivery.messageId, delivery.status]));
-        let cursor = 0;
-        while (cursor < relevant.length && statuses.get(relevant[cursor]!.id) === "accepted") cursor++;
-        return { taskId: task.id, cursor, pending: relevant.filter((message) => statuses.get(message.id) !== "accepted").length,
-          uncertain: relevant.filter((message) => statuses.get(message.id) === "uncertain").length };
+        let cursor = 0, pending = 0, uncertain = 0, gap = false;
+        for (const message of this.messagesFor(task)) {
+          const status = statuses.get(message.id);
+          if (status !== "accepted") { pending++; gap = true; }
+          if (!gap) cursor++;
+          if (status === "uncertain") uncertain++;
+        }
+        return { taskId: task.id, cursor, pending, uncertain };
       }),
     };
   }
@@ -361,9 +367,14 @@ export class Orchestrator {
     if (event?.type !== "message.sent" || event.message.id !== reference.id || event.message.projectId !== reference.projectId) throw new Error("Mesaj içeriği journal içinde bulunamadı");
     return { ...event.message };
   }
-  private messagesFor(task: TaskRecord) {
-    return this.messages.filter((message) => message.projectId === task.projectId && message.taskId !== task.id
-      && (message.to === task.agentId || message.to === "*"));
+  private *messageRecords(projectId: string): Iterable<RetainedMessage> {
+    if (this.diskMessages) { yield* this.journal.scanMessageReferences!(projectId); return; }
+    for (const message of this.messages) if (message.projectId === projectId) yield message;
+  }
+  private *messagesFor(task: TaskRecord): Iterable<RetainedMessage> {
+    for (const message of this.messageRecords(task.projectId)) {
+      if (message.taskId !== task.id && (message.to === task.agentId || message.to === "*")) yield message;
+    }
   }
   private recipientIds(projectId: string) {
     return [...new Set([...(this.agentSettings.get(projectId) ?? []).map((agent) => agent.id),
@@ -377,8 +388,8 @@ export class Orchestrator {
     if (source && (source.projectId !== projectId || source.status !== "running")) throw new Error("Mesaj kaynağı aktif görev değil");
     const taskId = source?.id ?? "@user";
     const from = source?.agentId ?? "@user";
-    const existing = this.messages.find((message) => message.projectId === projectId && message.taskId === taskId
-      && message.idempotencyKey === draft.idempotencyKey);
+    const existing = this.diskMessages ? this.journal.findMessageReference!(projectId, taskId, draft.idempotencyKey)
+      : this.messages.find((message) => message.projectId === projectId && message.taskId === taskId && message.idempotencyKey === draft.idempotencyKey);
     if (existing) {
       if (existing.to !== draft.to || existing.kind !== draft.kind || this.materializeMessage(existing).body !== draft.body) throw new Error("Aynı mesaj anahtarı farklı içerikle kullanılamaz");
       return existing.id;
@@ -535,8 +546,10 @@ export class Orchestrator {
       };
       inbox = new ExecutionInbox({ active, signal: controller.signal,
         pending: () => {
-          const next = this.messagesFor(task).find(message => !initialIds.has(message.id) && this.delivery(task.id, message.id)?.status !== "accepted");
-          return next ? [this.materializeMessage(next)] : [];
+          for (const message of this.messagesFor(task)) {
+            if (!initialIds.has(message.id) && this.delivery(task.id, message.id)?.status !== "accepted") return [this.materializeMessage(message)];
+          }
+          return [];
         },
         record: (messageId, status) => receipt(messageId, status, "live"),
         onError: (error) => { this.notify({ kind: "output", projectId: task.projectId, taskId: task.id,
@@ -807,6 +820,7 @@ export class Orchestrator {
         break;
       }
       case "message.sent":
+        if (this.diskMessages) break;
         if (this.journal.readEvent) {
           const { body, ...metadata } = event.message;
           this.messages.push({ ...metadata, eventId });

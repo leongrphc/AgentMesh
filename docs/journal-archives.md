@@ -36,7 +36,7 @@ Durum sürümü, SHA-256, son sıra numarası ve kaynak olay kimliği doğrulan�
 
 Checkpoint tablo/indeksleri türetilmiş verilerdir; küçültülmemiş journal şeması v2 kalır. Arşivler sadece kaynak olayları ve arşiv manifestini taşır; checkpoint arşive kopyalanmaz. Böylece kurtarma checkpoint'e bağımlı değildir. Ajan ayarları son kayıt sorgusuyla, başka proje görev kimlikleri de indeksli kimlik sorgusuyla alınır; checkpoint kazanımını geri alan tam açılış taraması yapılmaz.
 
-Checkpoint'in boyutu görev, güncel context, bekleyen öneri, mesaj üst bilgileri ve devam eden gönderimlerin sayısına bağlıdır. SQLite mesaj gövdeleri yerine kaynak olay kimlikleri saklanır; geçmiş facts/paket/çözülmüş öneri içerikleri dahil edilmez. Projeksiyon sürüm 3'tür; eski projeksiyon sürümü tam replay ile yeniden kurulur. Tam dışa aktarım ve tanı raporu yine gerektiğinde journal'ı tarar. Küçültme ve birleşik okuma aşağıdaki --compact akışında uygulanır; isteğe bağlı otomatik bakım eşikleri aşağıda açıklanır.
+Checkpoint'in boyutu görev, güncel context, bekleyen öneri ve devam eden gönderimlerin sayısına bağlıdır. SQLite mesaj gövdeleri ve üst bilgileri checkpoint içinde tutulmaz; geçmiş facts/paket/çözülmüş öneri içerikleri dahil edilmez. Projeksiyon sürüm 4'tür; eski projeksiyon sürümü tam replay ile yeniden kurulur. Tam dışa aktarım ve tanı raporu yine gerektiğinde journal'ı tarar. Küçültme ve birleşik okuma aşağıdaki --compact akışında uygulanır; isteğe bağlı otomatik bakım eşikleri aşağıda açıklanır.
 
 
 ## Aktif journal'ı küçültme
@@ -53,7 +53,7 @@ Bağlı arşiv artık isteğe bağlı yedek değil, journal'ın **zorunlu parça
 
 Küçültme şemayı **v3** yapar; v2'ye kadar destekleyen eski uygulamalar bu dosyayı açamaz. Küçültülmemiş journal ve bağımsız arşivler v2 kalır. Fiziksel aktif alan VACUUM ve WAL checkpoint ile geri alınır. Çıktıda `compacted: true` aktarımın commit edildiğini, `vacuumed` alanı fiziksel bakımın da tamamlanıp tamamlanmadığını gösterir. Bakım başarısızsa `maintenanceError` döner; aktarım geri alınmış gibi raporlanmaz.
 
-Rotasyon geçmişi silmez. İkinci rotasyon eski arşivi de içerdiğinden önceki kopyalar ayrıca yer tutabilir. Varsayılan olarak kopyalar silinmez; otomatik oluşturulan kopyalar için aşağıdaki isteğe bağlı saklama ayarı kullanılabilir. Arşiv doğrulaması açılışta bütün arşivi okur; checkpoint durum replay'ini azaltır ama bu bütünlük okumasını kaldırmaz. Mesaj üst bilgileri/görev projeksiyonlarının bellek politikası ayrı açık iştir.
+Rotasyon geçmişi silmez. İkinci rotasyon eski arşivi de içerdiğinden önceki kopyalar ayrıca yer tutabilir. Varsayılan olarak kopyalar silinmez; otomatik oluşturulan kopyalar için aşağıdaki isteğe bağlı saklama ayarı kullanılabilir. Arşiv doğrulaması açılışta bütün arşivi okur; checkpoint durum replay'ini azaltır ama bu bütünlük okumasını kaldırmaz. Görev projeksiyonlarının bellek politikası ayrı açık iştir.
 
 ## İsteğe bağlı otomatik bakım
 

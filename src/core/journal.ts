@@ -1,9 +1,15 @@
 import { appendFileSync, existsSync, mkdirSync, readFileSync } from "node:fs";
 import { dirname } from "node:path";
 import { randomUUID } from "node:crypto";
-import type { DomainEvent, StoredEvent, ContextHistoryPage, HistoryPage, ContextConflict, ContextPackage, MessageDelivery } from "./contracts.js";
+import type { DomainEvent, StoredEvent, ContextHistoryPage, HistoryPage, ContextConflict, ContextPackage, MessageDelivery, AgentMessage } from "./contracts.js";
+
+export type StoredMessageReference = Omit<AgentMessage, "body"> & { eventId: string };
 
 export interface EventStore {
+  scanMessageReferences?(projectId: string): Iterable<StoredMessageReference>;
+  messageReferencePage?(projectId: string, taskId?: string, agentId?: string, before?: number): HistoryPage<StoredMessageReference>;
+  messageCount?(projectId: string): number;
+  findMessageReference?(projectId: string, taskId: string, key: string): StoredMessageReference | undefined;
   readEvent?(id: string): StoredEvent | undefined;
   readDelivery?(taskId: string, messageId: string): MessageDelivery | undefined;
   scanDeliveries?(taskId?: string, messageId?: string): Iterable<MessageDelivery>;

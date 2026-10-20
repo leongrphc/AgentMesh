@@ -4,7 +4,7 @@ import { dirname, resolve } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { pathToFileURL } from "node:url";
 import type { DomainEvent, StoredEvent, ContextConflict, MessageDelivery } from "./contracts.js";
-import type { EventStore } from "./journal.js";
+import type { EventStore, StoredMessageReference } from "./journal.js";
 import { fingerprintEvents, verifyJournalArchive } from "./journal-archive.js";
 
 /** Single-writer SQLite journal. A lock file prevents two orchestration processes writing concurrently. */
@@ -55,6 +55,7 @@ export class SqliteJournal implements EventStore {
         CREATE INDEX IF NOT EXISTS events_history_conflict ON events(project_id, json_extract(payload, '$.type'), json_extract(payload, '$.conflict.id'), sequence);
         CREATE INDEX IF NOT EXISTS events_delivery_task ON events(json_extract(payload, '$.delivery.taskId'), json_extract(payload, '$.delivery.messageId'), sequence) WHERE json_extract(payload, '$.type') = 'message.delivery';
         CREATE INDEX IF NOT EXISTS events_delivery_message ON events(json_extract(payload, '$.delivery.messageId'), sequence) WHERE json_extract(payload, '$.type') = 'message.delivery';
+        CREATE INDEX IF NOT EXISTS events_message_key ON events(project_id, json_extract(payload, '$.message.taskId'), json_extract(payload, '$.message.idempotencyKey'), sequence) WHERE json_extract(payload, '$.type') = 'message.sent';
       `);
       const link = this.db.prepare("SELECT path, digest, through_sequence, event_count FROM journal_archive WHERE id = 1").get() as
         { path: string; digest: string; through_sequence: number; event_count: number } | undefined;
@@ -101,6 +102,45 @@ export class SqliteJournal implements EventStore {
     this.assertOpen();
     const row = this.db.prepare("SELECT id, at, payload FROM events WHERE id = ?").get(id);
     return row ? { id: row.id as string, at: row.at as string, payload: JSON.parse(row.payload as string) as DomainEvent } : undefined;
+  }
+
+  private messageReference(row: Record<string, unknown>): StoredMessageReference {
+    return { ...JSON.parse(row.metadata as string), eventId: row.id as string };
+  }
+
+  *scanMessageReferences(projectId: string): Iterable<StoredMessageReference> {
+    this.assertOpen();
+    const last = this.db.prepare("SELECT COALESCE(MAX(sequence), 0) AS n FROM events").get()!.n as number;
+    const rows = this.db.prepare(`SELECT id, json_remove(json_extract(payload, '$.message'), '$.body') AS metadata FROM events
+      WHERE project_id = ? AND json_extract(payload, '$.type') = 'message.sent' AND sequence <= ? ORDER BY sequence`).iterate(projectId, last);
+    this.activeScans++;
+    try { for (const row of rows) yield this.messageReference(row); }
+    finally { this.activeScans--; }
+  }
+
+  messageCount(projectId: string): number {
+    this.assertOpen();
+    return this.db.prepare("SELECT COUNT(*) AS n FROM events WHERE project_id = ? AND json_extract(payload, '$.type') = 'message.sent'").get(projectId)!.n as number;
+  }
+
+  findMessageReference(projectId: string, taskId: string, key: string): StoredMessageReference | undefined {
+    this.assertOpen();
+    const row = this.db.prepare(`SELECT id, json_remove(json_extract(payload, '$.message'), '$.body') AS metadata FROM events
+      WHERE project_id = ? AND json_extract(payload, '$.type') = 'message.sent'
+      AND json_extract(payload, '$.message.taskId') = ? AND json_extract(payload, '$.message.idempotencyKey') = ? ORDER BY sequence LIMIT 1`).get(projectId, taskId, key);
+    return row ? this.messageReference(row) : undefined;
+  }
+
+  messageReferencePage(projectId: string, taskId?: string, agentId?: string, before?: number) {
+    this.assertOpen();
+    if (before !== undefined && (!Number.isSafeInteger(before) || before < 1)) throw new Error("Geçersiz geçmiş sayfası");
+    if ((taskId === undefined) !== (agentId === undefined)) throw new Error("Geçersiz mesaj kapsamı");
+    const where = `project_id = ? AND json_extract(payload, '$.type') = 'message.sent'${taskId === undefined ? "" : " AND (json_extract(payload, '$.message.taskId') = ? OR json_extract(payload, '$.message.to') IN (?, '*'))"}`;
+    const params = taskId === undefined ? [projectId] : [projectId, taskId, agentId!];
+    const total = this.db.prepare(`SELECT COUNT(*) AS n FROM events WHERE ${where}`).get(...params)!.n as number;
+    const end = Math.min(total, (before ?? total + 1) - 1), size = Math.min(20, end);
+    const rows = this.db.prepare(`SELECT id, json_remove(json_extract(payload, '$.message'), '$.body') AS metadata FROM events WHERE ${where} ORDER BY sequence DESC LIMIT ? OFFSET ?`).all(...params, size, total - end);
+    return { entries: rows.map(row => this.messageReference(row)), total, ...(end > size ? { nextBefore: end - size + 1 } : {}) };
   }
 
   readDelivery(taskId: string, messageId: string): MessageDelivery | undefined {

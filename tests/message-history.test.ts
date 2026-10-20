@@ -19,6 +19,7 @@ test("SQLite retains message references without bodies and reads only requested 
     engine.checkpoint();
     const checkpoint = journal.loadCheckpoint()!;
     assert.ok(!checkpoint.state.includes(body));
+    assert.deepEqual(JSON.parse(checkpoint.state).messages, []);
     assert.ok(Buffer.byteLength(checkpoint.state) < 60000);
     let reads = 0;
     const read = journal.readEvent.bind(journal);
@@ -38,6 +39,41 @@ test("SQLite retains message references without bodies and reads only requested 
     const old = JSON.parse(checkpoint.state); old.version = 1;
     journal.saveCheckpoint(JSON.stringify(old), checkpoint.sourceId);
     assert.equal(new Orchestrator(journal).snapshot("p").messages[0]!.body, body);
+  } finally { journal.close(); rmSync(root, { recursive: true, force: true }); }
+});
+
+test("SQLite message reads use scoped pages and keys while reference streams freeze their upper boundary", () => {
+  const root = mkdtempSync(join(tmpdir(), "mesh-message-queries-"));
+  const journal = new SqliteJournal(join(root, "events.sqlite"));
+  try {
+    const engine = new Orchestrator(journal);
+    engine.createProject({ id: "p", workspaceRoot: root });
+    engine.createProject({ id: "other", workspaceRoot: root });
+    const ids: string[] = [];
+    for (let i = 0; i < 45; i++) ids.push(engine.sendMessage("p", { to: "*", kind: "progress", body: String(i), idempotencyKey: `key-${i}` }));
+    engine.sendMessage("other", { to: "*", kind: "progress", body: "other", idempotencyKey: "key-0" });
+    const cursor = journal.scanMessageReferences("p")[Symbol.iterator]();
+    const first = cursor.next().value!;
+    assert.equal(first.id, ids[0]);
+    assert.ok(!("body" in first));
+    const newest = engine.sendMessage("p", { to: "*", kind: "progress", body: "new", idempotencyKey: "new" });
+    assert.throws(() => journal.compact(join(root, "blocked.sqlite")), /taraması/);
+    const streamed = [first.id];
+    for (let next = cursor.next(); !next.done; next = cursor.next()) streamed.push(next.value.id);
+    assert.deepEqual(streamed, ids);
+    assert.equal(journal.messageCount("p"), 46);
+    assert.equal(journal.messageCount("other"), 1);
+    const scan = journal.scanMessageReferences;
+    journal.scanMessageReferences = () => { throw new Error("Unbounded reference scan"); };
+    assert.equal(engine.historyCounts("p").messages, 46);
+    assert.equal(engine.messageHistoryPage("p").entries[0]!.message.id, newest);
+    assert.equal(engine.sendMessage("p", { to: "*", kind: "progress", body: "0", idempotencyKey: "key-0" }), ids[0]);
+    assert.equal(journal.findMessageReference("other", "@user", "key-0")?.projectId, "other");
+    assert.equal(journal.findMessageReference("p", "different-source", "key-0"), undefined);
+    journal.scanMessageReferences = scan;
+    engine.checkpoint();
+    journal.compact(join(root, "archive.sqlite"));
+    assert.equal(new Orchestrator(journal).messageHistoryPage("p").entries[0]!.message.id, newest);
   } finally { journal.close(); rmSync(root, { recursive: true, force: true }); }
 });
 
