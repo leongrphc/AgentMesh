@@ -3,7 +3,7 @@ import { mkdtempSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSyn
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
-import { listWorkspace, readWorkspaceFile, saveWorkspaceFile } from "../src/core/workspace-files.js";
+import { createWorkspaceEntry, listWorkspace, readWorkspaceFile, saveWorkspaceFile } from "../src/core/workspace-files.js";
 
 test("workspace file access rejects traversal, protected paths, symlinks, binaries and stale saves", () => {
   const base = mkdtempSync(join(tmpdir(), "mesh-files-"));
@@ -32,4 +32,29 @@ test("workspace file access rejects traversal, protected paths, symlinks, binari
     writeFileSync(join(root, "large.txt"), "x".repeat(1024 * 1024 + 1));
     for (const path of ["binary.dat", "invalid.txt", "large.txt"]) assert.throws(() => readWorkspaceFile(root, path));
   } finally { rmSync(base, { recursive: true, force: true }); }
+});
+
+test("new workspace entries are exclusive, scoped, and cannot traverse protected or linked parents", () => {
+  const root = mkdtempSync(join(tmpdir(), "mesh-create-"));
+  try {
+    mkdirSync(join(root, "src"));
+    mkdirSync(join(root, "outside"));
+    symlinkSync(join(root, "outside"), join(root, "linked"), process.platform === "win32" ? "junction" : "dir");
+    const scope = ["src/**/*.ts"];
+    createWorkspaceEntry(root, "src/components", true, scope);
+    createWorkspaceEntry(root, "src/components/view.ts", false, scope);
+    const file = readWorkspaceFile(root, "src/components/view.ts");
+    saveWorkspaceFile(root, file.path, "export const ready = true;", file.digest, scope);
+    assert.throws(() => createWorkspaceEntry(root, file.path, false, scope), /EEXIST/);
+    assert.equal(readWorkspaceFile(root, file.path).content, "export const ready = true;");
+    assert.throws(() => createWorkspaceEntry(root, "src/components", true, scope), /EEXIST/);
+    assert.throws(() => createWorkspaceEntry(root, "docs", true, scope), /kapsamı dışında/);
+    assert.throws(() => createWorkspaceEntry(root, "src/readme.md", false, scope), /kapsamı dışında/);
+    for (const path of ["../escape", ".GIT/config", "linked/new", "src/NUL.txt", "src/file:ads", "src/x.", "src//x", "/absolute", "src/../x"]) {
+      assert.throws(() => createWorkspaceEntry(root, path, false, ["**"]));
+    }
+    assert.throws(() => createWorkspaceEntry(root, "missing/child.ts", false, ["**"]), /ENOENT/);
+    createWorkspaceEntry(root, "specific", true, ["specific/file.txt"]);
+    createWorkspaceEntry(root, "specific/file.txt", false, ["specific/file.txt"]);
+  } finally { rmSync(root, { recursive: true, force: true }); }
 });

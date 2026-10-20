@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { existsSync, lstatSync, readFileSync, readdirSync, realpathSync, unlinkSync, writeFileSync } from "node:fs";
+import { existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, realpathSync, unlinkSync, writeFileSync } from "node:fs";
 import { isAbsolute, join, matchesGlob, relative, sep } from "node:path";
 
 const maxFileBytes = 1024 * 1024;
@@ -12,7 +12,8 @@ export interface WorkspaceFile { path: string; content: string; digest: string; 
 function checkedPath(root: string, path: string, allowMissingLeaf = false): string {
   if (typeof path !== "string" || path.includes("\0") || path.includes(":") || isAbsolute(path)) throw new Error("Geçersiz dosya yolu");
   const parts = path.replace(/\\/g, "/").split("/").filter(Boolean);
-  if (parts.some((part) => part === ".." || part === "." || hidden.has(part) || /[. ]$/.test(part))) {
+  if (parts.some((part) => part === ".." || part === "." || hidden.has(part.toLowerCase()) || /[. ]$/.test(part)
+    || /[<>"|?*\x00-\x1f]/.test(part) || /^(con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\.|$)/i.test(part))) {
     throw new Error("Çalışma alanı dışı veya korunan dosya yolu");
   }
   const realRoot = realpathSync(root);
@@ -30,6 +31,25 @@ function checkedPath(root: string, path: string, allowMissingLeaf = false): stri
 }
 
 export interface ConflictFile { path: string; content: string | null; digest: string | null; binary: boolean }
+
+/** Exclusive leaf creation; parents must already exist and pass the same path checks. */
+export function createWorkspaceEntry(root: string, path: string, directory: boolean, allowedPaths: readonly string[]): WorkspaceEntry {
+  if (typeof path !== "string" || !path || path.length > 1024 || typeof directory !== "boolean") throw new Error("Geçersiz yeni dosya yolu");
+  const normalized = path.replace(/\\/g, "/");
+  if (normalized.split("/").some((part) => !part)) throw new Error("Yeni öğe için göreli ve boş olmayan bir yol girin");
+  const target = checkedPath(root, normalized, true);
+  const permitted = allowedPaths.some((raw) => {
+    const pattern = raw.replace(/\\/g, "/");
+    if (!directory) return matchesGlob(normalized, pattern);
+    // A directory can match a prefix of an allowed file pattern, including globstar.
+    const segments = pattern.split("/");
+    return segments.some((_part, index) => matchesGlob(normalized, segments.slice(0, index + 1).join("/")));
+  });
+  if (!permitted) throw new Error("Yeni öğe görev kapsamı dışında");
+  if (directory) mkdirSync(target);
+  else writeFileSync(target, "", { encoding: "utf8", flag: "wx" });
+  return { path: normalized, name: normalized.split("/").at(-1)!, directory };
+}
 
 export function readConflictFile(root: string, path: string): ConflictFile {
   const target = checkedPath(root, path, true);

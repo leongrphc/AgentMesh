@@ -23,6 +23,7 @@ const api: DesktopAPI = {
   resolveConflict: (taskId, path, content, digest, keepCurrent) => ipcRenderer.invoke("mesh:resolve-conflict", taskId, path, content, digest, keepCurrent),
   approve: (taskId, digest) => ipcRenderer.invoke("mesh:approve", taskId, digest),
   files: (taskId, path) => ipcRenderer.invoke("mesh:files", taskId, path),
+  createEntry: (taskId, path, directory) => ipcRenderer.invoke("mesh:create-entry", taskId, path, directory),
   readFile: (taskId, path) => ipcRenderer.invoke("mesh:read-file", taskId, path),
   saveFile: (taskId, path, content, digest) => ipcRenderer.invoke("mesh:save-file", taskId, path, content, digest),
   createTask: (task) => ipcRenderer.invoke("mesh:create-task", task),

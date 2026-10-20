@@ -102,7 +102,7 @@ async function createWindow() {
         await window.agentmesh.terminalWrite(id, ${JSON.stringify(process.platform === "win32" ? "type terminal-smoke.txt\r" : "cat terminal-smoke.txt\r")});
         await waitFor(async () => (await window.agentmesh.terminalRead(id, 0)).data.includes('DESKTOP_PTY_OK'), 'PTY çıktısı alınmadı');
         document.querySelector('.terminal-panel').scrollIntoView();
-        await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+        await new Promise(resolve => { const timer = setTimeout(resolve, 500); requestAnimationFrame(() => requestAnimationFrame(() => { clearTimeout(timer); resolve(); })); });
       })()`);
       const terminalBounds = await window.webContents.executeJavaScript(`(() => {
         const r = document.querySelector('.terminal-panel').getBoundingClientRect();
@@ -148,7 +148,7 @@ async function createWindow() {
           const accepted = message && state.snapshot.deliveries.some(d => d.messageId === message.id && d.taskId === 'plan' && d.status === 'accepted' && d.mode === 'live');
           if (accepted && document.querySelector('.message-deliveries')?.textContent.includes('Kabul edildi')) {
             document.querySelector('.messages-panel').scrollIntoView({block:'center'});
-            await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+            await new Promise(resolve => { const timer = setTimeout(resolve, 500); requestAnimationFrame(() => requestAnimationFrame(() => { clearTimeout(timer); resolve(); })); });
             return;
           }
           await new Promise(r => setTimeout(r, 50));
@@ -205,7 +205,7 @@ async function createWindow() {
       mkdirSync(root, { recursive: true });
       await window.webContents.executeJavaScript(`(async () => {
         document.querySelector('.task-detail .test-reports').scrollIntoView({ block: 'center' });
-        await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+        await new Promise(resolve => { const timer = setTimeout(resolve, 500); requestAnimationFrame(() => requestAnimationFrame(() => { clearTimeout(timer); resolve(); })); });
       })()`);
       writeFileSync(join(root, "desktop-test-reports.png"), (await window.capturePage()).toPNG());
       writeFileSync(join(root, "desktop-smoke.png"), (await window.capturePage()).toPNG());
@@ -396,6 +396,10 @@ app.whenReady().then(async () => {
   handle("mesh:read-file", (taskId, path) => {
     if (typeof taskId !== "string" || typeof path !== "string") throw new Error("Geçersiz dosya isteği");
     return service.readFile(taskId, path);
+  });
+  handle("mesh:create-entry", (taskId, path, directory) => {
+    if (typeof taskId !== "string" || typeof path !== "string" || typeof directory !== "boolean") throw new Error("Geçersiz yeni öğe isteği");
+    return service.createEntry(taskId, path, directory);
   });
   handle("mesh:save-file", (taskId, path, content, digest) => {
     if ([taskId, path, content, digest].some((value) => typeof value !== "string")) throw new Error("Geçersiz kayıt isteği");

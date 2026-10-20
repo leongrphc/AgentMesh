@@ -13,7 +13,7 @@ import { configuredAdapter } from "../adapters/registry.js";
 import type { PermissionDecision } from "../core/permissions.js";
 import { probeCodex, probeOpenCode, probeOpenCodeServer, probeHeadlessProvider, type ProviderHealth } from "../adapters/provider-health.js";
 import { safeLog } from "../core/safe-log.js";
-import { listWorkspace, readWorkspaceFile, saveWorkspaceFile, readConflictFile, writeConflictResolution } from "../core/workspace-files.js";
+import { createWorkspaceEntry, listWorkspace, readWorkspaceFile, saveWorkspaceFile, readConflictFile, writeConflictResolution } from "../core/workspace-files.js";
 import type { DesktopState, DesktopReview, TaskDraft } from "./contracts.js";
 import { Terminals } from "./terminals.js";
 import { sendProviderMessage, validateProviderMessage, type ProviderMessageInput, type ProviderMessageResult } from "../adapters/provider-message.js";
@@ -347,8 +347,14 @@ export class DesktopService {
   }
 
   files(taskId: string, path = "") {
-    const { root } = this.workspace(taskId);
-    return { root, entries: listWorkspace(root, path) };
+    const { root, writable } = this.workspace(taskId);
+    return { root, writable, entries: listWorkspace(root, path) };
+  }
+
+  createEntry(taskId: string, path: string, directory: boolean) {
+    const { root, writable, task } = this.workspace(taskId);
+    if (!writable) throw new Error("Yalnızca durdurulmuş görev worktree'si düzenlenebilir");
+    return createWorkspaceEntry(root, path, directory, task.allowedPaths);
   }
 
   readFile(taskId: string, path: string) {

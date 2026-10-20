@@ -139,3 +139,5 @@ docs/
 ```
 
 Önemli sınır: `allowedPaths` işlem **sonrasında** değiştirilmiş dosyalara bakılarak doğrulanıyor; OS seviyesinde dosya erişimini engellemiyor. Gerçek CLI'lerin sürümleri kontrol edildi ve argüman/JSONL işleme test edildi, ancak ücretli/oturum açılmış bir model çağrısı yapılmadı.
+
+Dosya ağacındaki **Yeni öğe** formu, durdurulmuş görev worktree’sinde dosya veya klasör oluşturur. Geçerli klasöre bir ad girin; alt klasörleri sırayla oluşturun. Mevcut dosyalar ezilmez ve görev kapsamı dışındaki yollar reddedilir. **Yenile** ağacı diskten tekrar okur; açık editör taslağını değiştirmez.

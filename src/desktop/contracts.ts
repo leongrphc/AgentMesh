@@ -55,7 +55,8 @@ export interface DesktopAPI {
   conflictFile(taskId: string, path: string): Promise<ConflictFile>;
   resolveConflict(taskId: string, path: string, content: string | null, digest: string | null, keepCurrent?: boolean): Promise<DesktopReview>;
   approve(taskId: string, digest: string): Promise<boolean>;
-  files(taskId: string, path?: string): Promise<{ root: string; entries: WorkspaceEntry[] }>;
+  files(taskId: string, path?: string): Promise<{ root: string; writable: boolean; entries: WorkspaceEntry[] }>;
+  createEntry(taskId: string, path: string, directory: boolean): Promise<WorkspaceEntry>;
   readFile(taskId: string, path: string): Promise<WorkspaceFile>;
   saveFile(taskId: string, path: string, content: string, digest: string): Promise<WorkspaceFile>;
   createTask(task: TaskDraft): Promise<void>;

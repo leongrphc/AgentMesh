@@ -37,6 +37,10 @@
 .file-tree>button { display: flex; gap: 10px; align-items: center; width: 100%; border: none; border-radius: 0; text-align: left; background: transparent; padding: 9px 16px; font: 11px Consolas, monospace; overflow-wrap: anywhere; }
 .file-tree>button.current-file { background: #2b4451; color: var(--teal); }
 .file-tree>button span { color: var(--gold); }
+.create-entry { padding: 12px 16px; display: grid; gap: 8px; border-bottom: 1px solid var(--line); }
+.create-entry label { display: grid; gap: 4px; font-size: 11px; }
+.create-entry input, .create-entry select { min-width: 0; width: 100%; padding: 7px; color: var(--text); background: #203441; border: 1px solid var(--line); border-radius: 4px; }
+.create-entry p { font-size: 11px; line-height: 1.5; overflow-wrap: anywhere; margin: 0; }
 .directory-label { display: flex; gap: 8px; padding: 10px 15px; align-items: center; justify-content: space-between; font-size: 10px; color: var(--muted); min-height: 40px; }
 .directory-label code { overflow-wrap: anywhere; }
 .directory-label button { padding: 1px 7px; }

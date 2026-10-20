@@ -49,6 +49,47 @@ export async function mergeSmoke(window: BrowserWindow, service: DesktopService)
     await wait(() => document.querySelector('.task-detail h3')?.textContent === 'Smoke second');
     (await wait(() => [...document.querySelectorAll('.detail-actions button')].find(e => e.textContent.includes('Değişiklikleri incele')))).click();
     (await wait(() => [...document.querySelectorAll('.merge-resolution button')].find(e => e.textContent.includes('Çözümü görev alanında aç')))).click();
+    await wait(() => document.querySelector('.merge-file-list button'));
+    document.querySelector('[aria-label="İncelemeyi kapat"]').click();
+    await wait(() => !document.querySelector('.review-dialog'));
+    (await wait(() => [...document.querySelectorAll('.file-tree>button')].find(e => e.textContent.trim().endsWith('src')))).click();
+    await wait(() => document.querySelector('.directory-label code')?.textContent === 'src');
+    const create = async (name, kind) => {
+      const form = await wait(() => document.querySelector('form.create-entry'));
+      const select = form.querySelector('select');
+      Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value').set.call(select, kind);
+      select.dispatchEvent(new Event('change', {bubbles:true}));
+      const input = form.querySelector('input');
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(input, name);
+      input.dispatchEvent(new Event('input', {bubbles:true}));
+      await wait(() => !form.querySelector('button').disabled);
+      form.requestSubmit();
+      await wait(() => form.querySelector('[role="status"]')?.textContent.includes(name + ' oluşturuldu'));
+      return wait(() => [...document.querySelectorAll('.file-tree>button')].find(e => e.textContent.trim().endsWith(name)));
+    };
+    (await create('smoke-folder', 'directory')).click();
+    await wait(() => document.querySelector('.directory-label code')?.textContent === 'src/smoke-folder');
+    (await create('new.ts', 'file')).click();
+    await wait(() => document.querySelector('.editor-toolbar code')?.textContent === 'src/smoke-folder/new.ts');
+    document.querySelector('.file-workspace').scrollIntoView({block:'center'});
+    await new Promise(resolve => { const timer = setTimeout(resolve, 500); requestAnimationFrame(() => requestAnimationFrame(() => { clearTimeout(timer); resolve(); })); });
+  })()`);
+  const bounds = await window.webContents.executeJavaScript(`(() => {
+    const r = document.querySelector('.file-workspace').getBoundingClientRect();
+    return {x:r.x + scrollX, y:r.y + scrollY, width:r.width, height:r.height, scale:1};
+  })()`);
+  window.webContents.debugger.attach("1.3");
+  try {
+    const shot = await window.webContents.debugger.sendCommand("Page.captureScreenshot", {format:"png", captureBeyondViewport:true, clip:bounds});
+    writeFileSync(resolve("dist", "desktop-create-file.png"), Buffer.from(shot.data, "base64"));
+  } finally { window.webContents.debugger.detach(); }
+  if (service.readFile("second", "src/smoke-folder/new.ts").content !== "") throw new Error("Yeni dosya diskte doğrulanamadı");
+  await window.webContents.executeJavaScript(`(async () => {
+    const wait = async (find) => {
+      for (let i = 0; i < 200; i++) { const value = find(); if (value) return value; await new Promise(r => setTimeout(r, 50)); }
+      throw new Error('Merge smoke arayüzü zaman aşımı');
+    };
+    (await wait(() => [...document.querySelectorAll('.detail-actions button')].find(e => e.textContent.includes('Değişiklikleri incele')))).click();
     (await wait(() => document.querySelector('.merge-file-list button'))).click();
     const editor = await wait(() => document.querySelector('[aria-label="Çakışma çözümü"]'));
     if (!editor.value.includes('<<<<<<< HEAD')) throw new Error('Çakışma içeriği açılmadı');
@@ -60,7 +101,7 @@ export async function mergeSmoke(window: BrowserWindow, service: DesktopService)
     const approve = [...document.querySelectorAll('.review-actions button')].find(e => e.textContent.includes('Onayla ve birleştir'));
     if (!approve || approve.disabled) throw new Error('Çözüm yeni onaya hazırlanmadı');
     document.querySelector('.merge-resolution').scrollIntoView({block:'center'});
-    await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    await new Promise(resolve => { const timer = setTimeout(resolve, 500); requestAnimationFrame(() => requestAnimationFrame(() => { clearTimeout(timer); resolve(); })); });
   })()`);
   writeFileSync(resolve("dist", "desktop-merge.png"), (await window.capturePage()).toPNG());
   // Native confirmation is not clicked by automation; approve the verified fixture via the service.

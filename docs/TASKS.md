@@ -91,7 +91,10 @@ Codex, OpenCode, Claude, Antigravity ve diğer API modellerini **tek IDE içinde
   - [x] Desktop yeniden açma ve CLI execute öncesi toplu görev kontrolü: aynı ID'de başlık/talimat/ajan/bağımlılık/kapsam farkı alan adlarıyla reddedilir; ham talimat hata metnine alınmaz. UI görevleri korunur; eksik ajan eşlemesi ve başka projedeki görev ID çakışması yeni görev eklenmeden reddedilir. Dizi sırası anlamsız fark üretmez; tekrarlı bağımlılıklar config doğrulamasında reddedilir. Başarısız açılış eski projeyi/journal'ı kullanılabilir bırakır.
   - [x] Ajan tanımları `project.agents.configured` olayıyla kalıcı bağlandı; masaüstü ve CLI aynı çözümlemeyi kullanır. Kaynak config değişirse kayıtlı kaynak veya etkin ajan listesiyle eşleşmesi gerekir; uyumsuz değişiklik reddedilir. Kullanılmış ajan bağlantısı/rolü ve oturumlu pending retry değiştirilemez.
   - [ ] Farkları karşılaştıran güncelleme ekranı ve güvenli görev revizyonu. Şimdilik görev farkında orijinal tanımı geri yüklemek veya yeni görev kimliği kullanmak gerekir. Eski journal'ların ilk bağlaması mevcut config üzerinden yapılır; daha önce kaydedilmemiş provider/model geçmişi geriye dönük kanıtlanamaz.
-- [ ] **UI-007 / Editör devamı:** Dosya/klasör oluşturma, disk değişikliği izleme, çoklu dosya sekmeleri ve kaydedilmemiş taslak kurtarma. Monaco paket boyutu/ilk yükleme optimizasyonu; şu anda editör ayrı ve tembel yüklenen yaklaşık 2.6 MB chunk.
+- [ ] **UI-007 / Editör devamı:**
+  - [x] Dosya/klasör oluşturma ve dosya ağacını yenileme. Durdurulmuş worktree, allowedPaths ve korunan yol kontrolü; mevcut öğeyi ezmeyen exclusive oluşturma. Klasörler izinli dosya kalıplarının üst yollarıyla sınırlı, üst klasörler önce oluşturulmalı. Taslak korunur; yeni öğe ağaçtan açılır. Gerçek Electron form → IPC → disk doğrulaması.
+  - [ ] Disk değişikliği izleme, çoklu dosya sekmeleri ve kaydedilmemiş taslak kurtarma.
+  - [ ] Monaco paket boyutu/ilk yükleme optimizasyonu; şu anda editör ayrı ve tembel yüklenen yaklaşık 2.6 MB chunk.
 
 ### P2 — Hibrit sağlayıcılar ve ileri orkestrasyon
 
@@ -110,7 +113,7 @@ Codex, OpenCode, Claude, Antigravity ve diğer API modellerini **tek IDE içinde
 
 ## Devam ederken
 
-20 Ekim goal çalışması: UI-003 ajan ayarları, CORE-013 kalıcı ajan bağlaması ilk adımı, UI-006 test raporu/merge çözüm akışı ve CORE-009 kalıcı inbox/Codex canlı teslim eklendi. **73/73 tam süit + ek oturumsuz retry regresyonu** (inbox 6/6), TypeScript ve canlı mesaj/gerçek Git çakışma çözümünü doğrulayan Electron smoke başarılı. Gerçek model çağrısı yapılmadı. Sırada kalan native canlı teslim kabul işleri ve UI-007 editör geliştirmeleri var.
+20 Ekim goal çalışması: UI-003 ajan ayarları, CORE-013 kalıcı ajan bağlaması ilk adımı, UI-006 test raporu/merge çözüm akışı ve CORE-009 kalıcı inbox/Codex canlı teslim eklendi. **75/75 tam süit ve genişletilmiş worktree servis testleri**, TypeScript ve canlı mesaj/gerçek Git çakışma çözümünü doğrulayan Electron smoke başarılı. Gerçek model çağrısı yapılmadı. UI-007 dosya/klasör oluşturma eklendi; sırada çoklu sekmeler, taslak kurtarma/disk izleme ve kalan native canlı teslim kabul işleri var.
 
 1. `D:\WebGpt` içinde `git status --short` ve `git log -5 --oneline` ile durumu kontrol et.
 2. `npm install` (gerekiyorsa), ardından `npm run typecheck` ve `npm test` çalıştır.
@@ -148,7 +151,7 @@ npm run live -- --config agentmesh.config.example.json
 
 ## Bilinen sınırlar / tamamlandı sanılmaması gerekenler
 
-- Grafik masaüstü kabuğu, Monaco editör, Task Board ve görev PTY terminalleri var. Editör mevcut dosyaları düzenler; yeni dosya/klasör oluşturma ve dosya izleyicisi henüz yok.
+- Grafik masaüstü kabuğu, Monaco editör, Task Board ve görev PTY terminalleri var. Editör mevcut dosyaları düzenler, yeni dosya/klasör oluşturur. Çoklu sekmeler, taslak kurtarma ve dosya izleyicisi henüz yok.
 - Gerçek kısa yanıtlar: Codex, Antigravity ve native TUI üzerinden OpenCode Space Bunny Free. Gerçek çok ajanlı kod/araç/resume uçtan uca kabulü henüz yapılmadı; Claude API anahtarıyla model erişimi doğrulanmadı.
 - OpenCode için OS seviyesinde izolasyon kanıtlanmadı; mevcut `allowedPaths` denetimi işlem sonrasındadır.
 - Codex App Server ve OpenCode Server için araç onayı köprüleri var; canlı ajan mesajları Codex App Server ve demo için uygulandı, diğer otomatik bağlantılarda sonraki isteme bırakılır. OpenCode Server şu an 1.19.x v1 şemasına bağlıdır ve yalnızca bash/read/edit kapsamlarını sunar. Log filtresi bilinen biçimleri tanır; keyfi kişisel veri için garanti vermez.

@@ -30,6 +30,12 @@ export function FileEditor({ taskId, api, busy, onDirty }: { taskId: string; api
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [writable, setWritable] = useState(false);
+  const [revision, setRevision] = useState(0);
+  const [creating, setCreating] = useState(false);
+  const [newKind, setNewKind] = useState<"file" | "directory">("file");
+  const [newName, setNewName] = useState("");
+  const [notice, setNotice] = useState("");
   const host = useRef<HTMLDivElement>(null);
   const editor = useRef<monaco.editor.IStandaloneCodeEditor | undefined>(undefined);
   const request = useRef(0);
@@ -49,10 +55,10 @@ export function FileEditor({ taskId, api, busy, onDirty }: { taskId: string; api
   useEffect(() => {
     let live = true;
     setLoading(true);
-    api.files(taskId, directory).then((value) => { if (live) { setEntries(value.entries); setRoot(value.root); setError(""); } })
+    api.files(taskId, directory).then((value) => { if (live) { setEntries(value.entries); setRoot(value.root); setWritable(value.writable); } })
       .catch((e) => { if (live) setError(String(e)); }).finally(() => { if (live) setLoading(false); });
     return () => { live = false; };
-  }, [api, taskId, directory]);
+  }, [api, taskId, directory, revision, busy]);
 
   useEffect(() => { editor.current?.updateOptions({ readOnly: !file?.writable || busy }); }, [file?.writable, busy]);
 
@@ -63,11 +69,25 @@ export function FileEditor({ taskId, api, busy, onDirty }: { taskId: string; api
   }
 
   async function openFile(path: string) {
+    if (saving || creating) return;
     if (dirty && !window.confirm("Kaydedilmemiş değişiklikler silinsin mi?")) return;
     const id = ++request.current;
     setError("");
     try { const value = await api.readFile(taskId, path); if (id === request.current) showFile(value); }
     catch (e) { if (id === request.current) setError(String(e)); }
+  }
+
+  async function createEntry(event: React.FormEvent) {
+    event.preventDefault();
+    if (creating || busy || !writable) return;
+    setCreating(true); setError(""); setNotice("");
+    try {
+      const path = directory ? `${directory}/${newName}` : newName;
+      const entry = await api.createEntry(taskId, path, newKind === "directory");
+      setNewName(""); setRevision((value) => value + 1);
+      setNotice(`${entry.path} oluşturuldu. Dosya ağacından açabilirsiniz.`);
+    } catch (e) { setError(String(e)); }
+    finally { setCreating(false); }
   }
 
   async function save() {
@@ -83,12 +103,22 @@ export function FileEditor({ taskId, api, busy, onDirty }: { taskId: string; api
   }
 
   return <section className="file-workspace" aria-label="Görev dosyaları">
-    <div className="file-heading"><h2>Dosyalar</h2><code title={root}>{root || "Çalışma alanı açılıyor…"}</code><span>{file?.writable && !busy ? "Görev worktree’si" : "Salt okunur"}</span></div>
+    <div className="file-heading"><h2>Dosyalar</h2><code title={root}>{root || "Çalışma alanı açılıyor…"}</code><span>{writable && !busy ? "Görev worktree’si" : "Salt okunur"}</span></div>
     {error && <p className="file-error" role="alert">{error}</p>}
     <div className="file-layout"><nav className="file-tree" aria-label="Dosya ağacı">
-      <div className="directory-label"><code>{directory || "/"}</code>{directory && <button aria-label="Üst klasör" onClick={() => setDirectory(directory.split("/").slice(0, -1).join("/"))}>↑</button>}</div>
+      <div className="directory-label"><code>{directory || "/"}</code>{directory && <button disabled={creating} aria-label="Üst klasör" onClick={() => setDirectory(directory.split("/").slice(0, -1).join("/"))}>↑</button>}<button disabled={loading || creating} onClick={() => setRevision((value) => value + 1)}>Yenile</button></div>
+      <form className="create-entry" onSubmit={createEntry} aria-label="Yeni dosya veya klasör">
+        <label>Yeni öğe<select aria-label="Yeni öğe türü" value={newKind} disabled={!writable || busy || creating} onChange={(event) => setNewKind(event.target.value as "file" | "directory")}>
+          <option value="file">Dosya</option><option value="directory">Klasör</option>
+        </select></label>
+        <label>Ad<input aria-label="Yeni öğe adı" value={newName} maxLength={255} required disabled={!writable || busy || creating}
+          onChange={(event) => setNewName(event.target.value)} pattern={'[^/\\\\]+'} /></label>
+        <button type="submit" disabled={!writable || busy || creating || !newName.trim()}>{creating ? "Oluşturuluyor…" : "Oluştur"}</button>
+        {!writable && <p>Durdurulmuş görev worktree’sinde oluşturabilirsiniz.</p>}
+        {notice && <p role="status">{notice}</p>}
+      </form>
       {loading ? <p className="empty">Açılıyor…</p> : entries.map((entry) => <button className={file?.path === entry.path ? "current-file" : ""} key={entry.path}
-        onClick={() => entry.directory ? setDirectory(entry.path) : void openFile(entry.path)}><span>{entry.directory ? "▸" : "·"}</span>{entry.name}</button>)}
+        disabled={creating || saving} onClick={() => entry.directory ? setDirectory(entry.path) : void openFile(entry.path)}><span>{entry.directory ? "▸" : "·"}</span>{entry.name}</button>)}
       {!loading && entries.length === 0 && <p className="empty">Klasör boş.</p>}
     </nav><div className="file-editor"><div className="editor-toolbar"><code>{file ? `${file.path}${dirty ? " ●" : ""}` : "Dosya seçin"}</code><div>
       {file && <button disabled={saving} onClick={() => openFile(file.path)}>Yeniden aç</button>}

@@ -129,6 +129,9 @@ test("desktop reloads real worktree review, rejects stale approval and integrate
     assert.equal(service.readFile("feature", "src/initial.txt").writable, false);
     const editable = service.readFile("feature", "src/feature.txt");
     assert.equal(editable.writable, true);
+    assert.equal(service.files("feature").writable, true);
+    assert.throws(() => service.createEntry("feature", "src/outside.txt", false), /kapsamı dışında/);
+    assert.throws(() => service.createEntry("feature", "src/feature.txt", false), /EEXIST/);
     assert.throws(() => service.saveFile("feature", "src/initial.txt", "forbidden", editable.digest), /kapsamı dışında/);
     assert.throws(() => service.saveFile("feature", "src/feature.txt", "stale", "wrong-digest"), /disk üzerinde değişti/);
     writeFileSync(join(worktree, "src", "feature.txt"), "changed after preview\n");
@@ -148,6 +151,8 @@ test("desktop reloads real worktree review, rejects stale approval and integrate
     assert.equal(service.openConfig(configPath).snapshot.tasks[0]?.tests?.[0]?.name, "Fixture check");
     assert.throws(() => service.openTerminal("feature", 80, 24), /durdurulmuş/);
     assert.throws(() => service.saveFile("feature", editable.path, "late edit", editable.digest), /durdurulmuş/);
+    assert.equal(service.files("feature").writable, false);
+    assert.throws(() => service.createEntry("feature", "src/feature.txt", false), /durdurulmuş/);
     assert.equal(git(f.repo, "status", "--porcelain"), "");
     assert.throws(() => service.review("outside-project"), /Geçersiz/);
   } finally { journal.close(); await service.close(); f.cleanup(); }
