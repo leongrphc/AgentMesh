@@ -36,7 +36,7 @@ Durum sürümü, SHA-256, son sıra numarası ve kaynak olay kimliği doğrulan�
 
 Checkpoint tablo/indeksleri türetilmiş verilerdir; küçültülmemiş journal şeması v2 kalır. Arşivler sadece kaynak olayları ve arşiv manifestini taşır; checkpoint arşive kopyalanmaz. Böylece kurtarma checkpoint'e bağımlı değildir. Ajan ayarları son kayıt sorgusuyla, başka proje görev kimlikleri de indeksli kimlik sorgusuyla alınır; checkpoint kazanımını geri alan tam açılış taraması yapılmaz.
 
-Checkpoint'in boyutu görev, güncel context, bekleyen öneri, mesaj ve teslim kayıtlarının sayısına bağlıdır. Geçmiş facts/paket/çözülmüş öneri içerikleri dahil edilmez. Tam dışa aktarım ve tanı raporu yine gerektiğinde journal'ı tarar. Küçültme ve birleşik okuma aşağıdaki --compact akışında uygulanır; otomatik zaman/boyut politikası henüz yoktur.
+Checkpoint'in boyutu görev, güncel context, bekleyen öneri, mesaj üst bilgileri ve teslim kayıtlarının sayısına bağlıdır. SQLite mesaj gövdeleri yerine kaynak olay kimlikleri saklanır; geçmiş facts/paket/çözülmüş öneri içerikleri dahil edilmez. Projeksiyon sürüm 2'dir; eski projeksiyon sürümü tam replay ile yeniden kurulur. Tam dışa aktarım ve tanı raporu yine gerektiğinde journal'ı tarar. Küçültme ve birleşik okuma aşağıdaki --compact akışında uygulanır; otomatik zaman/boyut politikası henüz yoktur.
 
 
 ## Aktif journal'ı küçültme

@@ -27,7 +27,9 @@ Mesaj geçmişi en yeni kayıttan başlayarak 20 mesajlık sayfalar halinde yük
 
 Durum yayınları mesaj gövdelerini ve teslim kayıtlarını taşımaz; toplam sayı ve olay revizyonu taşır. Açık geçmiş sayfası yeni olaylarda yenilenir. Her mesaj için en fazla 50 teslim kaydı gösterilir; daha fazla alıcı varsa ilgili görev filtresinden o görevin teslimi incelenebilir. Inbox sayaçları ve canlı teslim davranışı korunur.
 
-Bu sınırlar masaüstü aktarımı ve görünümü içindir. Çekirdek mesaj/teslim geçmişini hâlâ bellekte tutar; otomatik silme veya saklama süresi uygulanmaz. Testler sayfa sınırlarını, filtreleri, yeniden açılışı, checkpoint/arşiv rotasyonunu ve gönderim tekilliğini kapsar.
+SQLite kullanıldığında çekirdek mesaj gövdelerini kalıcı bellekte veya checkpoint içinde tutmaz; mesaj üst bilgisi ve kaynak olay kimliği saklanır. Gövdeler olay kimliğinin indeksiyle ihtiyaç anında okunur: geçmiş sayfasında en fazla 20, başlangıç isteminde 64 mesaj / 128 KiB ve canlı teslimde sıradaki tek mesaj. Tekrar gönderim kontrolü de asıl içeriği diskten karşılaştırır. Açık tam snapshot/export isteği tüm gövdeleri yeniden oluşturur. Salt okunur bağlı arşivlerde aynı okuma yolu kullanılır.
+
+Checkpoint projeksiyonu sürüm 2'dir; eski projeksiyonlar journal olaylarından yeniden kurulur. Olay şeması değişmez. JSONL fallback tam gövdeleri bellekte tutmaya devam eder. Mesaj üst bilgileri, teslim kayıtları ve görevler hâlâ geçmişle birlikte büyür; toplam çekirdek belleği için sabit sınır veya otomatik silme/saklama süresi henüz yoktur. Testler sayfa sınırlarını, filtreleri, yeniden açılışı, checkpoint/arşiv rotasyonunu, gönderim tekilliğini ve diskten canlı teslimi kapsar.
 
 ## Ajanların canlı notları
 

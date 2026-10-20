@@ -48,6 +48,8 @@ export type OrchestratorNotice =
   | { kind: "event"; event: StoredEvent }
   | { kind: "output"; projectId: string; taskId: string; output: AgentOutput };
 
+type RetainedMessage = Omit<AgentMessage, "body"> & ({ body: string; eventId?: never } | { body?: never; eventId: string });
+
 export class Orchestrator {
   private readonly projects = new Map<string, Project>();
   private readonly tasks = new Map<string, TaskRecord>();
@@ -55,7 +57,7 @@ export class Orchestrator {
   private readonly factHistory = new Map<string, Map<string, Fact[]>>();
   private readonly contextConflicts = new Map<string, Map<string, ContextConflict>>();
   private readonly resolvedContext = new Map<string, ContextConflict[]>();
-  private readonly messages: AgentMessage[] = [];
+  private readonly messages: RetainedMessage[] = [];
   private readonly deliveries = new Map<string, MessageDelivery>();
   private readonly inboxes = new Map<string, ExecutionInbox>();
   private readonly adapters = new Map<string, AgentAdapter>();
@@ -77,7 +79,7 @@ export class Orchestrator {
     const unresolved = new Map<string, Extract<DomainEvent, { type: "permission.requested" }>>();
     const events = restored ? journal.scanAfter!(checkpoint.sequence) : eventStream(journal);
     for (const { payload, id } of events) {
-      this.apply(payload);
+      this.apply(payload, id);
       this.lastAppliedId = id;
       if (payload.type === "permission.requested") unresolved.set(payload.requestId, payload);
       if (payload.type === "permission.resolved") unresolved.delete(payload.requestId);
@@ -100,7 +102,7 @@ export class Orchestrator {
     if (!this.diskHistory || !this.journal.saveCheckpoint) throw new Error("Bu journal checkpoint desteklemiyor");
     if (this.controllers.size || this.inboxes.size || [...this.tasks.values()].some(task => task.status === "running")
       || [...this.projects.keys()].some(id => this.pendingPermissions(id).length)) throw new Error("Checkpoint için çalışan görevleri bitirin");
-    const state = { version: 1, projects: [...this.projects], tasks: [...this.tasks],
+    const state = { version: 2, projects: [...this.projects], tasks: [...this.tasks],
       facts: [...this.facts].map(([id, values]) => [id, [...values]]),
       conflicts: [...this.contextConflicts].map(([id, values]) => [id, [...values]]),
       messages: this.messages, deliveries: [...this.deliveries], agentSettings: [...this.agentSettings],
@@ -112,7 +114,7 @@ export class Orchestrator {
     try {
       const state = JSON.parse(serialized);
       const names = ["projects", "tasks", "facts", "conflicts", "messages", "deliveries", "agentSettings", "packageCounts", "resolvedCounts"];
-      if (state?.version !== 1 || names.some(name => !Array.isArray(state[name]))) return false;
+      if (state?.version !== 2 || names.some(name => !Array.isArray(state[name]))) return false;
       const pairs = (entries: unknown): Array<[string, any]> => {
         if (!Array.isArray(entries) || entries.some(entry => !Array.isArray(entry) || entry.length !== 2 || typeof entry[0] !== "string")
           || new Set(entries.map(entry => entry[0])).size !== entries.length) throw new Error("Geçersiz checkpoint haritası");
@@ -139,6 +141,7 @@ export class Orchestrator {
       }
       for (const entry of state.messages) {
         if (!entry || typeof entry.id !== "string" || !this.projects.has(entry.projectId)) throw new Error("Geçersiz checkpoint mesajı");
+        if (entry.eventId !== undefined ? typeof entry.eventId !== "string" || !this.journal.readEvent || entry.body !== undefined : typeof entry.body !== "string") throw new Error("Geçersiz checkpoint mesaj kaynağı");
         this.messages.push(entry);
       }
       for (const [key, value] of pairs(state.deliveries)) {
@@ -268,7 +271,7 @@ export class Orchestrator {
     if (task && task.projectId !== projectId) throw new Error("Görev başka projeye ait");
     const messages = this.messages.filter(message => message.projectId === projectId && (!task || message.taskId === task.id || message.to === task.agentId || message.to === "*"));
     const page = historyPage(messages, before);
-    const entries = page.entries.map(message => ({ message, deliveries: [] as MessageDelivery[], deliveryCount: 0 }));
+    const entries = page.entries.map(message => ({ message: this.materializeMessage(message), deliveries: [] as MessageDelivery[], deliveryCount: 0 }));
     const selected = new Map(entries.map(entry => [entry.message.id, entry]));
     for (const delivery of this.deliveries.values()) {
       const entry = selected.get(delivery.messageId);
@@ -308,7 +311,7 @@ export class Orchestrator {
       context: structuredClone(Object.fromEntries(this.facts.get(projectId) ?? [])),
       contextHistory: history?.facts ?? (includeHistory ? structuredClone(Object.fromEntries(this.factHistory.get(projectId) ?? [])) : {}),
       contextConflicts: history?.conflicts ?? structuredClone([...this.contextConflicts.get(projectId)?.values() ?? []].filter(conflict => includeHistory || conflict.status === "pending")),
-      messages: includeHistory ? this.messages.filter((message) => message.projectId === projectId).map((x) => ({ ...x })) : [],
+      messages: includeHistory ? this.messages.filter((message) => message.projectId === projectId).map(message => this.materializeMessage(message)) : [],
       deliveries: includeHistory ? [...this.deliveries.values()].filter((delivery) => this.tasks.get(delivery.taskId)?.projectId === projectId).map((delivery) => ({ ...delivery })) : [],
       inboxes: [...this.tasks.values()].filter((task) => task.projectId === projectId).map((task) => {
         const relevant = this.messagesFor(task);
@@ -340,6 +343,12 @@ export class Orchestrator {
   }
 
   private delivery(taskId: string, messageId: string) { return this.deliveries.get(JSON.stringify([taskId, messageId])); }
+  private materializeMessage(reference: RetainedMessage): AgentMessage {
+    if (reference.eventId === undefined) return { ...reference };
+    const event = this.journal.readEvent?.(reference.eventId)?.payload;
+    if (event?.type !== "message.sent" || event.message.id !== reference.id || event.message.projectId !== reference.projectId) throw new Error("Mesaj içeriği journal içinde bulunamadı");
+    return { ...event.message };
+  }
   private messagesFor(task: TaskRecord) {
     return this.messages.filter((message) => message.projectId === task.projectId && message.taskId !== task.id
       && (message.to === task.agentId || message.to === "*"));
@@ -359,7 +368,7 @@ export class Orchestrator {
     const existing = this.messages.find((message) => message.projectId === projectId && message.taskId === taskId
       && message.idempotencyKey === draft.idempotencyKey);
     if (existing) {
-      if (existing.to !== draft.to || existing.kind !== draft.kind || existing.body !== draft.body) throw new Error("Aynı mesaj anahtarı farklı içerikle kullanılamaz");
+      if (existing.to !== draft.to || existing.kind !== draft.kind || this.materializeMessage(existing).body !== draft.body) throw new Error("Aynı mesaj anahtarı farklı içerikle kullanılamaz");
       return existing.id;
     }
     const id = randomUUID();
@@ -494,8 +503,10 @@ export class Orchestrator {
       const active = () => !!controller && !controller.signal.aborted && this.controllers.get(task.id) === controller && this.requireTask(task.id).status === "running";
       let initialBytes = 0;
       const initial: AgentMessage[] = [];
-      for (const message of this.messagesFor(task)) {
-        if (task.sessionId && this.delivery(task.id, message.id)?.status === "accepted") continue;
+      for (const reference of this.messagesFor(task)) {
+        if (task.sessionId && this.delivery(task.id, reference.id)?.status === "accepted") continue;
+        if (initial.length >= 64) break;
+        const message = this.materializeMessage(reference);
         const bytes = Buffer.byteLength(JSON.stringify(message));
         if (initial.length >= 64 || initialBytes + bytes > 128 * 1024) break;
         initial.push(message); initialBytes += bytes;
@@ -511,7 +522,10 @@ export class Orchestrator {
         acknowledged = true;
       };
       inbox = new ExecutionInbox({ active, signal: controller.signal,
-        pending: () => this.messagesFor(task).filter((message) => !initialIds.has(message.id) && this.delivery(task.id, message.id)?.status !== "accepted"),
+        pending: () => {
+          const next = this.messagesFor(task).find(message => !initialIds.has(message.id) && this.delivery(task.id, message.id)?.status !== "accepted");
+          return next ? [this.materializeMessage(next)] : [];
+        },
         record: (messageId, status) => receipt(messageId, status, "live"),
         onError: (error) => { this.notify({ kind: "output", projectId: task.projectId, taskId: task.id,
           output: { channel: "stderr", data: safeLog(`Inbox kaydı başarısız: ${String(error)}`) } }); },
@@ -649,13 +663,13 @@ export class Orchestrator {
 
   private emitBatch(payloads: readonly DomainEvent[]): void {
     const entries = this.journal.appendBatch(payloads);
-    for (const event of payloads) this.apply(event);
+    for (const event of entries) this.apply(event.payload, event.id);
     if (entries.length) this.lastAppliedId = entries.at(-1)!.id;
     for (const event of entries) this.notify({ kind: "event", event });
     if (payloads.some((event) => event.type === "message.sent")) for (const inbox of this.inboxes.values()) inbox.wake();
   }
 
-  private apply(event: DomainEvent): void {
+  private apply(event: DomainEvent, eventId: string): void {
     switch (event.type) {
       case "message.delivery":
         this.deliveries.set(JSON.stringify([event.delivery.taskId, event.delivery.messageId]), { ...event.delivery });
@@ -780,7 +794,10 @@ export class Orchestrator {
         break;
       }
       case "message.sent":
-        this.messages.push(event.message);
+        if (this.journal.readEvent) {
+          const { body, ...metadata } = event.message;
+          this.messages.push({ ...metadata, eventId });
+        } else this.messages.push({ ...event.message });
         break;
     }
   }

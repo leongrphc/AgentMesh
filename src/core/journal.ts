@@ -4,6 +4,7 @@ import { randomUUID } from "node:crypto";
 import type { DomainEvent, StoredEvent, ContextHistoryPage, HistoryPage, ContextConflict, ContextPackage } from "./contracts.js";
 
 export interface EventStore {
+  readEvent?(id: string): StoredEvent | undefined;
   loadCheckpoint?(): { sequence: number; sourceId: string | null; state: string } | undefined;
   saveCheckpoint?(state: string, expectedSourceId: string | null): { sequence: number; digest: string };
   scanAfter?(sequence: number): Iterable<StoredEvent>;

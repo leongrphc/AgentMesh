@@ -78,6 +78,12 @@ export class SqliteJournal implements EventStore {
     return [...this.scan()];
   }
 
+  readEvent(id: string): StoredEvent | undefined {
+    this.assertOpen();
+    const row = this.db.prepare("SELECT id, at, payload FROM events WHERE id = ?").get(id);
+    return row ? { id: row.id as string, at: row.at as string, payload: JSON.parse(row.payload as string) as DomainEvent } : undefined;
+  }
+
   *scan(projectId?: string, afterSequence = 0): Iterable<StoredEvent> {
     this.assertOpen();
     if (!Number.isSafeInteger(afterSequence) || afterSequence < 0) throw new Error("Geçersiz replay sınırı");
