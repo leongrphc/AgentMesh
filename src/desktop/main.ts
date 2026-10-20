@@ -24,6 +24,7 @@ if (smoke) {
 let window: BrowserWindow | undefined;
 let service: DesktopService;
 let quitting = false;
+const smokeAssetRequests = new Set<string>();
 
 async function createWindow() {
   window = new BrowserWindow({ width: 1440, height: 950, minWidth: 960, minHeight: 640,
@@ -82,10 +83,13 @@ async function createWindow() {
         const check = setInterval(() => {
           const file = [...document.querySelectorAll('.file-tree>button')].find((button) => button.textContent.includes('DEMO.md'));
           if (document.querySelector('.monaco-host') && file) {
-            file.click(); clearInterval(check); clearTimeout(timeout); resolve(true);
+            if (document.querySelector('.monaco-editor')) { clearInterval(check); clearTimeout(timeout); reject(new Error('Monaco dosya açılmadan kuruldu')); return; }
+            clearInterval(check); clearTimeout(timeout); resolve(true);
           }
         }, 50);
       })`);
+      if ([...smokeAssetRequests].some((path) => /monaco-runtime-/.test(path))) throw new Error("Monaco dosya seçimi öncesinde indirildi");
+      await window.webContents.executeJavaScript(`[...document.querySelectorAll('.file-tree>button')].find(button => button.textContent.includes('DEMO.md')).click()`);
       await window.webContents.executeJavaScript(`new Promise((resolve, reject) => {
         const timeout = setTimeout(() => reject(new Error('Demo dosyası editörde görüntülenmedi')), 10000);
         const check = setInterval(() => {
@@ -94,6 +98,7 @@ async function createWindow() {
           }
         }, 50);
       })`);
+      if (![...smokeAssetRequests].some((path) => /monaco-runtime-.*\.js$/.test(path))) throw new Error("İlk dosya Monaco modülünü yüklemedi");
       await window.webContents.executeJavaScript(`(async () => {
         async function waitFor(check, label) {
           for (let i = 0; i < 200; i++) { if (await check()) return; await new Promise(r => setTimeout(r, 50)); }
@@ -318,6 +323,7 @@ app.whenReady().then(async () => {
     catch { return new Response(null, { status: 400 }); }
     const suffix = relative(rendererRoot, path);
     if (suffix.startsWith("..") || isAbsolute(suffix)) return new Response(null, { status: 403 });
+    if (smoke) smokeAssetRequests.add(path);
     return net.fetch(pathToFileURL(path).href);
   });
   function handle(channel: string, action: (...args: unknown[]) => unknown) {

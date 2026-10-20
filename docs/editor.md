@@ -15,3 +15,16 @@ Dosya/klasör oluşturma ve kaydetme yalnızca durdurulmuş görev worktree'sind
 Doğrulama: kurtarma kapsamı, bozuk kayıt, boyut/kota ve önceki kaydı koruma testleri; gerçek Electron/Monaco'da iki taslak yazma, sekme geçişi, renderer yeniden yükleme, diskte dış değişiklik, eski digest reddi ve iki taslağı doğru dosyalara kaydetme. Gerçek sağlayıcı çağrısı yapılmaz.
 
 `npm run desktop:smoke:editor` editör + merge senaryosunu tek başına, `npm run desktop:smoke` tüm masaüstü senaryolarıyla birlikte çalıştırır. Input smoke, Monaco'nun native EditContext alanına Chromium protokolü üzerinden metin girer.
+
+Monaco motoru, CSS'i ve yerel worker dosyası ilk dosya açılışına veya taslak kurtarmaya kadar yüklenmez. Dosya ağacı, oluşturma formu ve disk listelemesi küçük editör kabuğunda çalışır. Dil kayıtları ve motor özellikleri kaldırılmadı; toplam dağıtım boyutunu azaltma iddiası yoktur.
+
+20 Ekim build ölçümü (minify edilmiş, sıkıştırılmamış bayt):
+
+| Kaynak | Önce | Sonra |
+| --- | ---: | ---: |
+| Başlangıçta yüklenen editör modülü | 2.631.581 | 10.627 |
+| İhtiyaç anında yüklenen Monaco motoru | — | 2.621.687 |
+
+Son build'de ilk ekranın toplam JavaScript bağımlılıkları 606.158 bayt; CSS bağımlılıkları 24.919 bayttır. Bunlar paket ölçümüdür, açılış süresi veya RAM ölçümü değildir. Dosya ilk açılırken motorun yükleme maliyeti ödenir; yükleme durumu ve hata görünümü vardır.
+
+Her `desktop:build`, Vite manifest'inden gerçek statik bağımlılık grafiğini kontrol eder. Başlangıç JS bütçesi 800 KiB, CSS 40 KiB, editör kabuğu 64 KiB ve ertelenen motor 3 MiB sınırındadır. Monaco başlangıç grafiğine geri dönerse build başarısız olur. Son rapor `dist/renderer-budget.json` dosyasına yazılır. Tam Electron smoke, yerel protocol isteklerinden motorun dosya seçimi öncesinde istenmediğini ve ilk dosyada yüklendiğini ayrıca doğrular; taslak kurtarma smoke'u motorun yeniden yüklemede gerektiğinde kurulmasını kapsar.

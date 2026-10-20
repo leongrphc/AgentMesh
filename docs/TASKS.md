@@ -36,7 +36,7 @@ Codex, OpenCode, Claude, Antigravity ve diğer API modellerini **tek IDE içinde
 - [x] JSONL stdout/stderr ve journal olaylarını canlı `subscribe()` abonelerine iletme; CLI'da `--stream`.
 - [x] `AbortSignal`, `Ctrl+C`, kalıcı `cancelled`, geç gelen çıktının görev sonucunu tamamlamasını engelleme.
 - [x] Başarısız/iptal edilmiş/engellenmiş görevi `--retry TASK` ile açıkça yeniden kuyruğa alma.
-- [x] Mock ve yerel subprocess/Git worktree testleri; 20 Ekim doğrulaması **67/67 test**, `npm run typecheck` ve `npm run desktop:smoke` başarılı. Desktop smoke build, Electron/sandbox/preload, Monaco, gerçek PTY, ajan ayarları, test raporları, gerçek Git çakışmasını formdan çözme ve demo görevlerini kapsar. Native OpenCode TUI ve modelsiz yerel OpenCode Server protokol smoke önceki çalışmada doğrulandı.
+- [x] Mock ve yerel subprocess/Git worktree testleri; 20 Ekim doğrulaması **77/77 test**, `npm run typecheck` ve `npm run desktop:smoke` başarılı. Desktop smoke build, Electron/sandbox/preload, Monaco, gerçek PTY, ajan ayarları, test raporları, gerçek Git çakışmasını formdan çözme ve demo görevlerini kapsar. Native OpenCode TUI ve modelsiz yerel OpenCode Server protokol smoke önceki çalışmada doğrulandı.
 
 ## Açık görevler — öncelik sırasıyla
 
@@ -91,11 +91,11 @@ Codex, OpenCode, Claude, Antigravity ve diğer API modellerini **tek IDE içinde
   - [x] Desktop yeniden açma ve CLI execute öncesi toplu görev kontrolü: aynı ID'de başlık/talimat/ajan/bağımlılık/kapsam farkı alan adlarıyla reddedilir; ham talimat hata metnine alınmaz. UI görevleri korunur; eksik ajan eşlemesi ve başka projedeki görev ID çakışması yeni görev eklenmeden reddedilir. Dizi sırası anlamsız fark üretmez; tekrarlı bağımlılıklar config doğrulamasında reddedilir. Başarısız açılış eski projeyi/journal'ı kullanılabilir bırakır.
   - [x] Ajan tanımları `project.agents.configured` olayıyla kalıcı bağlandı; masaüstü ve CLI aynı çözümlemeyi kullanır. Kaynak config değişirse kayıtlı kaynak veya etkin ajan listesiyle eşleşmesi gerekir; uyumsuz değişiklik reddedilir. Kullanılmış ajan bağlantısı/rolü ve oturumlu pending retry değiştirilemez.
   - [ ] Farkları karşılaştıran güncelleme ekranı ve güvenli görev revizyonu. Şimdilik görev farkında orijinal tanımı geri yüklemek veya yeni görev kimliği kullanmak gerekir. Eski journal'ların ilk bağlaması mevcut config üzerinden yapılır; daha önce kaydedilmemiş provider/model geçmişi geriye dönük kanıtlanamaz.
-- [ ] **UI-007 / Editör devamı:**
+- [x] **UI-007 / Editör devamı:**
   - [x] Dosya/klasör oluşturma ve dosya ağacını yenileme. Durdurulmuş worktree, allowedPaths ve korunan yol kontrolü; mevcut öğeyi ezmeyen exclusive oluşturma. Klasörler izinli dosya kalıplarının üst yollarıyla sınırlı, üst klasörler önce oluşturulmalı. Taslak korunur; yeni öğe ağaçtan açılır. Gerçek Electron form → IPC → disk doğrulaması.
   - [x] En fazla 20 Monaco sekmesi; sekmeler arasında taslak/undo/imleç korunur. Açık dosyalar ve mevcut klasör 3 saniyelik kontrollü polling ile izlenir; temiz dosya yenilenir, taslak varsa disk farkı gösterilir ve eski digest kaydı reddedilir.
   - [x] Proje/görev/worktree kapsamında yerel taslak kurtarma; 300 ms gecikmeli kayıt, kapanış/geçişte flush, 4 MiB kapsam sınırı ve kota hatası görünümü. Renderer yeniden yüklemede iki taslağı kurtarma, ayrı dosyalara kaydetme ve disk çakışması Electron smoke kapsamındadır. [Editör kapsamı](editor.md).
-  - [ ] Monaco paket boyutu/ilk yükleme optimizasyonu; şu anda editör ayrı ve tembel yüklenen yaklaşık 2.6 MB chunk.
+  - [x] İlk dosya/taslak sınırında Monaco yükleme. Başlangıç editör modülü 2.631.581 → 10.627 bayt; 2.621.687 bayt motor, CSS ve worker ihtiyaç anına bırakıldı. Toplam dağıtım boyutu azalmadı. Vite manifest grafiği/boyut bütçesi build kapısı ve Electron gerçek asset isteği kontrolü eklendi. [Ölçüm ve sınırlar](editor.md).
 
 ### P2 — Hibrit sağlayıcılar ve ileri orkestrasyon
 
@@ -114,12 +114,12 @@ Codex, OpenCode, Claude, Antigravity ve diğer API modellerini **tek IDE içinde
 
 ## Devam ederken
 
-20 Ekim goal çalışması: UI-003 ajan ayarları, CORE-013 kalıcı ajan bağlaması ilk adımı, UI-006 test raporu/merge çözüm akışı ve CORE-009 kalıcı inbox/Codex canlı teslim eklendi. **77/77 tam süit**, TypeScript ve canlı mesaj/gerçek Git çakışma çözümünü doğrulayan Electron smoke başarılı. Gerçek model çağrısı yapılmadı. UI-007 dosya/klasör oluşturma, çoklu sekmeler, taslak kurtarma ve disk izleme eklendi. Monaco yükleme optimizasyonu ve kalan native canlı teslim kabul işleri açık.
+20 Ekim goal çalışması: UI-003 ajan ayarları, CORE-013 kalıcı ajan bağlaması ilk adımı, UI-006 test raporu/merge çözüm akışı ve CORE-009 kalıcı inbox/Codex canlı teslim eklendi. **77/77 tam süit**, TypeScript ve canlı mesaj/gerçek Git çakışma çözümünü doğrulayan Electron smoke başarılı. Gerçek model çağrısı yapılmadı. UI-007 dosya/klasör oluşturma, çoklu sekmeler, taslak kurtarma ve disk izleme eklendi. Monaco ilk yükleme optimizasyonu ve UI-007 tamamlandı. Kalan native canlı teslim kabul işleri, OS sandbox, sürümlü context ve config revizyonları açık.
 
 1. `D:\WebGpt` içinde `git status --short` ve `git log -5 --oneline` ile durumu kontrol et.
 2. `npm install` (gerekiyorsa), ardından `npm run typecheck` ve `npm test` çalıştır.
 3. Codex App Server ve OpenCode Server köprüleri tamamlandı; [permissions.md](permissions.md) desteklenen kapsamları açıklar. Varsayılan exec adaptörleri interaktif izin desteklemez. Modelsiz yerel kontrol: `npm run smoke:opencode`.
-4. Antigravity ve Claude API anahtarlı headless görev adaptörleri, ortak sonuç zarfı, test raporları, merge çözümü, UI ajan ayarları ve Codex canlı inbox eklendi. `agentmesh.hybrid.example.json` plan/uygulama/review zincirini gösterir. Sırada kalan native inbox desteği (CORE-009), editör (UI-007), ACP ve config revizyonları (CORE-013) var. Gerçek kod/araç/resume smoke'ları (CORE-008) hâlâ açık.
+4. Antigravity ve Claude API anahtarlı headless görev adaptörleri, ortak sonuç zarfı, test raporları, merge çözümü, UI ajan ayarları ve Codex canlı inbox eklendi. `agentmesh.hybrid.example.json` plan/uygulama/review zincirini gösterir. Sırada kalan native inbox desteği (CORE-009), OS sandbox (CORE-010), sürümlü context (CORE-011), ACP ve config revizyonları (CORE-013) var. Gerçek kod/araç/resume smoke'ları (CORE-008) hâlâ açık.
 5. **Her tamamlanan geliştirmeyi ayrı Git commit'iyle kaydet.** Commit'ten önce ilgili testleri çalıştır; `docs/TASKS.md` kutularını güncelle. Kullanıcı istemedikçe otomatik push/deploy/ana dal dışı entegrasyon merge'i yapma.
 
 ### Faydalı komutlar

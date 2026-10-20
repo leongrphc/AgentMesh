@@ -1,21 +1,8 @@
 import { useEffect, useRef, useState } from "react";
-import * as monaco from "monaco-editor/editor/editor.api.js";
-import EditorWorker from "monaco-editor/editor/editor.worker?worker";
-import "monaco-editor/languages/definitions/typescript/register.js";
-import "monaco-editor/languages/definitions/javascript/register.js";
-import "monaco-editor/languages/definitions/css/register.js";
-import "monaco-editor/languages/definitions/html/register.js";
-import "monaco-editor/languages/definitions/markdown/register.js";
+import type * as monaco from "monaco-editor/editor/editor.api.js";
 import type { WorkspaceEntry, WorkspaceFile } from "../src/core/workspace-files.js";
 import type { DesktopAPI } from "../src/desktop/contracts.js";
 import { maxEditorTabs, readDrafts, writeDrafts } from "./editor-drafts.js";
-
-// Workers and styles ship with the app; no CDN or external code is loaded.
-self.MonacoEnvironment = { getWorker: () => new EditorWorker() };
-monaco.editor.defineTheme("agentmesh", { base: "vs-dark", inherit: true, rules: [], colors: {
-  "editor.background": "#15232e", "editorLineNumber.foreground": "#657c8c",
-  "editor.lineHighlightBackground": "#203441", "editorCursor.foreground": "#78d2c6",
-} });
 
 function language(path: string) {
   const extension = path.split(".").pop()?.toLowerCase();
@@ -43,6 +30,9 @@ export function FileEditor({ taskId, scope, api, busy, onDirty }: { taskId: stri
   const [recovering, setRecovering] = useState(true);
   const [draftError, setDraftError] = useState("");
   const [diskWarning, setDiskWarning] = useState("");
+  const [engineLoading, setEngineLoading] = useState(false);
+  const runtime = useRef<typeof import("./monaco-runtime.js") | undefined>(undefined);
+  const enginePromise = useRef<Promise<void> | undefined>(undefined);
   const tabs = useRef(new Map<string, Tab>());
   const selected = useRef<string | undefined>(undefined);
   const disposed = useRef(false);
@@ -52,6 +42,22 @@ export function FileEditor({ taskId, scope, api, busy, onDirty }: { taskId: stri
   const editor = useRef<monaco.editor.IStandaloneCodeEditor | undefined>(undefined);
   const request = useRef(0);
   useEffect(() => () => { request.current++; onDirty(false); }, [onDirty]);
+
+  async function ensureEditor() {
+    if (editor.current) return;
+    if (!enginePromise.current) {
+      setEngineLoading(true);
+      enginePromise.current = import("./monaco-runtime.js").then((module) => {
+        if (disposed.current || !host.current) throw new Error("Editör alanı kapandı");
+        runtime.current = module;
+        editor.current = module.createEditor(host.current);
+      }).finally(() => {
+        enginePromise.current = undefined;
+        if (!disposed.current) setEngineLoading(false);
+      });
+    }
+    await enginePromise.current;
+  }
 
   function persistDrafts() {
     clearTimeout(persistTimer.current);
@@ -82,7 +88,7 @@ export function FileEditor({ taskId, scope, api, busy, onDirty }: { taskId: stri
     publish();
   }
   function addTab(value: WorkspaceFile, draft?: string) {
-    const model = monaco.editor.createModel(draft ?? value.content, language(value.path));
+    const model = runtime.current!.createModel(draft ?? value.content, language(value.path));
     const tab: Tab = { file: value, model, changed: false, missing: false };
     tabs.current.set(value.path, tab);
     model.onDidChangeContent(() => {
@@ -95,14 +101,11 @@ export function FileEditor({ taskId, scope, api, busy, onDirty }: { taskId: stri
 
   useEffect(() => {
     disposed.current = false;
-    const instance = monaco.editor.create(host.current!, { model: null, theme: "agentmesh",
-      readOnly: true, automaticLayout: true, minimap: { enabled: false }, fontSize: 13,
-      fontFamily: "Consolas, monospace", scrollBeyondLastLine: false, padding: { top: 15 },
-      unicodeHighlight: { ambiguousCharacters: false }, ariaLabel: "Görev dosyası editörü" });
-    editor.current = instance;
     void (async () => {
       try {
         const drafts = readDrafts(localStorage, scope);
+        if (drafts.length) await ensureEditor();
+        if (disposed.current) return;
         for (const draft of drafts) {
           let disk: WorkspaceFile | undefined;
           try { disk = await api.readFile(taskId, draft.path); } catch { /* Keep unreadable drafts for recovery. */ }
@@ -124,7 +127,7 @@ export function FileEditor({ taskId, scope, api, busy, onDirty }: { taskId: stri
     return () => {
       persistDrafts(); disposed.current = true; window.removeEventListener("pagehide", flush); window.removeEventListener("beforeunload", flush);
       window.removeEventListener("agentmesh:flush-drafts", flush);
-      clearTimeout(persistTimer.current); instance.dispose();
+      clearTimeout(persistTimer.current); editor.current?.dispose();
       for (const tab of tabs.current.values()) tab.model.dispose();
       tabs.current.clear();
     };
@@ -179,6 +182,8 @@ export function FileEditor({ taskId, scope, api, busy, onDirty }: { taskId: stri
     try {
       const value = await api.readFile(taskId, path);
       if (id !== request.current) return;
+      await ensureEditor();
+      if (id !== request.current || disposed.current) return;
       if (existing) { existing.file = value; existing.changed = false; existing.missing = false; existing.model.setValue(value.content); }
       else addTab(value);
       selectTab(path); persistDrafts();
@@ -232,6 +237,7 @@ export function FileEditor({ taskId, scope, api, busy, onDirty }: { taskId: stri
     {error && <p className="file-error" role="alert">{error}</p>}
     {draftError && <p className="file-error" role="alert">{draftError}</p>}
     {recovering && <p role="status">Yerel taslaklar kontrol ediliyor…</p>}
+    {engineLoading && <p className="editor-hint" role="status">Editör yükleniyor…</p>}
     {diskWarning && <p className="file-error" role="status">{diskWarning}</p>}
     <div className="file-layout"><nav className="file-tree" aria-label="Dosya ağacı">
       <div className="directory-label"><code>{directory || "/"}</code>{directory && <button disabled={creating} aria-label="Üst klasör" onClick={() => setDirectory(directory.split("/").slice(0, -1).join("/"))}>↑</button>}<button disabled={loading || creating} onClick={() => setRevision((value) => value + 1)}>Yenile</button></div>

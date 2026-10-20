@@ -1,3 +1,3 @@
 import { defineConfig } from "vite";
 
-export default defineConfig({ root: "desktop", base: "./", build: { outDir: "../dist/renderer", emptyOutDir: true } });
+export default defineConfig({ root: "desktop", base: "./", build: { outDir: "../dist/renderer", emptyOutDir: true, manifest: true } });

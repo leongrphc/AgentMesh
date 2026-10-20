@@ -143,3 +143,5 @@ docs/
 Dosya ağacındaki **Yeni öğe** formu, durdurulmuş görev worktree’sinde dosya veya klasör oluşturur. Geçerli klasöre bir ad girin; alt klasörleri sırayla oluşturun. Mevcut dosyalar ezilmez ve görev kapsamı dışındaki yollar reddedilir. **Yenile** ağacı diskten tekrar okur; açık editör taslağını değiştirmez.
 
 Editör en fazla 20 dosyayı ayrı sekmelerde açar. Kaydedilmemiş taslaklar proje/görev/worktree kapsamında yerel olarak kurtarılır; disk değişiklikleri izlenir ve taslağın üzerine yazılmaz. [Kurtarma ve sınırlar](docs/editor.md).
+
+Monaco motoru ilk dosya açılışında veya taslak kurtarmada yüklenir; dosya ağacı ağır motoru beklemez. Desktop build, başlangıç bağımlılık grafiğini ve boyut bütçelerini denetler; raporu `dist/renderer-budget.json` dosyasına yazar.
