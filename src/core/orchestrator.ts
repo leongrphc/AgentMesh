@@ -29,6 +29,7 @@ import { normalizeContextFacts } from "./context.js";
 import { validateContextKeys } from "./context.js";
 import { prepareContext } from "./context-package.js";
 import { historyPage } from "./history-page.js";
+import { eventStream } from "./journal.js";
 
 export interface ProjectSnapshot {
   project: Project;
@@ -64,15 +65,15 @@ export class Orchestrator {
 
   constructor(private readonly journal: EventStore, private readonly worktrees?: WorktreeManager) {
     this.permissions = new PermissionBroker((event) => this.emit(event));
-    for (const event of journal.all()) this.apply(event.payload);
+    const unresolved = new Map<string, Extract<DomainEvent, { type: "permission.requested" }>>();
+    for (const { payload } of eventStream(journal)) {
+      this.apply(payload);
+      if (payload.type === "permission.requested") unresolved.set(payload.requestId, payload);
+      if (payload.type === "permission.resolved") unresolved.delete(payload.requestId);
+    }
     for (const delivery of this.deliveries.values()) if (delivery.status === "sending") {
       const task = this.requireTask(delivery.taskId);
       this.emit({ type: "message.delivery", projectId: task.projectId, delivery: { ...delivery, status: "uncertain" } });
-    }
-    const unresolved = new Map<string, Extract<DomainEvent, { type: "permission.requested" }>>();
-    for (const { payload } of journal.all()) {
-      if (payload.type === "permission.requested") unresolved.set(payload.requestId, payload);
-      if (payload.type === "permission.resolved") unresolved.delete(payload.requestId);
     }
     for (const request of unresolved.values()) this.emit({ type: "permission.resolved", projectId: request.projectId,
       taskId: request.taskId, executionId: request.executionId, requestId: request.requestId, decision: "deny", source: "restart" });
@@ -92,7 +93,7 @@ export class Orchestrator {
   configureAgents(projectId: string, agents: AgentConfig[], sourceAgents: AgentConfig[]): void {
     if (!this.projects.has(projectId)) throw new Error("Proje bulunamadı");
     if (this.controllers.size) throw new Error("Önce çalışan görevleri durdurun");
-    const snapshot = this.snapshot(projectId);
+    const snapshot = this.snapshot(projectId, false);
     validate({ projectId, repoPath: snapshot.project.workspaceRoot, agents, tasks: snapshot.tasks });
     for (const agent of agents) validateAgentEdit(this.agentSettings.get(projectId) ?? [], agent, snapshot.tasks);
     this.emit({ type: "project.agents.configured", projectId, agents: structuredClone(agents), sourceAgents: structuredClone(sourceAgents) });

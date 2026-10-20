@@ -54,10 +54,22 @@ export class SqliteJournal implements EventStore {
   }
 
   all(): readonly StoredEvent[] {
+    return [...this.scan()];
+  }
+
+  *scan(projectId?: string): Iterable<StoredEvent> {
     this.assertOpen();
-    const rows = this.db.prepare("SELECT id, at, payload FROM events ORDER BY sequence").all() as
-      Array<{ id: string; at: string; payload: string }>;
-    return rows.map((row) => ({ id: row.id, at: row.at, payload: JSON.parse(row.payload) as DomainEvent }));
+    const { last } = this.db.prepare("SELECT COALESCE(MAX(sequence), 0) AS last FROM events").get() as { last: number };
+    const rows = this.db.prepare(`SELECT id, at, payload FROM events WHERE sequence <= ?${projectId === undefined ? "" : " AND project_id = ?"} ORDER BY sequence`)
+      .iterate(...(projectId === undefined ? [last] : [last, projectId]));
+    for (const row of rows) yield { id: row.id as string, at: row.at as string, payload: JSON.parse(row.payload as string) as DomainEvent };
+  }
+
+  recent(projectId: string, limit = 200): StoredEvent[] {
+    this.assertOpen();
+    if (!Number.isInteger(limit) || limit < 1 || limit > 200) throw new Error("Geçersiz son olay sınırı");
+    const rows = this.db.prepare("SELECT id, at, payload FROM events WHERE project_id = ? ORDER BY sequence DESC LIMIT ?").all(projectId, limit);
+    return rows.reverse().map(row => ({ id: row.id as string, at: row.at as string, payload: JSON.parse(row.payload as string) as DomainEvent }));
   }
 
   contextHistoryPage(projectId: string, key: string, before?: number) {

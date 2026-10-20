@@ -1,8 +1,9 @@
 import type { StoredEvent } from "./contracts.js";
 
 /** Support reports deliberately omit all user/provider text, IDs, paths and sessions. */
-export function diagnosticReport(events: readonly StoredEvent[]) {
+export function diagnosticReport(events: Iterable<StoredEvent>) {
   const counts: Record<string, number> = {};
+  let eventCount = 0;
   const known = new Set([
     "project.created", "project.parallelism.updated", "project.agents.configured", "task.created", "task.started", "task.completed", "task.failed",
     "permission.requested", "permission.resolved",
@@ -14,8 +15,9 @@ export function diagnosticReport(events: readonly StoredEvent[]) {
     "task.context.prepared",
   ]);
   for (const event of events) {
+    eventCount++;
     const kind = known.has(event.payload.type) ? event.payload.type : "unknown";
     counts[kind] = (counts[kind] ?? 0) + 1;
   }
-  return { version: 1, eventCount: events.length, counts };
+  return { version: 1, eventCount, counts };
 }

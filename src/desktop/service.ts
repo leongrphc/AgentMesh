@@ -142,19 +142,20 @@ export class DesktopService {
     const journal = reused || new SqliteJournal(path);
     try {
       const sourceAgents = structuredClone(config.agents);
-      config = resolveAgentSettings(config, journal.all());
+      config = resolveAgentSettings(config, journal.scan(config.projectId));
       const engine = new Orchestrator(journal, new WorktreeManager());
       for (const agent of config.agents) {
         engine.registerAgent(this.makeAdapter(agent, demo));
       }
       let existing;
-      try { existing = engine.snapshot(config.projectId); }
+      try { existing = engine.snapshot(config.projectId, false); }
       catch { engine.createProject({ id: config.projectId, workspaceRoot: config.repoPath }); }
       if (existing && realpathSync(existing.project.workspaceRoot) !== realpathSync(config.repoPath)) {
         throw new Error("Proje kimliği başka depoya ait");
       }
-      const tasks = engine.snapshot(config.projectId).tasks;
-      const reserved = journal.all().flatMap(({ payload }) => payload.type === "task.created" && payload.task.projectId !== config.projectId ? [payload.task.id] : []);
+      const tasks = engine.snapshot(config.projectId, false).tasks;
+      const reserved: string[] = [];
+      for (const { payload } of journal.scan()) if (payload.type === "task.created" && payload.task.projectId !== config.projectId) reserved.push(payload.task.id);
       for (const task of reconcileTasks(config, tasks, reserved)) engine.addTask(task);
       engine.configureAgents(config.projectId, config.agents, sourceAgents);
       if (!reused) this.journal?.close();
@@ -164,9 +165,7 @@ export class DesktopService {
       this.config = config;
       this.sourceAgents = sourceAgents;
       this.demo = demo;
-      this.events = journal.all().filter(({ payload }) =>
-        (payload.type === "project.created" ? payload.project.id : payload.type === "task.created" ? payload.task.projectId : payload.projectId) === config.projectId)
-        .slice(-200).map((event) => ({ at: event.at, text: event.payload.type,
+      this.events = journal.recent(config.projectId).map((event) => ({ at: event.at, text: event.payload.type,
           taskId: "taskId" in event.payload ? event.payload.taskId : event.payload.type === "task.created" ? event.payload.task.id : undefined }));
       engine.subscribe((notice) => {
         this.events.push({ at: new Date().toISOString(),

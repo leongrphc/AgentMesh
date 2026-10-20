@@ -4,12 +4,22 @@ import { randomUUID } from "node:crypto";
 import type { DomainEvent, StoredEvent, ContextHistoryPage, HistoryPage, ContextConflict, ContextPackage } from "./contracts.js";
 
 export interface EventStore {
+  scan?(projectId?: string): Iterable<StoredEvent>;
   contextHistoryPage?(projectId: string, key: string, before?: number): ContextHistoryPage;
   resolvedContextPage?(projectId: string, before?: number): HistoryPage<ContextConflict>;
   contextPackagesPage?(projectId: string, taskId: string, before?: number): HistoryPage<ContextPackage>;
   all(): readonly StoredEvent[];
   append(payload: DomainEvent): StoredEvent;
   appendBatch(payloads: readonly DomainEvent[]): readonly StoredEvent[];
+}
+
+export function* eventStream(store: EventStore, projectId?: string): Iterable<StoredEvent> {
+  if (store.scan) { yield* store.scan(projectId); return; }
+  for (const event of store.all()) {
+    const payload = event.payload;
+    const id = payload.type === "project.created" ? payload.project.id : payload.type === "task.created" ? payload.task.projectId : payload.projectId;
+    if (projectId === undefined || id === projectId) yield event;
+  }
 }
 
 /** MVP: tek proses tarafından yazılan, disk üzerinde kalıcı JSONL olay günlüğü. */

@@ -71,3 +71,12 @@ Yeni indeksler türetilmiş verilerdir. Var olan v2 journal açıldığında ekl
 Sayfa sorgusu bütün journal'ı `all()` ile yüklemez. Bununla birlikte toplam sayısı için COUNT ve eski sayfalarda OFFSET kullanılır; eski sayfalara erişim sabit maliyetli değildir. Orkestratör açılışta hâlâ tam replay yapar ve tam snapshot uyumluluğu için geçmişi bellekte tutar. Bu adım başlangıç belleğini veya journal disk boyutunu sınırlamaz; kanıtı koruyan arşivleme/checkpoint politikası açık iştir.
 
 Doğrulama: iki projede iç içe 47 sürüm/paket/öneri, ters sırada çözümler, tüm sayfalarda SQLite–JSONL eşitliği, eski veritabanına indeks eklenirken olayların korunması, SQL parametre bağlama, sayfa sınırları, kapalı depo, snapshot kopyaları ve indeksli sorgu planları. Toplu yazmada bir zorunlu alan hatası varsa tüm işlem geri alınır; yalnızca aynı olay kimliğinin yeniden içe aktarımı atlanır.
+
+
+## Başlangıçta akış halinde replay
+
+SQLite `scan()` olayları sıra numarasıyla tek tek verir; çağrı tüketilmeye başladığında üst sıra numarasını sabitler. Tarama sırasında sonradan eklenen olaylar aynı taramaya karışmaz. Erken bırakılan iterator SQLite okuma ifadesini kapatır. Tam dizi isteyen eski `all()` API'si korunur, fakat üretim açılışı/ayar çözümü/tanı raporu bu API'yi kullanmaz.
+
+Orkestratör durum ve çözümlenmemiş izinleri tek geçişte çıkarır. Tarama bittikten sonra belirsiz mesaj teslimleri, reddedilecek eski izinler ve kesintiye uğrayan görevler journal'a yazılır; okuma açıkken kurtarma yazımı yapılmaz. Tekrar açılış aynı kurtarma olaylarını çoğaltmaz. Masaüstü son olay listesini proje kapsamında SQL LIMIT 200 ile okur. Yapılandırma kontrolleri geçmiş dizilerini kopyalamayan kompakt snapshot kullanır.
+
+Bu değişiklik geçici tüm-olay dizilerini ve gereksiz geçmiş kopyalarını kaldırır; sürekli tutulan görev/mesaj/context projeksiyonlarını sabit bellekli hale getirmez. Journal açılışındaki toplam tarama hâlâ geçmiş uzunluğuyla artar. Bu yüzden checkpoint ve kanıtı koruyan arşivleme açık kalır. JSONL geliştirme deposu eski bellek tabanlı yolu destekler.

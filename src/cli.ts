@@ -54,15 +54,13 @@ async function main(): Promise<void> {
   const journal = new SqliteJournal(dbPath);
   try {
     if (diagnostics) {
-      const events = journal.all().filter(({ payload }) =>
-        (payload.type === "project.created" ? payload.project.id
-          : payload.type === "task.created" ? payload.task.projectId : payload.projectId) === config.projectId);
+      const events = journal.scan(config.projectId);
       console.log(JSON.stringify(diagnosticReport(events), null, 2));
       return;
     }
     const manager = new WorktreeManager();
     const sourceAgents = structuredClone(config.agents);
-    config = resolveAgentSettings(config, journal.all());
+    config = resolveAgentSettings(config, journal.scan(config.projectId));
     if (executing && config.agents.some((agent) => agent.transport && agent.transport !== "exec")) {
       throw new Error("Etkileşimli izin kararları için bu config'i masaüstü uygulamasında açın; CLI yalnızca exec transport çalıştırır");
     }
@@ -74,17 +72,18 @@ async function main(): Promise<void> {
       engine.registerAgent(configuredAdapter(agent));
     }
     let existing;
-    try { existing = engine.snapshot(config.projectId); }
+    try { existing = engine.snapshot(config.projectId, false); }
     catch {
       if (!executing) throw new Error(needsDesktop ? "Önce bu projeyi masaüstü uygulamasında açın" : "Önce --execute ile projeyi oluşturmalısınız");
       engine.createProject({ id: config.projectId, workspaceRoot: repoPath });
     }
-    existing = engine.snapshot(config.projectId);
+    existing = engine.snapshot(config.projectId, false);
     if (realpathSync(existing.project.workspaceRoot).toLowerCase() !== repoPath.toLowerCase()) {
       throw new Error("Proje kimliği başka depo ile eşleşiyor");
     }
     if (executing) {
-      const reserved = journal.all().flatMap(({ payload }) => payload.type === "task.created" && payload.task.projectId !== config.projectId ? [payload.task.id] : []);
+      const reserved: string[] = [];
+      for (const { payload } of journal.scan()) if (payload.type === "task.created" && payload.task.projectId !== config.projectId) reserved.push(payload.task.id);
       for (const task of reconcileTasks(config, existing.tasks, reserved)) engine.addTask(task);
       engine.configureAgents(config.projectId, config.agents, sourceAgents);
     }
