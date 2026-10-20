@@ -14,6 +14,8 @@ import type {
   TaskRecord,
   MessageDraft,
   MessageDelivery,
+  ContextConflict,
+  ContextChoice,
 } from "./contracts.js";
 import type { EventStore } from "./journal.js";
 import type { WorktreeManager } from "./worktrees.js";
@@ -23,11 +25,14 @@ import { validate } from "./config.js";
 import { validateAgentEdit } from "./agent-settings.js";
 import { normalizeTestReports } from "./test-reports.js";
 import { ExecutionInbox, validateMessageDraft } from "./inbox.js";
+import { normalizeContextFacts } from "./context.js";
 
 export interface ProjectSnapshot {
   project: Project;
   tasks: TaskRecord[];
   context: Record<string, Fact>;
+  contextHistory: Record<string, Fact[]>;
+  contextConflicts: ContextConflict[];
   messages: AgentMessage[];
   deliveries: MessageDelivery[];
   inboxes: Array<{ taskId: string; cursor: number; pending: number; uncertain: number }>;
@@ -42,6 +47,8 @@ export class Orchestrator {
   private readonly projects = new Map<string, Project>();
   private readonly tasks = new Map<string, TaskRecord>();
   private readonly facts = new Map<string, Map<string, Fact>>();
+  private readonly factHistory = new Map<string, Map<string, Fact[]>>();
+  private readonly contextConflicts = new Map<string, Map<string, ContextConflict>>();
   private readonly messages: AgentMessage[] = [];
   private readonly deliveries = new Map<string, MessageDelivery>();
   private readonly inboxes = new Map<string, ExecutionInbox>();
@@ -161,7 +168,9 @@ export class Orchestrator {
       tasks: [...this.tasks.values()]
         .filter((task) => task.projectId === projectId)
         .map((task) => structuredClone(task)),
-      context: Object.fromEntries(this.facts.get(projectId) ?? []),
+      context: structuredClone(Object.fromEntries(this.facts.get(projectId) ?? [])),
+      contextHistory: structuredClone(Object.fromEntries(this.factHistory.get(projectId) ?? [])),
+      contextConflicts: structuredClone([...this.contextConflicts.get(projectId)?.values() ?? []]),
       messages: this.messages.filter((message) => message.projectId === projectId).map((x) => ({ ...x })),
       deliveries: [...this.deliveries.values()].filter((delivery) => this.tasks.get(delivery.taskId)?.projectId === projectId).map((delivery) => ({ ...delivery })),
       inboxes: [...this.tasks.values()].filter((task) => task.projectId === projectId).map((task) => {
@@ -172,6 +181,25 @@ export class Orchestrator {
           uncertain: relevant.filter((message) => this.delivery(task.id, message.id)?.status === "uncertain").length };
       }),
     };
+  }
+
+  resolveContext(projectId: string, conflictId: string, expectedRevision: number, choice: ContextChoice, value?: string): void {
+    if (!this.projects.has(projectId)) throw new Error("Proje bulunamadı");
+    if ([...this.controllers.keys()].some((id) => this.requireTask(id).projectId === projectId)) throw new Error("Context kararından önce çalışan görevleri durdurun veya bitmesini bekleyin");
+    const conflict = this.contextConflicts.get(projectId)?.get(conflictId);
+    if (!conflict || conflict.status !== "pending") throw new Error("Bekleyen context çakışması bulunamadı");
+    const current = this.facts.get(projectId)?.get(conflict.key);
+    if (!Number.isInteger(expectedRevision) || !current || current.revision !== expectedRevision) throw new Error("Context sürümü değişti; güncel kararı yeniden inceleyin");
+    if (!["keep", "accept", "custom"].includes(choice) || (choice === "custom" && (typeof value !== "string" || !value.trim() || value.length > 16384))) throw new Error("Geçersiz context kararı");
+    const at = new Date().toISOString();
+    const revision = expectedRevision + (choice === "keep" ? 0 : 1);
+    const events: DomainEvent[] = [];
+    if (choice !== "keep") events.push({ type: "context.updated", projectId, fact: {
+      key: conflict.key, value: choice === "custom" ? value! : conflict.proposal.value,
+      sourceTaskId: choice === "custom" ? "@user" : conflict.proposal.sourceTaskId, updatedAt: at, revision,
+    } });
+    events.push({ type: "context.conflict.resolved", projectId, conflictId, choice, revision, at });
+    this.emitBatch(events);
   }
 
   private delivery(taskId: string, messageId: string) { return this.deliveries.get(JSON.stringify([taskId, messageId])); }
@@ -247,6 +275,7 @@ export class Orchestrator {
       throw new Error(`Görev inceleme beklemiyor: ${taskId}`);
     }
     if (task.review.digest !== approvedDigest) throw new Error("Onay digest'i bekleyen inceleme ile eşleşmiyor");
+    normalizeContextFacts(task.review.result.facts);
     let commit: string;
     try { commit = this.worktrees.integrate(project.workspaceRoot, task.worktree, task.allowedPaths, approvedDigest, task.id); }
     catch (error) {
@@ -275,6 +304,7 @@ export class Orchestrator {
     try {
       while (true) {
         if (signal?.aborted) break;
+        if ([...this.contextConflicts.get(projectId)?.values() ?? []].some((conflict) => conflict.status === "pending")) break;
         const tasks = this.snapshot(projectId).tasks;
         for (const task of tasks.filter((item) => item.status === "pending")) {
           if (task.dependsOn.some((id) => {
@@ -391,6 +421,7 @@ export class Orchestrator {
       if (controller.signal.aborted || this.requireTask(task.id).status === "cancelled") return;
       acknowledgeInbox();
       output.tests = normalizeTestReports(output.tests);
+      output.facts = normalizeContextFacts(output.facts);
       if (output.sessionId && this.requireTask(task.id).sessionId !== output.sessionId) this.emit({
         type: "task.session.saved", projectId: task.projectId, taskId: task.id, sessionId: output.sessionId,
       });
@@ -432,16 +463,11 @@ export class Orchestrator {
   private resultEvents(task: TaskRecord, output: AgentResult): DomainEvent[] {
       const events: DomainEvent[] = [];
       for (const fact of output.facts ?? []) {
-        events.push({
-          type: "context.updated",
-          projectId: task.projectId,
-          fact: {
-            key: fact.key,
-            value: fact.value,
-            sourceTaskId: task.id,
-            updatedAt: new Date().toISOString(),
-          },
-        });
+        const proposal: Fact = { key: fact.key, value: fact.value, sourceTaskId: task.id, updatedAt: new Date().toISOString() };
+        const current = this.facts.get(task.projectId)?.get(fact.key);
+        if (current && current.value !== fact.value) events.push({ type: "context.conflict.created", projectId: task.projectId,
+          conflict: { id: randomUUID(), key: fact.key, proposal, baseRevision: current.revision!, status: "pending" } });
+        else events.push({ type: "context.updated", projectId: task.projectId, fact: proposal });
       }
       for (const message of output.messages ?? []) {
         events.push({
@@ -574,8 +600,25 @@ export class Orchestrator {
         break;
       case "context.updated": {
         const facts = this.facts.get(event.projectId) ?? new Map<string, Fact>();
-        facts.set(event.fact.key, event.fact);
+        const history = this.factHistory.get(event.projectId) ?? new Map<string, Fact[]>();
+        const versions = history.get(event.fact.key) ?? [];
+        const fact = { ...event.fact, revision: versions.length + 1 };
+        versions.push(fact); history.set(fact.key, versions);
+        facts.set(fact.key, fact);
         this.facts.set(event.projectId, facts);
+        this.factHistory.set(event.projectId, history);
+        break;
+      }
+      case "context.conflict.created": {
+        const conflicts = this.contextConflicts.get(event.projectId) ?? new Map<string, ContextConflict>();
+        conflicts.set(event.conflict.id, structuredClone(event.conflict));
+        this.contextConflicts.set(event.projectId, conflicts);
+        break;
+      }
+      case "context.conflict.resolved": {
+        const conflict = this.contextConflicts.get(event.projectId)!.get(event.conflictId)!;
+        conflict.status = "resolved";
+        conflict.resolution = { choice: event.choice, revision: event.revision, at: event.at };
         break;
       }
       case "message.sent":

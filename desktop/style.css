@@ -51,6 +51,19 @@
 .file-tabs button { border: 0; border-radius: 0; background: transparent; font-size: 11px; padding: 9px; }
 .file-tabs [role=tab] { max-width: 250px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .file-tabs [aria-selected=true] { background: #2b4451; color: var(--teal); }
+.context-alert { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 14px 18px; margin: 14px 0; background: #343528; border: 1px solid #6f6949; font-size: 12px; }
+.context-panel { padding: 14px 18px; font-size: 12px; line-height: 1.6; }
+.context-conflict { padding: 16px 0; border-bottom: 1px solid var(--line); }
+.context-conflict h3 { font-size: 13px; }
+.context-choices { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; margin: 12px 0; }
+.context-choices pre { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 180px; overflow: auto; font: inherit; padding: 10px; background: #203441; }
+.context-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+.context-panel summary { cursor: pointer; padding: 8px 0; }
+.context-conflict label { display: grid; gap: 6px; }
+.context-conflict textarea { width: 100%; resize: vertical; color: inherit; background: #203441; border: 1px solid var(--line); padding: 9px; font: inherit; }
+.context-conflict form button { margin-top: 8px; }
+.activity-body:has(.context-panel) { height: 480px; }
+@media(max-width:780px) { .context-choices { grid-template-columns: 1fr; } }
 .editor-toolbar { display: flex; justify-content: space-between; gap: 12px; align-items: center; min-height: 40px; border-bottom: 1px solid var(--line); padding: 5px 12px; }
 .editor-toolbar code { font-size: 10px; color: var(--teal); overflow-wrap: anywhere; }
 .editor-toolbar>div { display: flex; gap: 7px; }

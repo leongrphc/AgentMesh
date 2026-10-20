@@ -29,7 +29,7 @@ export async function mergeSmoke(window: BrowserWindow, service: DesktopService)
     for (const task of tasks) {
       engine.registerAgent({ id: task.agentId, provider: "fixture", connection: "cli", async execute({ workspaceRoot }) {
         writeFileSync(join(workspaceRoot, "src/shared.txt"), `${task.id}\n`);
-        return { summary: "Local fixture" };
+        return { summary: "Local fixture", facts: [{ key: "smoke.contract", value: task.id }] };
       } });
       engine.addTask(task);
     }
@@ -112,5 +112,42 @@ export async function mergeSmoke(window: BrowserWindow, service: DesktopService)
   if (service.state().snapshot.tasks[1]?.status !== "completed"
     || readFileSync(join(manager.integration(repo).path, "src/shared.txt"), "utf8").trim() !== "UI resolved"
     || readFileSync(join(repo, "src/shared.txt"), "utf8").trim() !== "initial") throw new Error("Smoke merge sonucu doğrulanamadı");
+  if (service.state().snapshot.context["smoke.contract"]?.value !== "first") throw new Error("Context kararı sessizce değiştirildi");
+  service.createTask({ id: "after-context", agentId: "first", title: "Context sonrası görev", instruction: "Smoke: never execute",
+    dependsOn: ["second"], allowedPaths: ["src/**"] });
+  console.log("Context smoke: karar ekranı açılıyor");
+  await window.webContents.executeJavaScript(`(async () => {
+    const wait = async (find) => {
+      for (let i=0;i<200;i++) { const value=find(); if(value) return value; await new Promise(r=>setTimeout(r,50)); }
+      throw new Error('Context smoke zaman aşımı');
+    };
+    if (document.documentElement.dataset.unsaved === 'true') throw new Error('Context smoke öncesinde kaydedilmemiş taslak kaldı');
+    document.querySelector('[aria-label="İncelemeyi kapat"]')?.click();
+    await wait(()=>!document.querySelector('.review-dialog'));
+    document.querySelector('#tab-context').click();
+    await wait(()=>document.querySelector('.context-conflict'));
+    if (!document.querySelector('[data-testid="start"]').disabled) throw new Error('Context kararı beklenirken başlat açık');
+    document.querySelector('.activity').scrollIntoView({block:'center'});
+  })()`);
+  console.log("Context smoke: karar ekranı hazır");
+  await window.webContents.executeJavaScript(`new Promise(resolve => setTimeout(resolve, 250))`);
+  const contextShot = await Promise.race([
+    window.capturePage(),
+    new Promise<never>((_resolve, reject) => { const timer = setTimeout(() => reject(new Error("Context ekran yakalama zaman aşımı")), 10000); timer.unref(); }),
+  ]);
+  writeFileSync(resolve("dist", "desktop-context.png"), contextShot.toPNG());
+  await window.webContents.executeJavaScript(`(async () => {
+    [...document.querySelectorAll('.context-conflict button')].find(e=>e.textContent==='Öneriyi kabul et').click();
+    for(let i=0;i<200;i++) {
+      const state=await window.agentmesh.state();
+      if(state.snapshot.context['smoke.contract']?.revision===2 && !document.querySelector('.context-conflict')
+        && !document.querySelector('[data-testid="start"]').disabled) return;
+      await new Promise(r=>setTimeout(r,50));
+    }
+    throw new Error('Context kararı kaydedilmedi');
+  })()`);
+  const decided = service.state().snapshot;
+  if (decided.context["smoke.contract"]?.value !== "second" || decided.contextHistory["smoke.contract"]?.length !== 2) throw new Error("Context geçmişi doğrulanamadı");
+  console.log("Context smoke başarılı: karşılaştırma, başlatma engeli ve sürüm bağlı kullanıcı kararı doğrulandı");
   console.log("Merge smoke başarılı: gerçek Git çakışması, renderer çözümü, IPC kaydı ve digest onayı doğrulandı");
 }

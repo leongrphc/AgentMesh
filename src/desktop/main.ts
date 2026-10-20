@@ -419,6 +419,11 @@ app.whenReady().then(async () => {
   });
   handle("mesh:create-task", (task) => service.createTask(task as TaskDraft));
   handle("mesh:send-message", (message) => service.sendMessage(message as MessageDraft));
+  handle("mesh:resolve-context", (id, revision, choice, value) => {
+    if (typeof id !== "string" || typeof revision !== "number" || !["keep", "accept", "custom"].includes(String(choice))
+      || (value !== undefined && typeof value !== "string")) throw new Error("Geçersiz context kararı");
+    return service.resolveContext(id, revision, choice as "keep" | "accept" | "custom", value as string | undefined);
+  });
   handle("mesh:save-agent", (agent) => service.saveAgent(agent as AgentConfig));
   handle("mesh:parallelism", (value) => {
     if (typeof value !== "number") throw new Error("Geçersiz paralellik");

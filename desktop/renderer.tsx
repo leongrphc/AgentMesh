@@ -3,6 +3,7 @@ import { createRoot } from "react-dom/client";
 import { TaskForm, TaskGraph } from "./task-board.js";
 import { AgentCenter } from "./agent-center.js";
 import { TestReports } from "./test-reports.js";
+import { ContextPanel } from "./context-panel.js";
 import { MergeResolution } from "./merge-resolution.js";
 import { Messages } from "./messages.js";
 import type { DesktopAPI, DesktopState, DesktopReview } from "../src/desktop/contracts.js";
@@ -80,6 +81,7 @@ function App() {
 
   if (!state) return <main className="loading"><b>AgentMesh</b><p>{error || "Çalışma alanı açılıyor…"}</p></main>;
   const { tasks, context, messages, project } = state.snapshot;
+  const contextPending = state.snapshot.contextConflicts.filter((conflict) => conflict.status === "pending").length;
   const task = tasks.find((item) => item.id === selected) ?? tasks[0];
   const completed = tasks.filter((item) => item.status === "completed").length;
   const active = tasks.filter((item) => item.status === "running").length;
@@ -107,9 +109,10 @@ function App() {
     <main className="workspace">
       <header className="topbar"><div className="breadcrumb">Çalışma alanı <span>/</span> <b>Orkestrasyon</b></div><span className="mode-tag">{state.demo ? "DEMO" : "CLI"}</span></header>
       <section className="workspace-heading"><div><div className="eyebrow">PROJE KONTROLÜ</div><h1>Birlikte çalışan ajanlar.</h1><p>Görevleri dağıt, ilerlemeyi izle, sonuçları incele.</p></div>
-        <div className="run-actions"><button disabled={!state.busy || pending} onClick={() => act(() => api.cancel())}>Durdur</button><button className="primary" data-testid="start" disabled={state.busy || !ready || pending} onClick={() => { if (editorDirty) setError("Başlatmadan önce dosya değişikliklerini kaydedin veya dosyayı yeniden açın."); else void act(() => api.start()); }}>{state.busy ? "Çalışıyor…" : "▶ Ajanları başlat"}</button></div>
+        <div className="run-actions"><button disabled={!state.busy || pending} onClick={() => act(() => api.cancel())}>Durdur</button><button className="primary" data-testid="start" disabled={state.busy || !ready || pending || !!contextPending} onClick={() => { if (editorDirty) setError("Başlatmadan önce dosya değişikliklerini kaydedin veya dosyayı yeniden açın."); else void act(() => api.start()); }}>{state.busy ? "Çalışıyor…" : "▶ Ajanları başlat"}</button></div>
       </section>
       {error && <div role="alert" className="error"><span>{error}</span><button aria-label="Hatayı kapat" onClick={() => setError("")}>×</button></div>}
+      {!!contextPending && <div className="context-alert" role="status"><p>{contextPending} ortak karar çakışıyor. Yeni görevler karar bekliyor.</p><button onClick={() => { setTab("context"); document.querySelector(".activity")?.scrollIntoView({ block: "center" }); }}>Kararları incele</button></div>}
       {!!state.permissions.length && <section className="permission-panel" aria-label="Bekleyen izinler"><h2>Ajan kararı bekliyor <span>{state.permissions.length}</span></h2>
         {state.permissions.map((request) => <article key={request.id}><div className="permission-title"><b>{request.taskId}</b><span>{request.provider} · {request.kind === "command" ? "Komut izni" : "Dosya izni"} · {new Date(request.expiresAt).toLocaleTimeString("tr-TR")} tarihine kadar</span></div>
           <pre>{request.description}</pre><div className="permission-actions"><small>Hassas değerler maskelenmiş olabilir. Karar yalnızca bu istek için geçerlidir.</small><button disabled={pending} onClick={() => act(() => api.decidePermission(request.id, request.executionId, request.digest, "deny"))}>Reddet</button><button className="primary" disabled={pending} onClick={() => act(() => api.decidePermission(request.id, request.executionId, request.digest, "allow_once"))}>Bir kez izin ver</button></div>
@@ -145,7 +148,7 @@ function App() {
       ] as const).map(([id, label, count]) => <button key={id} role="tab" aria-selected={tab === id} aria-controls={`panel-${id}`} id={`tab-${id}`} onClick={() => setTab(id)}>{label} <span>{count}</span></button>)}</div><label className="history-filter"><input type="checkbox" checked={selectedOnly} onChange={(event) => setSelectedOnly(event.target.checked)} />Seçili görev</label><small><span className="local-dot" /> {state.busy ? "Canlı" : "Son 200 olay"}</small></div>
         <div className="activity-body" role="tabpanel" id={`panel-${tab}`} aria-labelledby={`tab-${tab}`}>
           {tab === "events" && (state.events.length ? <div className="event-list">{[...state.events].reverse().filter((event) => !selectedOnly || event.taskId === task?.id).map((event, index) => <div className="event" key={`${event.at}-${index}`}><time>{new Date(event.at).toLocaleTimeString("tr-TR")}</time><span className="event-task">{event.taskId ?? "proje"}</span><code>{event.text}</code></div>)}</div> : <div className="empty"><b>İlk göreve hazır.</b><p>Ajanları başlattığınızda olaylar burada görünecek.</p></div>)}
-          {tab === "context" && (Object.keys(context).length ? Object.values(context).map((fact) => <article className="context-item" key={fact.key}><code>{fact.key}</code><p>{fact.value}</p><small>Kaynak: {fact.sourceTaskId}</small></article>) : <p className="empty">Ajanların paylaştığı sonuçlar burada görünecek.</p>)}
+          {tab === "context" && <ContextPanel key={project.id + project.workspaceRoot} state={state} api={api} />}
           {tab === "messages" && <Messages key={project.id + project.workspaceRoot} state={state} api={api} taskId={task?.id} selectedOnly={selectedOnly} />}
         </div>
       </section>

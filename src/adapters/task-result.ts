@@ -1,6 +1,7 @@
 import type { AgentResult } from "../core/contracts.js";
 import { record } from "./jsonl-rpc.js";
 import { normalizeTestReports } from "../core/test-reports.js";
+import { normalizeContextFacts } from "../core/context.js";
 
 /** Versioned handoff envelope; ordinary prose remains a valid summary. */
 export function normalizeTaskResult(base: AgentResult, recipients?: readonly string[]): AgentResult {
@@ -13,13 +14,7 @@ export function normalizeTaskResult(base: AgentResult, recipients?: readonly str
     throw new Error("Geçersiz AgentMesh sonuç zarfı");
   if (!Array.isArray(value.facts) || value.facts.length > 32 || !Array.isArray(value.messages) || value.messages.length > 32)
     throw new Error("AgentMesh facts/messages dizisi gerekli; her biri en fazla 32 kayıt olabilir");
-  const keys = new Set<string>();
-  const facts = value.facts.map((entry) => {
-    const fact = record(entry);
-    if (typeof fact.key !== "string" || !fact.key.trim() || fact.key.length > 160 || /^(task\.|system\.)/.test(fact.key)
-      || keys.has(fact.key) || typeof fact.value !== "string" || fact.value.length > 16384) throw new Error("Geçersiz veya tekrarlı ortak context kaydı");
-    keys.add(fact.key); return { key: fact.key, value: fact.value };
-  });
+  const facts = normalizeContextFacts(value.facts);
   const messages = value.messages.map((entry) => {
     const message = record(entry);
     if (typeof message.to !== "string" || !message.to.trim() || message.to.length > 200

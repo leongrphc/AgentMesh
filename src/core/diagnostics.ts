@@ -10,6 +10,7 @@ export function diagnosticReport(events: readonly StoredEvent[]) {
     "task.worktree.prepared", "task.review.requested", "task.review.approved", "context.updated", "message.sent",
     "task.merge.conflicted", "task.merge.prepared",
     "message.delivery",
+    "context.conflict.created", "context.conflict.resolved",
   ]);
   for (const event of events) {
     const kind = known.has(event.payload.type) ? event.payload.type : "unknown";

@@ -36,7 +36,7 @@ Codex, OpenCode, Claude, Antigravity ve diğer API modellerini **tek IDE içinde
 - [x] JSONL stdout/stderr ve journal olaylarını canlı `subscribe()` abonelerine iletme; CLI'da `--stream`.
 - [x] `AbortSignal`, `Ctrl+C`, kalıcı `cancelled`, geç gelen çıktının görev sonucunu tamamlamasını engelleme.
 - [x] Başarısız/iptal edilmiş/engellenmiş görevi `--retry TASK` ile açıkça yeniden kuyruğa alma.
-- [x] Mock ve yerel subprocess/Git worktree testleri; 20 Ekim doğrulaması **77/77 test**, `npm run typecheck` ve `npm run desktop:smoke` başarılı. Desktop smoke build, Electron/sandbox/preload, Monaco, gerçek PTY, ajan ayarları, test raporları, gerçek Git çakışmasını formdan çözme ve demo görevlerini kapsar. Native OpenCode TUI ve modelsiz yerel OpenCode Server protokol smoke önceki çalışmada doğrulandı.
+- [x] Mock ve yerel subprocess/Git worktree testleri; 20 Ekim doğrulaması **83/83 test**, `npm run typecheck` ve `npm run desktop:smoke` başarılı. Desktop smoke build, Electron/sandbox/preload, Monaco, gerçek PTY, ajan ayarları, test raporları, gerçek Git çakışmasını formdan çözme ve demo görevlerini kapsar. Native OpenCode TUI ve modelsiz yerel OpenCode Server protokol smoke önceki çalışmada doğrulandı.
 
 ## Açık görevler — öncelik sırasıyla
 
@@ -85,7 +85,8 @@ Codex, OpenCode, Claude, Antigravity ve diğer API modellerini **tek IDE içinde
 - [ ] **CORE-010:** İzinleri çalıştırma **öncesinde** zorlayabilecek süreç/OS sandbox politikası; `allowedPaths` şu an yalnızca çalıştırma sonrasında denetleniyor. Native sağlayıcı/araç alt süreç ağacının iptal ve kapanış garantileri ayrıca sınanmalı; sahipli ana sunucuyu kapatmak tek başına OS izolasyonu değildir.
 - [ ] **CORE-011:** Kalıcı, sürümlü context/karar yönetimi; çakışan kararlar için doğrulama ve ilgili context paketini seçme.
   - [x] Tüm otomatik adaptörlerde sürüm 1 sonuç zarfı: summary/facts/messages doğrulanır, alıcılar proje görev ajanlarıyla sınırlanır; boyut, tekrarlı anahtar ve ayrılmış system/task anahtarları denetlenir. Eski düz metin özetleri çalışır. Fact/mesaj kaynak kimlikleri modelden alınmaz; orkestratör atar. Sonuçlar diff onayından sonra transaction ile kaydedilir ve sonraki ajana aktarılır.
-  - [ ] Karar revizyonları, çelişki çözümü ve görevle ilgili context paketini seçme.
+  - [x] Anahtar bazlı kalıcı sürüm geçmişi; farklı ajan değerleri mevcut kararı ezmeden öneri/çakışma kaydı oluşturur. Çözülmemiş kararlarda yeni görev dalgası bekler. Masaüstü karşılaştırma + keep/accept/custom ve CLI context komutları güncel sürüme bağlıdır; karar sonrası açık başlatma gerekir. SQLite v1→v2 geçişi eski olayları korur, eski uygulamanın yeni karar semantiğini atlamasını engeller. [Semantik ve kapsam](context-decisions.md).
+  - [ ] Görevle ilgili sınırlı context paketi seçimi ve tüketilen sürümlerin görev bazında kaydı; büyük geçmiş için sayfalama/retention.
 - [ ] **CORE-012:** Güvenli log saklama/retention, hata teşhisi, oturum sağlığı ve yeniden başlatma kurtarma senaryoları.
 - [ ] **CORE-013 / Config uyumu:** Kayıtlı görev ve ajan tanımlarını açık güncelleme akışıyla uzlaştırma.
   - [x] Desktop yeniden açma ve CLI execute öncesi toplu görev kontrolü: aynı ID'de başlık/talimat/ajan/bağımlılık/kapsam farkı alan adlarıyla reddedilir; ham talimat hata metnine alınmaz. UI görevleri korunur; eksik ajan eşlemesi ve başka projedeki görev ID çakışması yeni görev eklenmeden reddedilir. Dizi sırası anlamsız fark üretmez; tekrarlı bağımlılıklar config doğrulamasında reddedilir. Başarısız açılış eski projeyi/journal'ı kullanılabilir bırakır.
@@ -114,7 +115,7 @@ Codex, OpenCode, Claude, Antigravity ve diğer API modellerini **tek IDE içinde
 
 ## Devam ederken
 
-20 Ekim goal çalışması: UI-003 ajan ayarları, CORE-013 kalıcı ajan bağlaması ilk adımı, UI-006 test raporu/merge çözüm akışı ve CORE-009 kalıcı inbox/Codex canlı teslim eklendi. **77/77 tam süit**, TypeScript ve canlı mesaj/gerçek Git çakışma çözümünü doğrulayan Electron smoke başarılı. Gerçek model çağrısı yapılmadı. UI-007 dosya/klasör oluşturma, çoklu sekmeler, taslak kurtarma ve disk izleme eklendi. Monaco ilk yükleme optimizasyonu ve UI-007 tamamlandı. Kalan native canlı teslim kabul işleri, OS sandbox, sürümlü context ve config revizyonları açık.
+20 Ekim goal çalışması: UI-003 ajan ayarları, CORE-013 kalıcı ajan bağlaması ilk adımı, UI-006 test raporu/merge çözüm akışı ve CORE-009 kalıcı inbox/Codex canlı teslim eklendi. **83/83 tam süit**, TypeScript ve canlı mesaj/gerçek Git çakışma çözümünü doğrulayan Electron smoke başarılı. Gerçek model çağrısı yapılmadı. UI-007 dosya/klasör oluşturma, çoklu sekmeler, taslak kurtarma ve disk izleme eklendi. Monaco ilk yükleme optimizasyonu ve UI-007 tamamlandı. CORE-011 karar sürümleri/çakışma çözümü eklendi. Kalan native canlı teslim kabul işleri, OS sandbox, görev bazlı context paketleri ve config revizyonları açık.
 
 1. `D:\WebGpt` içinde `git status --short` ve `git log -5 --oneline` ile durumu kontrol et.
 2. `npm install` (gerekiyorsa), ardından `npm run typecheck` ve `npm test` çalıştır.

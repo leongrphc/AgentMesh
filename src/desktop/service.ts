@@ -167,6 +167,7 @@ export class DesktopService {
     this.requireClosedTerminals();
     if (this.running) throw new Error("Görevler zaten çalışıyor");
     if (!this.engine || !this.config) throw new Error("Önce proje açın");
+    if (this.state().snapshot.contextConflicts.some((conflict) => conflict.status === "pending")) throw new Error("Önce Ortak context sekmesindeki çakışmaları çözün");
     this.healthAbort?.abort(); this.healthAbort = undefined;
     this.abort = new AbortController();
     // Defer execution so busy is visible before the first synchronous domain event.
@@ -200,6 +201,12 @@ export class DesktopService {
   sendMessage(message: MessageDraft): string {
     if (!this.config || !this.engine) throw new Error("Önce proje açın");
     return this.engine.sendMessage(this.config.projectId, message);
+  }
+
+  resolveContext(id: string, revision: number, choice: import("../core/contracts.js").ContextChoice, value?: string): void {
+    if (!this.config || !this.engine) throw new Error("Önce proje açın");
+    if (this.running) throw new Error("Context kararından önce çalışmanın bitmesini bekleyin");
+    this.engine.resolveContext(this.config.projectId, id, revision, choice, value);
   }
 
   saveAgent(draft: AgentConfig): void {

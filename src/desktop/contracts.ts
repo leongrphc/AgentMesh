@@ -1,7 +1,7 @@
 import type { ProjectSnapshot } from "../core/orchestrator.js";
 import type { WorktreeInspection } from "../core/worktrees.js";
 import type { ConflictFile, WorkspaceEntry, WorkspaceFile } from "../core/workspace-files.js";
-import type { AgentTask, TestReport, MessageDraft } from "../core/contracts.js";
+import type { AgentTask, TestReport, MessageDraft, ContextChoice } from "../core/contracts.js";
 import type { PermissionRequest, PermissionDecision } from "../core/permissions.js";
 import type { ProviderHealth } from "../adapters/provider-health.js";
 import type { TerminalInfo, TerminalOutput } from "./terminals.js";
@@ -35,6 +35,7 @@ export interface DesktopState {
 }
 
 export interface DesktopAPI {
+  resolveContext(conflictId: string, revision: number, choice: ContextChoice, value?: string): Promise<void>;
   sendMessage(message: MessageDraft): Promise<string>;
   openProviderTerminal(model?: string): Promise<TerminalInfo>;
   testProvider(input: ProviderMessageInput): Promise<ProviderMessageResult>;

@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { existsSync, readFileSync, realpathSync } from "node:fs";
+import { existsSync, readFileSync, realpathSync, statSync } from "node:fs";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 import { SqliteJournal } from "./core/sqlite-journal.js";
 import { Orchestrator } from "./core/orchestrator.js";
@@ -18,14 +18,16 @@ async function main(): Promise<void> {
   const executing = args.includes("--execute");
   const streaming = args.includes("--stream");
   const diagnostics = args.includes("--diagnostics");
-  if (Number(reviewing) + Number(approving) + Number(retrying) + Number(executing) + Number(diagnostics) > 1) {
-    throw new Error("--review, --approve, --retry ve --execute birlikte kullanılamaz");
+  const contextReview = args.includes("--context");
+  const resolvingContext = args.includes("--resolve-context");
+  if ([reviewing, approving, retrying, executing, diagnostics, contextReview, resolvingContext].filter(Boolean).length > 1) {
+    throw new Error("İnceleme, çalıştırma ve karar komutlarını ayrı kullanın");
   }
   if (streaming && !executing) throw new Error("--stream yalnızca --execute ile kullanılabilir");
   const configIndex = args.indexOf("--config");
   const configArg = args[configIndex + 1];
   if (configIndex < 0 || !configArg) {
-    throw new Error("Kullanım: npm run live -- --config .\\agentmesh.config.json [--execute [--stream] | --review | --approve TASK --digest SHA256 | --retry TASK]");
+    throw new Error("Kullanım: npm run live -- --config .\\agentmesh.config.json [--execute [--stream] | --review | --approve TASK --digest SHA256 | --retry TASK | --context | --resolve-context ID --revision N --choice keep|accept|custom [--value-file UTF8_FILE]]");
   }
   const configFile = resolve(configArg);
   let config = JSON.parse(readFileSync(configFile, "utf8")) as Config;
@@ -33,13 +35,14 @@ async function main(): Promise<void> {
   const needsDesktop = config.agents.some((agent) => agent.transport && agent.transport !== "exec");
   const repoPath = isAbsolute(config.repoPath)
     ? realpathSync(config.repoPath) : realpathSync(resolve(dirname(configFile), config.repoPath));
-  if (!executing && !reviewing && !approving && !retrying && !diagnostics) {
+  if (!executing && !reviewing && !approving && !retrying && !diagnostics && !contextReview && !resolvingContext) {
     console.log(JSON.stringify({
       dryRun: true, repoPath, projectId: config.projectId,
       agents: config.agents, tasks: config.tasks.map(({ id, agentId, dependsOn, allowedPaths }) => ({ id, agentId, dependsOn, allowedPaths })),
       instruction: needsDesktop
         ? "Bu config etkileşimli izin gerektirir; çalıştırmak için masaüstü uygulamasında açın. CLI --review, --approve ve --retry komutları kullanılabilir."
         : "--execute [--stream]: ajanları çalıştır, --review: diff görüntüle, --approve TASK --digest SHA256: onayla, --retry TASK: görevi yeniden kuyruğa al.",
+      contextInstruction: "--context: sürüm ve çakışmaları incele; --resolve-context ID --revision N --choice keep|accept|custom: karar ver. custom için --value-file UTF8_FILE gerekir.",
     }, null, 2));
     return;
   }
@@ -84,6 +87,27 @@ async function main(): Promise<void> {
       const reserved = journal.all().flatMap(({ payload }) => payload.type === "task.created" && payload.task.projectId !== config.projectId ? [payload.task.id] : []);
       for (const task of reconcileTasks(config, existing.tasks, reserved)) engine.addTask(task);
       engine.configureAgents(config.projectId, config.agents, sourceAgents);
+    }
+    if (contextReview) {
+      const { context, contextHistory, contextConflicts } = engine.snapshot(config.projectId);
+      console.log(JSON.stringify({ context, contextHistory, contextConflicts }, null, 2));
+      return;
+    }
+    if (resolvingContext) {
+      const id = args[args.indexOf("--resolve-context") + 1];
+      const revision = Number(args[args.indexOf("--revision") + 1]);
+      const choice = args[args.indexOf("--choice") + 1];
+      if (!id || id.startsWith("--") || !args.includes("--revision") || !args.includes("--choice")
+        || !Number.isInteger(revision) || !["keep", "accept", "custom"].includes(choice ?? "")) throw new Error("--resolve-context ID --revision N --choice keep|accept|custom gerekli");
+      let value: string | undefined;
+      if (choice === "custom") {
+        const file = args[args.indexOf("--value-file") + 1];
+        if (!args.includes("--value-file") || !file || file.startsWith("--") || statSync(file).size > 65536) throw new Error("Özel karar için en fazla 64 KiB UTF-8 --value-file gerekli");
+        value = new TextDecoder("utf-8", { fatal: true }).decode(readFileSync(file));
+      }
+      engine.resolveContext(config.projectId, id, revision, choice as "keep" | "accept" | "custom", value);
+      console.log(JSON.stringify({ resolved: id, instruction: "Karar kaydedildi; yeni görevler için ayrıca --execute kullanın." }, null, 2));
+      return;
     }
     if (approving) {
       const taskId = args[args.indexOf("--approve") + 1];
@@ -130,9 +154,11 @@ async function main(): Promise<void> {
         ...(reviewing ? { trackedDiff: changes?.trackedDiff, untrackedPreviews: changes?.untrackedPreviews } : {}),
       };
     });
-    console.log(JSON.stringify({ dbPath, mode: reviewing ? "review" : "execute", reports }, null, streaming ? 0 : 2));
+    const pendingContextDecisions = snapshot.contextConflicts.filter((conflict) => conflict.status === "pending").map(({ id, key }) => ({ id, key }));
+    console.log(JSON.stringify({ dbPath, mode: reviewing ? "review" : "execute", reports, pendingContextDecisions }, null, streaming ? 0 : 2));
     if (reports.some((task) => task.status === "cancelled")) process.exitCode = 130;
     else if (reports.some((task) => task.status === "failed" || task.status === "blocked" || task.status === "needs_review")) process.exitCode = 1;
+    else if (pendingContextDecisions.length) process.exitCode = 2;
   } finally { journal.close(); }
 }
 

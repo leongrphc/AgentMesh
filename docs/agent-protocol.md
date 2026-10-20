@@ -63,7 +63,7 @@ Context sadece özet sohbet değildir. Her kararın **kaynak görevi** bulunur. 
 
 ## Olaylar
 
-Otomatik adaptörler son yanıt için sürüm 1 zarfını ister: `agentmeshVersion`, `summary`, `facts` ve `messages`. Tüm sağlayıcılarda aynı doğrulama uygulanır; eski düz metin yanıtlar summary olarak çalışır. Proje alıcıları prompt'a eklenir, yabancı alıcılar ve ayrılmış `task.`/`system.` fact anahtarları reddedilir. Fact/message başına boyut ve en fazla 32 kayıt sınırı vardır. Kaynak görev/ajan/zaman damgası native modele bırakılmaz; orkestratör atar. Bu kayıtlar kod değişmişse digest onayına kadar yayınlanmaz. Karar sürümleri/çelişkileri açık işlerdir. Ayrı canlı soru/ilerleme zarfı ve teslim kapsamı [mesaj protokolünde](messages.md) açıklanır.
+Otomatik adaptörler son yanıt için sürüm 1 zarfını ister: `agentmeshVersion`, `summary`, `facts` ve `messages`. Tüm sağlayıcılarda aynı doğrulama uygulanır; eski düz metin yanıtlar summary olarak çalışır. Proje alıcıları prompt'a eklenir, yabancı alıcılar ve ayrılmış `task.`/`system.` fact anahtarları reddedilir. Fact/message başına boyut ve en fazla 32 kayıt sınırı vardır. Kaynak görev/ajan/zaman damgası native modele bırakılmaz; orkestratör atar. Bu kayıtlar kod değişmişse digest onayına kadar yayınlanmaz. Karar sürümleri ve çelişki çözümü [sürümlü context](context-decisions.md) akışında uygulanır; görev bazlı context paketi seçimi açıktır. Ayrı canlı soru/ilerleme zarfı ve teslim kapsamı [mesaj protokolünde](messages.md) açıklanır.
 
 Orkestratör journal'ındaki temel olaylar: `project.created`, `task.created`, `task.started`, `task.review.requested`, `task.review.approved`, `task.completed`, `task.failed`, `task.blocked`, `task.interrupted`, `task.cancelled`, `task.retried`, `context.updated`, `message.sent`.
 
@@ -98,3 +98,5 @@ Sürüm 1 sonuç zarfı isteğe bağlı `tests` dizisi kabul eder (en fazla 32 k
 - Her proje kendi görev, hafıza ve mesaj kapsamına sahip olmalı.
 - Adaptör hata verirse görev `failed`, buna bağımlı görevler `blocked` olmalı.
 - Kod veya komut çalıştıran gerçek adaptörlerde izin ve worktree izolasyonu zorunlu olmalı.
+
+`context.updated` olayları anahtar bazlı sürüm geçmişi oluşturur. Farklı değer `context.conflict.created` ile bekler; açık kullanıcı kararı `context.conflict.resolved` ve gerekirse yeni `context.updated` olayını transaction içinde yazar. Bekleyen kararlar yeni görev dalgalarını durdurur. SQLite olay semantiği sürümü 2, eski uygulamaların yeni bekleme koşulunu atlamasını engeller.

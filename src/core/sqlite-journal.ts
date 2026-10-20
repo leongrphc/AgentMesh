@@ -16,11 +16,12 @@ export class SqliteJournal implements EventStore {
     mkdirSync(dirname(path), { recursive: true });
     this.lockPath = `${path}.lock`;
     this.lockFd = this.acquireLock();
+    let opened: DatabaseSync | undefined;
     try {
-      this.db = new DatabaseSync(path);
+      this.db = opened = new DatabaseSync(path);
       this.db.exec("PRAGMA busy_timeout=5000; PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON;");
       const version = this.db.prepare("PRAGMA user_version").get() as { user_version: number };
-      if (version.user_version > 1) throw new Error(`SQLite schema desteklenmiyor: ${version.user_version}`);
+      if (version.user_version > 2) throw new Error(`SQLite schema desteklenmiyor: ${version.user_version}`);
       if (version.user_version < 1) {
         this.db.exec(`BEGIN IMMEDIATE;
           CREATE TABLE IF NOT EXISTS events (
@@ -31,11 +32,14 @@ export class SqliteJournal implements EventStore {
             payload TEXT NOT NULL
           );
           CREATE INDEX IF NOT EXISTS events_project_sequence ON events(project_id, sequence);
-          PRAGMA user_version=1;
+          PRAGMA user_version=2;
           COMMIT;`);
       }
+      // v2 adds decision/conflict event semantics. Old binaries must not ignore pending decisions.
+      if (version.user_version === 1) this.db.exec("BEGIN IMMEDIATE; PRAGMA user_version=2; COMMIT;");
       if (legacyJsonl && existsSync(legacyJsonl)) this.importJsonlOnce(legacyJsonl);
     } catch (error) {
+      try { opened?.close(); } catch { /* Preserve the original open/migration error. */ }
       closeSync(this.lockFd);
       rmSync(this.lockPath, { force: true });
       throw error;

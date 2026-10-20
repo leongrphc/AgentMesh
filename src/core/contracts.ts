@@ -28,6 +28,17 @@ export interface Fact {
   value: string;
   sourceTaskId: string;
   updatedAt: string;
+  revision?: number;
+}
+
+export type ContextChoice = "keep" | "accept" | "custom";
+export interface ContextConflict {
+  id: string;
+  key: string;
+  proposal: Fact;
+  baseRevision: number;
+  status: "pending" | "resolved";
+  resolution?: { choice: ContextChoice; revision: number; at: string };
 }
 
 export interface AgentMessage {
@@ -145,6 +156,8 @@ export type DomainEvent =
   | { type: "task.review.requested"; projectId: string; taskId: string; digest: string; result: AgentResult; testDigest?: string }
   | { type: "task.review.approved"; projectId: string; taskId: string; digest: string; commit: string }
   | { type: "context.updated"; projectId: string; fact: Fact }
+  | { type: "context.conflict.created"; projectId: string; conflict: ContextConflict }
+  | { type: "context.conflict.resolved"; projectId: string; conflictId: string; choice: ContextChoice; revision: number; at: string }
   | { type: "message.sent"; projectId: string; message: AgentMessage };
 
 export interface StoredEvent {
