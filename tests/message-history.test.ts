@@ -67,6 +67,24 @@ test("disk-backed inbox hydrates bounded prompt messages and then delivers the r
     const result = await engine.run("p");
     assert.equal(result.tasks[0]!.status, "completed");
     assert.equal(result.inboxes[0]!.cursor, 71);
+    engine.checkpoint();
+    assert.deepEqual(JSON.parse(journal.loadCheckpoint()!.state).deliveries, []);
+    journal.compact(join(root, "accepted.sqlite"));
+    assert.deepEqual(new Orchestrator(journal).snapshot("p").deliveries, result.deliveries);
+    const first = result.deliveries[0]!;
+    journal.append({ type: "message.delivery", projectId: "p", delivery: { ...first, executionId: "interrupted", status: "sending" } });
+    const recovered = new Orchestrator(journal);
+    assert.equal(journal.readDelivery(first.taskId, first.messageId)?.status, "uncertain");
+    assert.equal(recovered.snapshot("p", false).inboxes[0]!.uncertain, 1);
+    assert.equal([...journal.scanDeliveries(first.taskId)].length, 71);
+    assert.equal([...journal.scanDeliveries(undefined, first.messageId)].length, 1);
+    const scan = journal.scanDeliveries()[Symbol.iterator]();
+    scan.next();
+    assert.throws(() => journal.compact(join(root, "blocked.sqlite")), /taraması bitmeden/);
+    scan.return?.();
+    recovered.checkpoint();
+    journal.compact(join(root, "recovered.sqlite"));
+    assert.deepEqual(new Orchestrator(journal).snapshot("p").deliveries, recovered.snapshot("p").deliveries);
   } finally { journal.close(); rmSync(root, { recursive: true, force: true }); }
 });
 

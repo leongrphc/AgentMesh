@@ -3,7 +3,7 @@ import { closeSync, existsSync, mkdirSync, openSync, readFileSync, rmSync, write
 import { dirname, resolve } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { pathToFileURL } from "node:url";
-import type { DomainEvent, StoredEvent, ContextConflict } from "./contracts.js";
+import type { DomainEvent, StoredEvent, ContextConflict, MessageDelivery } from "./contracts.js";
 import type { EventStore } from "./journal.js";
 import { fingerprintEvents, verifyJournalArchive } from "./journal-archive.js";
 
@@ -52,6 +52,8 @@ export class SqliteJournal implements EventStore {
         CREATE INDEX IF NOT EXISTS events_history_fact ON events(project_id, json_extract(payload, '$.type'), json_extract(payload, '$.fact.key'), sequence);
         CREATE INDEX IF NOT EXISTS events_history_task ON events(project_id, json_extract(payload, '$.type'), json_extract(payload, '$.taskId'), sequence);
         CREATE INDEX IF NOT EXISTS events_history_conflict ON events(project_id, json_extract(payload, '$.type'), json_extract(payload, '$.conflict.id'), sequence);
+        CREATE INDEX IF NOT EXISTS events_delivery_task ON events(json_extract(payload, '$.delivery.taskId'), json_extract(payload, '$.delivery.messageId'), sequence) WHERE json_extract(payload, '$.type') = 'message.delivery';
+        CREATE INDEX IF NOT EXISTS events_delivery_message ON events(json_extract(payload, '$.delivery.messageId'), sequence) WHERE json_extract(payload, '$.type') = 'message.delivery';
       `);
       const link = this.db.prepare("SELECT path, digest, through_sequence, event_count FROM journal_archive WHERE id = 1").get() as
         { path: string; digest: string; through_sequence: number; event_count: number } | undefined;
@@ -82,6 +84,29 @@ export class SqliteJournal implements EventStore {
     this.assertOpen();
     const row = this.db.prepare("SELECT id, at, payload FROM events WHERE id = ?").get(id);
     return row ? { id: row.id as string, at: row.at as string, payload: JSON.parse(row.payload as string) as DomainEvent } : undefined;
+  }
+
+  readDelivery(taskId: string, messageId: string): MessageDelivery | undefined {
+    this.assertOpen();
+    const row = this.db.prepare(`SELECT payload FROM events WHERE json_extract(payload, '$.type') = 'message.delivery'
+      AND json_extract(payload, '$.delivery.taskId') = ? AND json_extract(payload, '$.delivery.messageId') = ? ORDER BY sequence DESC LIMIT 1`).get(taskId, messageId);
+    return row ? JSON.parse(row.payload as string).delivery : undefined;
+  }
+
+  *scanDeliveries(taskId?: string, messageId?: string): Iterable<MessageDelivery> {
+    this.assertOpen();
+    const filters = ["json_extract(payload, '$.type') = 'message.delivery'"];
+    const params: string[] = [];
+    if (taskId !== undefined) { filters.push("json_extract(payload, '$.delivery.taskId') = ?"); params.push(taskId); }
+    if (messageId !== undefined) { filters.push("json_extract(payload, '$.delivery.messageId') = ?"); params.push(messageId); }
+    const partition = "PARTITION BY json_extract(payload, '$.delivery.taskId'), json_extract(payload, '$.delivery.messageId')";
+    const rows = this.db.prepare(`SELECT payload FROM (SELECT payload,
+      ROW_NUMBER() OVER (${partition} ORDER BY sequence DESC) AS latest,
+      MIN(sequence) OVER (${partition}) AS first_sequence FROM events WHERE ${filters.join(" AND ")})
+      WHERE latest = 1 ORDER BY first_sequence`).iterate(...params);
+    this.activeScans++;
+    try { for (const row of rows) yield JSON.parse(row.payload as string).delivery as MessageDelivery; }
+    finally { this.activeScans--; }
   }
 
   *scan(projectId?: string, afterSequence = 0): Iterable<StoredEvent> {

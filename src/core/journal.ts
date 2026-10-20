@@ -1,10 +1,12 @@
 import { appendFileSync, existsSync, mkdirSync, readFileSync } from "node:fs";
 import { dirname } from "node:path";
 import { randomUUID } from "node:crypto";
-import type { DomainEvent, StoredEvent, ContextHistoryPage, HistoryPage, ContextConflict, ContextPackage } from "./contracts.js";
+import type { DomainEvent, StoredEvent, ContextHistoryPage, HistoryPage, ContextConflict, ContextPackage, MessageDelivery } from "./contracts.js";
 
 export interface EventStore {
   readEvent?(id: string): StoredEvent | undefined;
+  readDelivery?(taskId: string, messageId: string): MessageDelivery | undefined;
+  scanDeliveries?(taskId?: string, messageId?: string): Iterable<MessageDelivery>;
   loadCheckpoint?(): { sequence: number; sourceId: string | null; state: string } | undefined;
   saveCheckpoint?(state: string, expectedSourceId: string | null): { sequence: number; digest: string };
   scanAfter?(sequence: number): Iterable<StoredEvent>;

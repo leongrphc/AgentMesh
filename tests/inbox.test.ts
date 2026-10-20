@@ -2,9 +2,10 @@ import assert from "node:assert/strict";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { test } from "node:test";
+import { test, describe } from "node:test";
 import { Orchestrator } from "../src/core/orchestrator.js";
 import { Journal } from "../src/core/journal.js";
+import { SqliteJournal } from "../src/core/sqlite-journal.js";
 import { MockAgent } from "../src/adapters/mock.js";
 import { ExecutionInbox } from "../src/core/inbox.js";
 import type { AgentExecution, AgentMessage, AgentTask } from "../src/core/contracts.js";
@@ -14,13 +15,14 @@ function deferred<T = void>() {
   const promise = new Promise<T>((done) => { resolve = done; });
   return { promise, resolve };
 }
+for (const storage of ["jsonl", "sqlite"] as const) describe(`${storage} inbox`, () => {
 function fixture() {
   const root = mkdtempSync(join(tmpdir(), "mesh-inbox-"));
-  const journal = new Journal(join(root, "events.jsonl"));
+  const journal = storage === "sqlite" ? new SqliteJournal(join(root, "events.sqlite")) : new Journal(join(root, "events.jsonl"));
   const engine = new Orchestrator(journal);
   engine.createProject({ id: "p", workspaceRoot: root });
   const task = (id: string, agentId = id): AgentTask => ({ id, projectId: "p", agentId, title: id, instruction: id, dependsOn: [], allowedPaths: ["src/**"] });
-  return { root, journal, engine, task, close: () => rmSync(root, { recursive: true, force: true }) };
+  return { root, journal, engine, task, close: () => { if (journal instanceof SqliteJournal) journal.close(); rmSync(root, { recursive: true, force: true }); } };
 }
 
 test("live messages fan out to concurrent tasks, deduplicate sends and persist task-scoped cursors", async () => {
@@ -57,7 +59,7 @@ test("live messages fan out to concurrent tasks, deduplicate sends and persist t
     assert.equal(snapshot.inboxes.find((inbox) => inbox.taskId === "receiver-1")?.cursor, 1);
     assert.equal(snapshot.inboxes.find((inbox) => inbox.taskId === "receiver-2")?.cursor, 1);
     assert.throws(() => send!({ to: "*", kind: "progress", body: "Late", idempotencyKey: "late" }), /artık aktif/);
-    const restored = new Orchestrator(new Journal(join(f.root, "events.jsonl"))).snapshot("p");
+    const restored = new Orchestrator(storage === "jsonl" ? new Journal(join(f.root, "events.jsonl")) : f.journal).snapshot("p");
     assert.deepEqual(restored.deliveries, snapshot.deliveries);
     assert.deepEqual(restored.inboxes, snapshot.inboxes);
   } finally { f.close(); }
@@ -167,4 +169,5 @@ test("non-live adapters receive queued messages on the next explicit execution a
     assert.equal(f.engine.snapshot("p").deliveries[0]?.mode, "prompt");
     assert.equal(f.engine.snapshot("p").deliveries[0]?.status, "accepted");
   } finally { f.close(); }
+});
 });

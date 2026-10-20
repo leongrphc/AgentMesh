@@ -66,12 +66,14 @@ export class Orchestrator {
   private readonly subscribers = new Set<(notice: OrchestratorNotice) => void>();
   private readonly permissions: PermissionBroker;
   private readonly diskHistory: boolean;
+  private readonly diskDeliveries: boolean;
   private readonly packageCounts = new Map<string, number>();
   private readonly resolvedCounts = new Map<string, number>();
   private lastAppliedId: string | null = null;
 
   constructor(private readonly journal: EventStore, private readonly worktrees?: WorktreeManager) {
     this.diskHistory = !!(journal.scan && journal.contextHistoryPage && journal.contextPackagesPage && journal.resolvedContextPage);
+    this.diskDeliveries = !!(journal.readDelivery && journal.scanDeliveries);
     this.permissions = new PermissionBroker((event) => this.emit(event));
     const checkpoint = this.diskHistory && journal.scanAfter ? journal.loadCheckpoint?.() : undefined;
     const restored = checkpoint && this.restoreCheckpoint(checkpoint.state);
@@ -102,7 +104,7 @@ export class Orchestrator {
     if (!this.diskHistory || !this.journal.saveCheckpoint) throw new Error("Bu journal checkpoint desteklemiyor");
     if (this.controllers.size || this.inboxes.size || [...this.tasks.values()].some(task => task.status === "running")
       || [...this.projects.keys()].some(id => this.pendingPermissions(id).length)) throw new Error("Checkpoint için çalışan görevleri bitirin");
-    const state = { version: 2, projects: [...this.projects], tasks: [...this.tasks],
+    const state = { version: 3, diskDeliveries: this.diskDeliveries, projects: [...this.projects], tasks: [...this.tasks],
       facts: [...this.facts].map(([id, values]) => [id, [...values]]),
       conflicts: [...this.contextConflicts].map(([id, values]) => [id, [...values]]),
       messages: this.messages, deliveries: [...this.deliveries], agentSettings: [...this.agentSettings],
@@ -114,7 +116,7 @@ export class Orchestrator {
     try {
       const state = JSON.parse(serialized);
       const names = ["projects", "tasks", "facts", "conflicts", "messages", "deliveries", "agentSettings", "packageCounts", "resolvedCounts"];
-      if (state?.version !== 2 || names.some(name => !Array.isArray(state[name]))) return false;
+      if (state?.version !== 3 || state.diskDeliveries !== this.diskDeliveries || names.some(name => !Array.isArray(state[name]))) return false;
       const pairs = (entries: unknown): Array<[string, any]> => {
         if (!Array.isArray(entries) || entries.some(entry => !Array.isArray(entry) || entry.length !== 2 || typeof entry[0] !== "string")
           || new Set(entries.map(entry => entry[0])).size !== entries.length) throw new Error("Geçersiz checkpoint haritası");
@@ -146,6 +148,7 @@ export class Orchestrator {
       }
       for (const [key, value] of pairs(state.deliveries)) {
         if (!value || !this.tasks.has(value.taskId) || !["sending", "accepted", "uncertain", "queued"].includes(value.status)) throw new Error("Geçersiz checkpoint teslimi");
+        if (this.diskDeliveries && value.status !== "sending") throw new Error("Geçersiz checkpoint aktif teslimi");
         this.deliveries.set(key, value);
       }
       for (const [key, value] of pairs(state.agentSettings)) {
@@ -272,12 +275,12 @@ export class Orchestrator {
     const messages = this.messages.filter(message => message.projectId === projectId && (!task || message.taskId === task.id || message.to === task.agentId || message.to === "*"));
     const page = historyPage(messages, before);
     const entries = page.entries.map(message => ({ message: this.materializeMessage(message), deliveries: [] as MessageDelivery[], deliveryCount: 0 }));
-    const selected = new Map(entries.map(entry => [entry.message.id, entry]));
-    for (const delivery of this.deliveries.values()) {
-      const entry = selected.get(delivery.messageId);
-      if (!entry || (task && delivery.taskId !== task.id) || this.tasks.get(delivery.taskId)?.projectId !== projectId) continue;
-      entry.deliveryCount++;
-      if (entry.deliveries.length < 50) entry.deliveries.push({ ...delivery });
+    for (const entry of entries) {
+      for (const delivery of this.deliveryRecords(task?.id, entry.message.id)) {
+        if (this.tasks.get(delivery.taskId)?.projectId !== projectId) continue;
+        entry.deliveryCount++;
+        if (entry.deliveries.length < 50) entry.deliveries.push({ ...delivery });
+      }
     }
     return { ...page, entries };
   }
@@ -312,13 +315,14 @@ export class Orchestrator {
       contextHistory: history?.facts ?? (includeHistory ? structuredClone(Object.fromEntries(this.factHistory.get(projectId) ?? [])) : {}),
       contextConflicts: history?.conflicts ?? structuredClone([...this.contextConflicts.get(projectId)?.values() ?? []].filter(conflict => includeHistory || conflict.status === "pending")),
       messages: includeHistory ? this.messages.filter((message) => message.projectId === projectId).map(message => this.materializeMessage(message)) : [],
-      deliveries: includeHistory ? [...this.deliveries.values()].filter((delivery) => this.tasks.get(delivery.taskId)?.projectId === projectId).map((delivery) => ({ ...delivery })) : [],
+      deliveries: includeHistory ? [...this.deliveryRecords()].filter((delivery) => this.tasks.get(delivery.taskId)?.projectId === projectId).map((delivery) => ({ ...delivery })) : [],
       inboxes: [...this.tasks.values()].filter((task) => task.projectId === projectId).map((task) => {
         const relevant = this.messagesFor(task);
+        const statuses = new Map([...this.deliveryRecords(task.id)].map(delivery => [delivery.messageId, delivery.status]));
         let cursor = 0;
-        while (cursor < relevant.length && this.delivery(task.id, relevant[cursor]!.id)?.status === "accepted") cursor++;
-        return { taskId: task.id, cursor, pending: relevant.filter((message) => this.delivery(task.id, message.id)?.status !== "accepted").length,
-          uncertain: relevant.filter((message) => this.delivery(task.id, message.id)?.status === "uncertain").length };
+        while (cursor < relevant.length && statuses.get(relevant[cursor]!.id) === "accepted") cursor++;
+        return { taskId: task.id, cursor, pending: relevant.filter((message) => statuses.get(message.id) !== "accepted").length,
+          uncertain: relevant.filter((message) => statuses.get(message.id) === "uncertain").length };
       }),
     };
   }
@@ -342,7 +346,15 @@ export class Orchestrator {
     this.emitBatch(events);
   }
 
-  private delivery(taskId: string, messageId: string) { return this.deliveries.get(JSON.stringify([taskId, messageId])); }
+  private delivery(taskId: string, messageId: string) {
+    return this.diskDeliveries ? this.journal.readDelivery!(taskId, messageId) : this.deliveries.get(JSON.stringify([taskId, messageId]));
+  }
+  private *deliveryRecords(taskId?: string, messageId?: string): Iterable<MessageDelivery> {
+    if (this.diskDeliveries) { yield* this.journal.scanDeliveries!(taskId, messageId); return; }
+    for (const delivery of this.deliveries.values()) {
+      if ((taskId === undefined || delivery.taskId === taskId) && (messageId === undefined || delivery.messageId === messageId)) yield delivery;
+    }
+  }
   private materializeMessage(reference: RetainedMessage): AgentMessage {
     if (reference.eventId === undefined) return { ...reference };
     const event = this.journal.readEvent?.(reference.eventId)?.payload;
@@ -672,7 +684,8 @@ export class Orchestrator {
   private apply(event: DomainEvent, eventId: string): void {
     switch (event.type) {
       case "message.delivery":
-        this.deliveries.set(JSON.stringify([event.delivery.taskId, event.delivery.messageId]), { ...event.delivery });
+        if (!this.diskDeliveries || event.delivery.status === "sending") this.deliveries.set(JSON.stringify([event.delivery.taskId, event.delivery.messageId]), { ...event.delivery });
+        else this.deliveries.delete(JSON.stringify([event.delivery.taskId, event.delivery.messageId]));
         break;
       case "project.created":
         this.projects.set(event.project.id, { ...event.project });
