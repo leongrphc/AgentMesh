@@ -424,6 +424,10 @@ export class DesktopService {
       const result = maintainJournal(this.journal, this.engine, this.journalPath, this.config.journalMaintenance);
       if (result.status === "compacted") this.events.push({ at: new Date().toISOString(),
         text: result.maintenanceError ? `Journal arşivlendi; fiziksel küçültme tamamlanamadı: ${safeLog(result.maintenanceError)}` : `Journal bakımı: ${result.activeEvents} aktif olay doğrulanan arşive taşındı.` });
+      if (result.status !== "disabled" && result.retention) {
+        if (result.retention.removed) this.events.push({ at: new Date().toISOString(), text: `Arşiv bakımı: ${result.retention.removed} eski yönetilen kopya kaldırıldı; olay geçmişi korundu.` });
+        for (const error of result.retention.errors) this.events.push({ at: new Date().toISOString(), text: `Arşiv kopyası temizlenemedi: ${safeLog(error)}` });
+      }
     } catch (error) {
       this.events.push({ at: new Date().toISOString(), text: `Journal bakımı tamamlanamadı: ${safeLog(String(error))}` });
     }

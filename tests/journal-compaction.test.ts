@@ -77,13 +77,14 @@ test("failed rotation rolls back its link and deletion; an open replay cursor pr
     const inject = new DatabaseSync(path);
     try { inject.exec("CREATE TRIGGER fail_rotation BEFORE DELETE ON events BEGIN SELECT RAISE(ABORT, 'injected rotation failure'); END;"); }
     finally { inject.close(); }
-    assert.throws(() => journal.compact(archive), /injected rotation failure/);
+    assert.throws(() => journal.compact(archive, true), /injected rotation failure/);
     assert.deepEqual(journal.all(), before);
     assert.equal(verifyJournalArchive(archive).eventCount, 1);
     const inspect = new DatabaseSync(path);
     try {
       assert.equal(inspect.prepare("PRAGMA user_version").get()!.user_version, 2);
       assert.equal(inspect.prepare("SELECT COUNT(*) AS n FROM journal_archive").get()!.n, 0);
+      assert.equal(inspect.prepare("SELECT COUNT(*) AS n FROM managed_archives").get()!.n, 0);
       inspect.exec("DROP TRIGGER fail_rotation");
     } finally { inspect.close(); }
     assert.equal(journal.compact(join(root, "second.sqlite")).compacted, true);

@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
-import { closeSync, existsSync, mkdirSync, openSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { closeSync, existsSync, mkdirSync, openSync, readFileSync, rmSync, writeFileSync, lstatSync, realpathSync, unlinkSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { pathToFileURL } from "node:url";
@@ -44,6 +44,7 @@ export class SqliteJournal implements EventStore {
       // Derived indexes only: old writers maintain them automatically; event schema stays v2.
       this.db.exec(`
         CREATE TABLE IF NOT EXISTS journal_archive (id INTEGER PRIMARY KEY CHECK(id = 1), path TEXT NOT NULL, digest TEXT NOT NULL, through_sequence INTEGER NOT NULL, event_count INTEGER NOT NULL);
+        CREATE TABLE IF NOT EXISTS managed_archives (ordinal INTEGER PRIMARY KEY AUTOINCREMENT, path TEXT NOT NULL UNIQUE, digest TEXT NOT NULL, through_sequence INTEGER NOT NULL, event_count INTEGER NOT NULL);
         CREATE TABLE IF NOT EXISTS replay_checkpoint (id INTEGER PRIMARY KEY CHECK(id = 1), format INTEGER NOT NULL, sequence INTEGER NOT NULL, source_id TEXT, state TEXT NOT NULL, digest TEXT NOT NULL);
         CREATE TRIGGER IF NOT EXISTS invalidate_checkpoint_update AFTER UPDATE ON events BEGIN DELETE FROM replay_checkpoint; END;
         CREATE TRIGGER IF NOT EXISTS invalidate_checkpoint_delete AFTER DELETE ON events BEGIN DELETE FROM replay_checkpoint; END;
@@ -292,7 +293,7 @@ export class SqliteJournal implements EventStore {
   }
 
   /** Explicit lossless rotation: the verified archive becomes a required part of this journal. */
-  compact(destination: string) {
+  compact(destination: string, managed = false) {
     this.assertOpen();
     if (this.activeScans) throw new Error("Journal taraması bitmeden küçültme yapılamaz");
     const archive = this.archive(destination);
@@ -305,6 +306,8 @@ export class SqliteJournal implements EventStore {
       try {
         const checkpoint = this.db.prepare("SELECT * FROM replay_checkpoint WHERE id = 1").get();
         this.db.prepare("INSERT OR REPLACE INTO journal_archive(id, path, digest, through_sequence, event_count) VALUES (1, ?, ?, ?, ?)")
+          .run(archive.path, archive.digest, archive.lastSequence, archive.eventCount);
+        if (managed) this.db.prepare("INSERT INTO managed_archives(path, digest, through_sequence, event_count) VALUES (?, ?, ?, ?)")
           .run(archive.path, archive.digest, archive.lastSequence, archive.eventCount);
         this.db.prepare("DELETE FROM main.events WHERE sequence <= ?").run(archive.lastSequence);
         if (checkpoint) this.db.prepare("INSERT OR REPLACE INTO replay_checkpoint(id, format, sequence, source_id, state, digest) VALUES (1, ?, ?, ?, ?, ?)")
@@ -326,6 +329,49 @@ export class SqliteJournal implements EventStore {
     catch (error) { vacuumed = false; maintenanceError = String(error); } // Rotation is already committed; never misreport it as rolled back.
     finally { this.setHistoryView(next); }
     return { compacted: true, archive, vacuumed, ...(maintenanceError ? { maintenanceError } : {}) };
+  }
+
+  pruneManagedArchives(directory: string, keep: number) {
+    this.assertOpen();
+    if (!Number.isSafeInteger(keep) || keep < 1 || keep > 1000) throw new Error("Geçersiz arşiv saklama sayısı");
+    if (this.activeScans) throw new Error("Journal taraması bitmeden arşiv temizlenemez");
+    const rows = this.db.prepare("SELECT * FROM managed_archives ORDER BY ordinal DESC").all() as Array<{
+      ordinal: number; path: string; digest: string; through_sequence: number; event_count: number;
+    }>;
+    const result = { removed: 0, retained: rows.length, errors: [] as string[] };
+    if (rows.length <= keep) return result;
+    const link = this.db.prepare("SELECT path, digest FROM journal_archive WHERE id = 1").get() as { path: string; digest: string } | undefined;
+    if (!link || verifyJournalArchive(link.path).digest !== link.digest) throw new Error("Güncel arşiv doğrulanmadan eski kopyalar silinemez");
+    const normalized = (path: string) => process.platform === "win32" ? resolve(path).toLowerCase() : resolve(path);
+    const root = normalized(directory);
+    if (normalized(realpathSync(directory)) !== root) throw new Error("Arşiv klasörü bağlantı üzerinden temizlenemez");
+    for (const row of rows.slice(keep)) {
+      let lock: number | undefined;
+      try {
+        if (normalized(row.path) === normalized(link.path)) continue;
+        if (normalized(dirname(row.path)) !== root) throw new Error("Arşiv yönetilen klasör dışında");
+        lock = openSync(row.path + ".lock", "wx");
+        writeFileSync(lock, JSON.stringify({ pid: process.pid, created: new Date().toISOString() }));
+        for (const suffix of ["", "-wal", "-shm"]) {
+          if (!existsSync(row.path + suffix)) continue;
+          const stat = lstatSync(row.path + suffix);
+          if (!stat.isFile() || stat.isSymbolicLink()) throw new Error("Arşiv yolu normal dosya değil");
+        }
+        // Prove the complete retired history still exists before removing any file.
+        const prefix = fingerprintEvents(this.db, row.through_sequence);
+        if (prefix.digest !== row.digest || prefix.eventCount !== row.event_count) throw new Error("Eski arşiv geçmişi güncel journal ile eşleşmiyor");
+        if (existsSync(row.path)) {
+          const verified = verifyJournalArchive(row.path);
+          if (verified.digest !== row.digest || verified.lastSequence !== row.through_sequence || verified.eventCount !== row.event_count) throw new Error("Yönetilen arşiv değiştirilmiş");
+          unlinkSync(row.path);
+        }
+        for (const suffix of ["-wal", "-shm"]) if (existsSync(row.path + suffix)) unlinkSync(row.path + suffix);
+        this.db.prepare("DELETE FROM managed_archives WHERE ordinal = ?").run(row.ordinal);
+        result.removed++; result.retained--;
+      } catch (error) { result.errors.push(String(error)); }
+      finally { if (lock !== undefined) { closeSync(lock); rmSync(row.path + ".lock", { force: true }); } }
+    }
+    return result;
   }
 
   private attachArchive(path: string, alias: "history0" | "history1") {

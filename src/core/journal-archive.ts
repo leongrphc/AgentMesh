@@ -1,10 +1,12 @@
 import { createHash } from "node:crypto";
 import { DatabaseSync } from "node:sqlite";
 
-export function fingerprintEvents(db: DatabaseSync) {
+export function fingerprintEvents(db: DatabaseSync, throughSequence?: number) {
   const hash = createHash("sha256");
   let eventCount = 0, firstSequence: number | null = null, lastSequence: number | null = null;
-  for (const row of db.prepare("SELECT sequence, id, at, project_id, payload FROM events ORDER BY sequence").iterate()) {
+  if (throughSequence !== undefined && (!Number.isSafeInteger(throughSequence) || throughSequence < 1)) throw new Error("Geçersiz arşiv sınırı");
+  for (const row of db.prepare(`SELECT sequence, id, at, project_id, payload FROM events${throughSequence === undefined ? "" : " WHERE sequence <= ?"} ORDER BY sequence`)
+    .iterate(...(throughSequence === undefined ? [] : [throughSequence]))) {
     const sequence = Number(row.sequence);
     if (!Number.isSafeInteger(sequence) || sequence < 1) throw new Error("Geçersiz arşiv olay sırası");
     firstSequence ??= sequence; lastSequence = sequence; eventCount++;

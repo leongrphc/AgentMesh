@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { mkdtempSync, mkdirSync, readdirSync, rmSync, writeFileSync, existsSync } from "node:fs";
+import { mkdtempSync, mkdirSync, readdirSync, rmSync, writeFileSync, existsSync, renameSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, dirname } from "node:path";
 import { createHash } from "node:crypto";
@@ -22,7 +22,8 @@ test("maintenance validates opt-in policy, rotates at the active threshold and p
     const config = { projectId: "p", repoPath: root, agents: [], tasks: [] };
     for (const value of [null, [], {}, { maxActiveEvents: 99 }, { maxActiveEvents: Infinity }, { maxActiveEvents: 100.1 },
       { maxActivePayloadBytes: 1023 }, { maxActivePayloadBytes: 1024 ** 4 + 1 }, { maxActiveAgeHours: 0 }, { maxActiveAgeHours: 1.5 },
-      { maxActiveAgeHours: 87601 }, { maxActiveEvents: undefined }, { ...policy, deleteHistory: true }]) {
+      { maxActiveAgeHours: 87601 }, { maxActiveEvents: undefined }, { ...policy, keepManagedArchives: 0 },
+      { keepManagedArchives: 1 }, { ...policy, deleteHistory: true }]) {
       assert.throws(() => validate({ ...config, journalMaintenance: value as never }), /journalMaintenance/);
     }
     const engine = new Orchestrator(journal); engine.createProject({ id: "p", workspaceRoot: root });
@@ -42,6 +43,92 @@ test("maintenance validates opt-in policy, rotates at the active threshold and p
     assert.equal(readdirSync(join(root, "archives")).filter(name => name.endsWith(".sqlite")).length, 2);
     assert.ok(existsSync(join(root, "archives", archive)));
     assert.equal(new Orchestrator(journal).snapshot("p").messages.length, 199);
+  } finally { journal.close(); rmSync(root, { recursive: true, force: true }); }
+});
+
+test("managed retention removes only retired owned copies, survives reopen and preserves complete replay", () => {
+  const root = mkdtempSync(join(tmpdir(), "mesh-retention-")), path = join(root, "events.sqlite"), directory = join(root, "archives");
+  let journal = new SqliteJournal(path);
+  try {
+    let engine = new Orchestrator(journal); engine.createProject({ id: "p", workspaceRoot: root });
+    const rotate = (key: string) => {
+      engine.sendMessage("p", { to: "*", kind: "progress", body: "x".repeat(2000), idempotencyKey: key });
+      const result = maintainJournal(journal, engine, path, { maxActivePayloadBytes: 1024 });
+      assert.equal(result.status, "compacted");
+      if (result.status !== "compacted") throw new Error("Expected rotation");
+      return result.archive.path;
+    };
+    const first = rotate("one");
+    const manual = join(directory, "manual-export.sqlite"); journal.archive(manual);
+    const second = rotate("two");
+    assert.ok(existsSync(first));
+    journal.close(); journal = new SqliteJournal(path); engine = new Orchestrator(journal);
+    const expected = engine.snapshot("p");
+    const pruned = maintainJournal(journal, engine, path, { maxActivePayloadBytes: 1024, keepManagedArchives: 1 });
+    assert.equal(pruned.status, "below_threshold");
+    if (pruned.status !== "below_threshold") throw new Error("Unexpected rotation");
+    assert.equal(pruned.retention?.removed, 1);
+    assert.ok(!existsSync(first)); assert.ok(existsSync(second)); assert.ok(existsSync(manual));
+    assert.deepEqual(new Orchestrator(journal).snapshot("p"), expected);
+    engine.sendMessage("p", { to: "*", kind: "progress", body: "z".repeat(2000), idempotencyKey: "three" });
+    const third = maintainJournal(journal, engine, path, { maxActivePayloadBytes: 1024, keepManagedArchives: 1 });
+    assert.equal(third.status, "compacted");
+    if (third.status !== "compacted") throw new Error("Expected rotation");
+    assert.equal(third.retention?.removed, 1);
+    assert.ok(!existsSync(second)); assert.ok(existsSync(third.archive.path)); assert.ok(existsSync(manual));
+    journal.close(); journal = new SqliteJournal(path);
+    assert.equal(new Orchestrator(journal).snapshot("p").messages.length, 3);
+  } finally { journal.close(); rmSync(root, { recursive: true, force: true }); }
+});
+
+test("retention preserves locked or modified copies and refuses to prune without a verified current archive", () => {
+  const root = mkdtempSync(join(tmpdir(), "mesh-retention-guards-")), path = join(root, "events.sqlite");
+  const journal = new SqliteJournal(path);
+  try {
+    const engine = new Orchestrator(journal); engine.createProject({ id: "p", workspaceRoot: root });
+    const paths: string[] = [];
+    for (let i = 0; i < 3; i++) {
+      engine.sendMessage("p", { to: "*", kind: "progress", body: "x".repeat(2000), idempotencyKey: String(i) });
+      const result = maintainJournal(journal, engine, path, { maxActivePayloadBytes: 1024 });
+      if (result.status !== "compacted") throw new Error("Expected rotation");
+      paths.push(result.archive.path);
+    }
+    writeFileSync(paths[0]! + ".lock", "in use");
+    const modify = (file: string) => {
+      const db = new DatabaseSync(file);
+      try { db.exec("UPDATE archive_manifest SET manifest = '{}'"); } finally { db.close(); }
+    };
+    modify(paths[1]!);
+    const result = journal.pruneManagedArchives(join(root, "archives"), 1);
+    assert.equal(result.removed, 0); assert.equal(result.errors.length, 2);
+    assert.ok(paths.every(file => existsSync(file)));
+    modify(paths[2]!);
+    assert.throws(() => journal.pruneManagedArchives(join(root, "archives"), 1), /manifesti/);
+    assert.ok(paths.every(file => existsSync(file)));
+  } finally { journal.close(); rmSync(root, { recursive: true, force: true }); }
+});
+
+test("retention rejects registered paths outside its directory without removing the file", () => {
+  const root = mkdtempSync(join(tmpdir(), "mesh-retention-scope-")), path = join(root, "events.sqlite");
+  const journal = new SqliteJournal(path);
+  try {
+    const engine = new Orchestrator(journal); engine.createProject({ id: "p", workspaceRoot: root });
+    const paths: string[] = [];
+    for (let i = 0; i < 2; i++) {
+      engine.sendMessage("p", { to: "*", kind: "progress", body: "x".repeat(2000), idempotencyKey: String(i) });
+      const result = maintainJournal(journal, engine, path, { maxActivePayloadBytes: 1024 });
+      if (result.status !== "compacted") throw new Error("Expected rotation");
+      paths.push(result.archive.path);
+    }
+    const outside = join(root, "outside.sqlite");
+    renameSync(paths[0]!, outside);
+    const db = new DatabaseSync(path);
+    try { db.prepare("UPDATE managed_archives SET path = ? WHERE path = ?").run(outside, paths[0]!); } finally { db.close(); }
+    const result = journal.pruneManagedArchives(join(root, "archives"), 1);
+    assert.equal(result.removed, 0);
+    assert.match(result.errors[0]!, /klasör dışında/);
+    assert.ok(existsSync(outside)); assert.ok(existsSync(paths[1]!));
+    assert.equal(new Orchestrator(journal).snapshot("p").messages.length, 2);
   } finally { journal.close(); rmSync(root, { recursive: true, force: true }); }
 });
 

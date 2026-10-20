@@ -53,7 +53,7 @@ Bağlı arşiv artık isteğe bağlı yedek değil, journal'ın **zorunlu parça
 
 Küçültme şemayı **v3** yapar; v2'ye kadar destekleyen eski uygulamalar bu dosyayı açamaz. Küçültülmemiş journal ve bağımsız arşivler v2 kalır. Fiziksel aktif alan VACUUM ve WAL checkpoint ile geri alınır. Çıktıda `compacted: true` aktarımın commit edildiğini, `vacuumed` alanı fiziksel bakımın da tamamlanıp tamamlanmadığını gösterir. Bakım başarısızsa `maintenanceError` döner; aktarım geri alınmış gibi raporlanmaz.
 
-Rotasyon geçmişi silmez. Arşivlerin toplam disk kullanımı azalmaz; ikinci rotasyon eski arşivi de içerdiğinden eski kopyalar ayrıca yer tutabilir. Otomatik arşiv silme yoktur. Arşiv doğrulaması açılışta bütün arşivi okur; checkpoint durum replay'ini azaltır ama bu bütünlük okumasını kaldırmaz. Mesaj üst bilgileri/görev projeksiyonlarının bellek politikası ayrı açık iştir.
+Rotasyon geçmişi silmez. İkinci rotasyon eski arşivi de içerdiğinden önceki kopyalar ayrıca yer tutabilir. Varsayılan olarak kopyalar silinmez; otomatik oluşturulan kopyalar için aşağıdaki isteğe bağlı saklama ayarı kullanılabilir. Arşiv doğrulaması açılışta bütün arşivi okur; checkpoint durum replay'ini azaltır ama bu bütünlük okumasını kaldırmaz. Mesaj üst bilgileri/görev projeksiyonlarının bellek politikası ayrı açık iştir.
 
 ## İsteğe bağlı otomatik bakım
 
@@ -79,8 +79,18 @@ En az bir eşik seçilir; seçilen eşiklerden herhangi birine ulaşılması bak
 
 Masaüstü projeyi açarken, görev çalıştırması bittiğinde, başka projeye geçerken ve kapanırken kontrol eder. CLI yalnızca `--execute` sonrasında kontrol eder; dry-run, inceleme, tanı ve açık arşiv komutları otomatik bakım başlatmaz. Çalışan görev/inbox veya bekleyen izin varsa checkpoint kapısı bakımı reddeder. Olay başına kontrol veya arka plan zamanlayıcısı yoktur; uzun bir çalıştırma boyunca eşik aşılabilir.
 
-Eşiğe ulaşılınca checkpoint oluşturulur; journal'ın yanındaki `archives` klasöründe zaman damgası ve rastgele kimlik içeren yeni bir dosyaya doğrulanmış arşiv alınır ve aktif journal küçültülür. Bu arşiv uygulamanın çalışması için zorunludur. Mevcut arşivler silinmez veya üzerine yazılmaz. Ayarı kaldırmak gelecekteki otomatik bakımı kapatır; mevcut arşiv bağlantısını kaldırmaz.
+Eşiğe ulaşılınca checkpoint oluşturulur; journal'ın yanındaki `archives` klasöründe zaman damgası ve rastgele kimlik içeren yeni bir dosyaya doğrulanmış arşiv alınır ve aktif journal küçültülür. Bu arşiv uygulamanın çalışması için zorunludur. Mevcut arşivlerin üzerine yazılmaz. Ayarı kaldırmak gelecekteki otomatik bakımı kapatır; mevcut arşiv bağlantısını kaldırmaz.
 
-Bakım hatası görev sonucunu değiştirmez. Masaüstü olay listesinde, CLI sonuç JSON'undaki `maintenance` alanında raporlanır. Doğrulanmış rotasyon sonrasında fiziksel küçültme başarısızsa bağlantı korunur ve `maintenanceError` raporlanır. Büyük geçmişlerde senkron doğrulama/kopyalama arayüzün açılışını veya kapanışını uzatabilir. Bu politika aktif dosyayı küçültür; toplam disk kotası, yaşa göre silme ve arşiv kopyası sayısı sınırı sağlamaz.
+Bakım hatası görev sonucunu değiştirmez. Masaüstü olay listesinde, CLI sonuç JSON'undaki `maintenance` alanında raporlanır. Doğrulanmış rotasyon sonrasında fiziksel küçültme başarısızsa bağlantı korunur ve `maintenanceError` raporlanır. Büyük geçmişlerde senkron doğrulama/kopyalama arayüzün açılışını veya kapanışını uzatabilir. Bu politika toplam disk kotası veya olay geçmişini yaşa göre silme sağlamaz.
+
+### Yönetilen arşiv kopyalarını sınırlama
+
+`journalMaintenance` içine `"keepManagedArchives": 3` eklemek, uygulamanın otomatik oluşturduğu en yeni üç arşiv kopyasını tutar; bağlı güncel kopya bu sayıya dahildir. Değer 1–1000 arasında tam sayı olmalıdır ve en az bir rotasyon eşiğiyle birlikte kullanılır. Varsayılan olarak bu alan yoktur ve kopyalar tutulur. Kopya temizliği, yeni rotasyon gerekmese bile aynı boşta bakım noktalarında uygulanır.
+
+Yalnızca başarılı otomatik rotasyonla birlikte bu journal'ın `managed_archives` tablosuna kaydedilmiş dosyalar temizlenebilir. Elle `--archive`/`--compact` ile üretilmiş dosyalar, bu özellikten önce oluşturulmuş kopyalar ve başarısız rotasyondan kalan kayıtsız dosyalar kapsam dışıdır. Klasördeki dosyalar ad desenine göre topluca silinmez.
+
+Silmeden önce bağlı güncel arşiv doğrulanır; eski kopyanın digest/sıra/sayı bilgisi ve bütün olaylarının güncel birleşik geçmişte aynı olduğu kontrol edilir. Bağlı dosya hiçbir zaman silinmez. Yönetilen klasör dışındaki veya bağlantı üzerinden erişilen dosyalar, kilitli ya da değiştirilmiş kopyalar korunur ve hata raporlanır. Dosya için exclusive kilit alınır; silme yalnızca o dosya ve kendi WAL/SHM yan dosyalarıyla sınırlıdır. Temizlik hatası yeni arşiv bağlantısını geri almaz; `retention.removed`, `retention.retained` ve `retention.errors` sonucu açıklamak için kullanılır. Hata halinde hedef kopya sayısı aşılabilir.
+
+Bu ayar olayları değil, aynı geçmişin artık gerekli olmayan eski kopyalarını kaldırır. Saklanacak bağımsız yedek veya başka journal için `--archive` ile ayrı kopya alın; otomatik yönetilen dosyaları başka journal'lara bağlamayın. Her yeni arşiv bütün geçmişi içerdiğinden toplam bayt kotası garanti edilmez; rotasyon sırasında yeni kopya için geçici ek disk alanı gerekir.
 
 Doğrulama: aktif dosyada olay kalmaması ve boyutun azalması; tam snapshot ve sıra eşitliği; arşivden öneri + aktif çözüm eşlemesi; iki dosyaya yayılan sayfalar; yeniden açılış/yazım/ikinci rotasyon; salt okunur arşiv; eksik/bozuk arşiv reddi; transaction hata enjeksiyonunda rollback; CLI ve masaüstünde yeni görev/ayarların korunması.
