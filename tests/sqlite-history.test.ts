@@ -91,7 +91,8 @@ test("compact execution never rebuilds history, while explicit exports restore i
     engine.resolveContext("p", compact.contextConflicts[0]!.id, 30, "accept");
     assert.equal(engine.snapshot("p", false).context.contract?.revision, 31);
     assert.equal(engine.snapshot("p", false).contextConflicts.length, 0);
-    assert.deepEqual(engine.historyCounts("p"), { resolvedDecisions: 1, contextPackages: { t: 1 } });
+    assert.equal(engine.historyCounts("p").resolvedDecisions, 1);
+    assert.deepEqual(engine.historyCounts("p").contextPackages, { t: 1 });
     assert.equal(engine.resolvedContextPage("p").entries[0]!.proposal.value, "proposal");
     assert.equal(engine.contextHistoryPage("p", "contract").entries[0]!.revision, 31);
     assert.equal(engine.contextPackagesPage("p", "t").entries[0]!.entries[0]!.revision, 30);

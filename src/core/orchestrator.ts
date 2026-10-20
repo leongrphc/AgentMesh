@@ -257,8 +257,26 @@ export class Orchestrator {
 
   historyCounts(projectId: string) {
     if (!this.projects.has(projectId)) throw new Error("Proje bulunamadı");
-    return { resolvedDecisions: this.resolvedCounts.get(projectId) ?? 0,
+    return { messages: this.messages.filter(message => message.projectId === projectId).length, messageRevision: this.lastAppliedId ?? "",
+      resolvedDecisions: this.resolvedCounts.get(projectId) ?? 0,
       contextPackages: Object.fromEntries([...this.tasks.values()].filter(task => task.projectId === projectId).map(task => [task.id, this.packageCounts.get(task.id) ?? 0])) };
+  }
+
+  messageHistoryPage(projectId: string, taskId?: string, before?: number): import("./contracts.js").HistoryPage<import("./contracts.js").MessageHistoryEntry> {
+    if (!this.projects.has(projectId)) throw new Error("Proje bulunamadı");
+    const task = taskId === undefined ? undefined : this.requireTask(taskId);
+    if (task && task.projectId !== projectId) throw new Error("Görev başka projeye ait");
+    const messages = this.messages.filter(message => message.projectId === projectId && (!task || message.taskId === task.id || message.to === task.agentId || message.to === "*"));
+    const page = historyPage(messages, before);
+    const entries = page.entries.map(message => ({ message, deliveries: [] as MessageDelivery[], deliveryCount: 0 }));
+    const selected = new Map(entries.map(entry => [entry.message.id, entry]));
+    for (const delivery of this.deliveries.values()) {
+      const entry = selected.get(delivery.messageId);
+      if (!entry || (task && delivery.taskId !== task.id) || this.tasks.get(delivery.taskId)?.projectId !== projectId) continue;
+      entry.deliveryCount++;
+      if (entry.deliveries.length < 50) entry.deliveries.push({ ...delivery });
+    }
+    return { ...page, entries };
   }
 
   resolvedContextPage(projectId: string, before?: number) {
@@ -290,8 +308,8 @@ export class Orchestrator {
       context: structuredClone(Object.fromEntries(this.facts.get(projectId) ?? [])),
       contextHistory: history?.facts ?? (includeHistory ? structuredClone(Object.fromEntries(this.factHistory.get(projectId) ?? [])) : {}),
       contextConflicts: history?.conflicts ?? structuredClone([...this.contextConflicts.get(projectId)?.values() ?? []].filter(conflict => includeHistory || conflict.status === "pending")),
-      messages: this.messages.filter((message) => message.projectId === projectId).map((x) => ({ ...x })),
-      deliveries: [...this.deliveries.values()].filter((delivery) => this.tasks.get(delivery.taskId)?.projectId === projectId).map((delivery) => ({ ...delivery })),
+      messages: includeHistory ? this.messages.filter((message) => message.projectId === projectId).map((x) => ({ ...x })) : [],
+      deliveries: includeHistory ? [...this.deliveries.values()].filter((delivery) => this.tasks.get(delivery.taskId)?.projectId === projectId).map((delivery) => ({ ...delivery })) : [],
       inboxes: [...this.tasks.values()].filter((task) => task.projectId === projectId).map((task) => {
         const relevant = this.messagesFor(task);
         let cursor = 0;

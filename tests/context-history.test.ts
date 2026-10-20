@@ -31,7 +31,8 @@ test("resolved decisions and execution packages use stable append order and comp
     assert.equal(engine.contextPackagesPage("p", "task").entries[0]!.executionId, "e45");
     assert.deepEqual(engine.snapshot("p", false).contextConflicts.map(entry => entry.id), ["c0"]);
     assert.equal(engine.snapshot("p", false).tasks[0]!.contextPackages, undefined);
-    assert.deepEqual(engine.historyCounts("p"), { resolvedDecisions: 45, contextPackages: { task: 45 } });
+    assert.equal(engine.historyCounts("p").resolvedDecisions, 45);
+    assert.deepEqual(engine.historyCounts("p").contextPackages, { task: 45 });
     append(0); // Oldest proposal is resolved last, so it must append rather than shift older pages.
     engine = new Orchestrator(journal);
     const second = engine.resolvedContextPage("p", first.nextBefore);

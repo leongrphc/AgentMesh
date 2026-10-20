@@ -5,6 +5,7 @@ const api: DesktopAPI = {
   sendMessage: (message) => ipcRenderer.invoke("mesh:send-message", message),
   resolveContext: (id, revision, choice, value) => ipcRenderer.invoke("mesh:resolve-context", id, revision, choice, value),
   contextHistory: (projectId, workspaceRoot, key, before) => ipcRenderer.invoke("mesh:context-history", projectId, workspaceRoot, key, before),
+  messageHistory: (projectId, workspaceRoot, taskId, before) => ipcRenderer.invoke("mesh:message-history", projectId, workspaceRoot, taskId, before),
   resolvedContext: (projectId, workspaceRoot, before) => ipcRenderer.invoke("mesh:resolved-context", projectId, workspaceRoot, before),
   contextPackages: (projectId, workspaceRoot, taskId, before) => ipcRenderer.invoke("mesh:context-packages", projectId, workspaceRoot, taskId, before),
   openProviderTerminal: (model) => ipcRenderer.invoke("mesh:provider-terminal", model),

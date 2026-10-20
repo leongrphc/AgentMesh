@@ -21,6 +21,14 @@ Codex köprüsü `expectedTurnId` gönderir ve yanıttaki `turnId` değerini do�
 - Oturumu korunan yeniden denemede kabul edilmiş mesaj tekrarlanmaz. Native oturumu olmayan yeni çalıştırmaya önceki bağlam yeniden sağlanır. Belirsiz teslimler açık yeniden denemede tekrar gelebilir: taşıma **exactly-once garantisi vermez**. Sabit mesaj kimliği alıcıya tekrarlı işlemi önlemesi için aktarılır.
 - Başlangıç istemi en fazla 64 mesaj / 128 KiB içerir. Mesaj gövdesi 16.384 karakterle; ajan kaynaklı canlı gönderim girişimleri çalıştırma başına 64 ile sınırlıdır. Büyük kuyruklar sonraki açık çalıştırmalara kalabilir.
 
+## Masaüstü geçmişi
+
+Mesaj geçmişi en yeni kayıttan başlayarak 20 mesajlık sayfalar halinde yüklenir. Daha eski/yeni sayfalara geçilebilir; yeni mesaj eklenmesi eski sayfaların cursor sınırını değiştirmez. Seçili görev filtresi görevin gönderdiği mesajları, ajanına gelen mesajları ve yayınları gösterir. Her okuma proje ve çalışma klasörü kapsamında doğrulanır.
+
+Durum yayınları mesaj gövdelerini ve teslim kayıtlarını taşımaz; toplam sayı ve olay revizyonu taşır. Açık geçmiş sayfası yeni olaylarda yenilenir. Her mesaj için en fazla 50 teslim kaydı gösterilir; daha fazla alıcı varsa ilgili görev filtresinden o görevin teslimi incelenebilir. Inbox sayaçları ve canlı teslim davranışı korunur.
+
+Bu sınırlar masaüstü aktarımı ve görünümü içindir. Çekirdek mesaj/teslim geçmişini hâlâ bellekte tutar; otomatik silme veya saklama süresi uygulanmaz. Testler sayfa sınırlarını, filtreleri, yeniden açılışı, checkpoint/arşiv rotasyonunu ve gönderim tekilliğini kapsar.
+
 ## Ajanların canlı notları
 
 Codex App Server tamamlanan ara assistant mesajından şu zarfı okuyabilir:

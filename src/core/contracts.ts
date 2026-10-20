@@ -81,6 +81,12 @@ export interface MessageDelivery {
   mode: "prompt" | "live";
 }
 
+export interface MessageHistoryEntry {
+  message: AgentMessage;
+  deliveries: MessageDelivery[];
+  deliveryCount: number;
+}
+
 export interface AgentExecution {
   task: AgentTask;
   workspaceRoot: string;

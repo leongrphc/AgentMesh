@@ -89,6 +89,11 @@ export class DesktopService {
     return this.engine!.contextHistoryPage(projectId, key, before);
   }
 
+  messageHistory(projectId: string, workspaceRoot: string, taskId?: string, before?: number) {
+    this.requireHistoryScope(projectId, workspaceRoot);
+    return this.engine!.messageHistoryPage(projectId, taskId, before);
+  }
+
   resolvedContext(projectId: string, workspaceRoot: string, before?: number) {
     this.requireHistoryScope(projectId, workspaceRoot);
     return this.engine!.resolvedContextPage(projectId, before);

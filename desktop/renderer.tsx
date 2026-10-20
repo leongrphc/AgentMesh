@@ -81,7 +81,7 @@ function App() {
   }
 
   if (!state) return <main className="loading"><b>AgentMesh</b><p>{error || "Çalışma alanı açılıyor…"}</p></main>;
-  const { tasks, context, messages, project } = state.snapshot;
+  const { tasks, context, project } = state.snapshot;
   const contextPending = state.snapshot.contextConflicts.filter((conflict) => conflict.status === "pending").length;
   const task = tasks.find((item) => item.id === selected) ?? tasks[0];
   const completed = tasks.filter((item) => item.status === "completed").length;
@@ -146,7 +146,7 @@ function App() {
       <Suspense fallback={<p className="empty">Terminal hazırlanıyor…</p>}><TerminalPanel key={`${project.id}:${project.workspaceRoot}`} api={api} taskId={task?.id} busy={state.busy}
         available={state.demo || !!task?.worktree && !["running", "completed"].includes(task.status)} /></Suspense>
       <section className="activity"><div className="activity-header"><div role="tablist" aria-label="Proje kayıtları">{([
-        ["events", "Canlı olaylar", state.events.length], ["context", "Ortak context", Object.keys(context).length], ["messages", "Mesajlar", messages.length],
+        ["events", "Canlı olaylar", state.events.length], ["context", "Ortak context", Object.keys(context).length], ["messages", "Mesajlar", state.historyCounts.messages],
       ] as const).map(([id, label, count]) => <button key={id} role="tab" aria-selected={tab === id} aria-controls={`panel-${id}`} id={`tab-${id}`} onClick={() => setTab(id)}>{label} <span>{count}</span></button>)}</div><label className="history-filter"><input type="checkbox" checked={selectedOnly} onChange={(event) => setSelectedOnly(event.target.checked)} />Seçili görev</label><small><span className="local-dot" /> {state.busy ? "Canlı" : "Son 200 olay"}</small></div>
         <div className="activity-body" role="tabpanel" id={`panel-${tab}`} aria-labelledby={`tab-${tab}`}>
           {tab === "events" && (state.events.length ? <div className="event-list">{[...state.events].reverse().filter((event) => !selectedOnly || event.taskId === task?.id).map((event, index) => <div className="event" key={`${event.at}-${index}`}><time>{new Date(event.at).toLocaleTimeString("tr-TR")}</time><span className="event-task">{event.taskId ?? "proje"}</span><code>{event.text}</code></div>)}</div> : <div className="empty"><b>İlk göreve hazır.</b><p>Ajanları başlattığınızda olaylar burada görünecek.</p></div>)}

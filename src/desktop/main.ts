@@ -121,7 +121,11 @@ async function createWindow() {
       })()`);
       window.webContents.debugger.attach("1.3");
       try {
-        const screenshot = await window.webContents.debugger.sendCommand("Page.captureScreenshot", { format: "png", captureBeyondViewport: true, clip: terminalBounds });
+        let captureTimeout: ReturnType<typeof setTimeout> | undefined;
+        const screenshot = await Promise.race([
+          window.webContents.debugger.sendCommand("Page.captureScreenshot", { format: "png", captureBeyondViewport: true, clip: terminalBounds }),
+          new Promise<never>((_, reject) => { captureTimeout = setTimeout(() => reject(new Error("Terminal ekran görüntüsü 15 saniyede alınamadı")), 15000); }),
+        ]).finally(() => clearTimeout(captureTimeout));
         writeFileSync(resolve("dist", "desktop-terminal.png"), Buffer.from(screenshot.data, "base64"));
       } finally { window.webContents.debugger.detach(); }
       await window.webContents.executeJavaScript(`(async () => {
@@ -155,8 +159,9 @@ async function createWindow() {
         form.requestSubmit();
         for (let i = 0; i < 100; i++) {
           const state = await window.agentmesh.state();
-          const message = state.snapshot.messages.find(m => m.body === 'SMOKE_LIVE_INBOX');
-          const accepted = message && state.snapshot.deliveries.some(d => d.messageId === message.id && d.taskId === 'plan' && d.status === 'accepted' && d.mode === 'live');
+          const page = await window.agentmesh.messageHistory(state.snapshot.project.id, state.snapshot.project.workspaceRoot, 'plan');
+          const message = page.entries.find(entry => entry.message.body === 'SMOKE_LIVE_INBOX');
+          const accepted = message && message.deliveries.some(d => d.taskId === 'plan' && d.status === 'accepted' && d.mode === 'live');
           if (accepted && document.querySelector('.message-deliveries')?.textContent.includes('Kabul edildi')) {
             document.querySelector('.messages-panel').scrollIntoView({block:'center'});
             await new Promise(resolve => { const timer = setTimeout(resolve, 500); requestAnimationFrame(() => requestAnimationFrame(() => { clearTimeout(timer); resolve(); })); });
@@ -455,6 +460,10 @@ app.whenReady().then(async () => {
   });
   handle("mesh:create-task", (task) => service.createTask(task as TaskDraft));
   handle("mesh:send-message", (message) => service.sendMessage(message as MessageDraft));
+  handle("mesh:message-history", (projectId, workspaceRoot, taskId, before) => {
+    if ([projectId, workspaceRoot].some(value => typeof value !== "string") || (taskId !== undefined && typeof taskId !== "string") || (before !== undefined && typeof before !== "number")) throw new Error("Geçersiz mesaj geçmişi isteği");
+    return service.messageHistory(projectId as string, workspaceRoot as string, taskId as string | undefined, before as number | undefined);
+  });
   handle("mesh:resolved-context", (projectId, workspaceRoot, before) => {
     if ([projectId, workspaceRoot].some(value => typeof value !== "string") || (before !== undefined && typeof before !== "number")) throw new Error("Geçersiz geçmiş isteği");
     return service.resolvedContext(projectId as string, workspaceRoot as string, before as number | undefined);

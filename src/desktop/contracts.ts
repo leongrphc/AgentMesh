@@ -22,7 +22,7 @@ export interface DesktopReview {
 }
 
 export interface DesktopState {
-  historyCounts: { resolvedDecisions: number; contextPackages: Record<string, number> };
+  historyCounts: { resolvedDecisions: number; contextPackages: Record<string, number>; messages: number; messageRevision: string };
   snapshot: ProjectSnapshot;
   busy: boolean;
   demo: boolean;
@@ -36,6 +36,7 @@ export interface DesktopState {
 }
 
 export interface DesktopAPI {
+  messageHistory(projectId: string, workspaceRoot: string, taskId?: string, before?: number): Promise<import("../core/contracts.js").HistoryPage<import("../core/contracts.js").MessageHistoryEntry>>;
   resolvedContext(projectId: string, workspaceRoot: string, before?: number): Promise<import("../core/contracts.js").HistoryPage<import("../core/contracts.js").ContextConflict>>;
   contextPackages(projectId: string, workspaceRoot: string, taskId: string, before?: number): Promise<import("../core/contracts.js").HistoryPage<import("../core/contracts.js").ContextPackage>>;
   contextHistory(projectId: string, workspaceRoot: string, key: string, before?: number): Promise<import("../core/contracts.js").ContextHistoryPage>;

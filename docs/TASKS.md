@@ -95,6 +95,7 @@ Codex, OpenCode, Claude, Antigravity ve diğer API modellerini **tek IDE içinde
   - [x] Tam journal için mevcut dosyayı ezmeyen CLI arşivleme ve salt okunur doğrulama; olay sıra/kimlik korunumu, SHA-256 manifesti, SQLite bütünlüğü ve kopyadan recovery testi. [Arşiv kapsamı](journal-archives.md).
   - [x] Açık CLI checkpoint oluşturma; checksum/olay sınırı/biçim doğrulaması, yalnızca sonraki olayları replay, geçersiz checkpoint için temiz tam replay ve olay değişiminde geçersizleştirme. Açılış config okumaları indeksli.
   - [x] Açık CLI rotasyonu: doğrulanan zorunlu salt okunur arşiv + aktif tail, atomik bağlantı/taşıma, birleşik replay/sayfalama, fiziksel küçültme ve v3 eski sürüm engeli. Hiçbir geçmiş otomatik silinmez.
+  - [x] Masaüstü mesaj geçmişinde 20 kayıtlık sayfalama, görev/proje kapsamı ve mesaj başına 50 teslim sınırı; durum yayınlarından mesaj gövdeleri/teslim dizileri çıkarıldı. Olay revizyonuyla açık sayfa yenilenir; inbox semantiği korunur. [Kapsam](messages.md).
   - [ ] Mesaj/görev geçmişlerinin bellek politikası ve otomatik saklama ayarları.
 - [ ] **CORE-012:** Güvenli log saklama/retention, hata teşhisi, oturum sağlığı ve yeniden başlatma kurtarma senaryoları.
 - [ ] **CORE-013 / Config uyumu:** Kayıtlı görev ve ajan tanımlarını açık güncelleme akışıyla uzlaştırma.
@@ -124,7 +125,7 @@ Codex, OpenCode, Claude, Antigravity ve diğer API modellerini **tek IDE içinde
 
 ## Devam ederken
 
-20 Ekim goal çalışması: UI-003 ajan ayarları, CORE-013 kalıcı ajan bağlaması ilk adımı, UI-006 test raporu/merge çözüm akışı ve CORE-009 kalıcı inbox/Codex canlı teslim eklendi. **105/105 tam süit**, TypeScript ve canlı mesaj/gerçek Git çakışma çözümünü doğrulayan Electron smoke başarılı. Gerçek model çağrısı yapılmadı. UI-007 dosya/klasör oluşturma, çoklu sekmeler, taslak kurtarma ve disk izleme eklendi. Monaco ilk yükleme optimizasyonu ve UI-007 tamamlandı. CORE-011 karar sürümleri/çakışma çözümü ve görev bazlı sınırlı context paketleri eklendi. Kalan native canlı teslim kabul işleri, OS sandbox, context geçmişi sayfalama/retention ve config revizyonları açık.
+20 Ekim goal çalışması: UI-003 ajan ayarları, CORE-013 kalıcı ajan bağlaması ilk adımı, UI-006 test raporu/merge çözüm akışı ve CORE-009 kalıcı inbox/Codex canlı teslim eklendi. **107/107 tam süit**, TypeScript ve canlı mesaj/gerçek Git çakışma çözümünü doğrulayan Electron smoke başarılı. Gerçek model çağrısı yapılmadı. UI-007 dosya/klasör oluşturma, çoklu sekmeler, taslak kurtarma ve disk izleme eklendi. Monaco ilk yükleme optimizasyonu ve UI-007 tamamlandı. CORE-011 karar sürümleri/çakışma çözümü ve görev bazlı sınırlı context paketleri eklendi. Kalan native canlı teslim kabul işleri, OS sandbox, çekirdek mesaj/görev belleği, otomatik retention ve config revizyonları açık. Masaüstü mesaj geçmişi sayfalandı; canlı teslim kayıtları talep üzerine yenileniyor.
 
 1. `D:\WebGpt` içinde `git status --short` ve `git log -5 --oneline` ile durumu kontrol et.
 2. `npm install` (gerekiyorsa), ardından `npm run typecheck` ve `npm test` çalıştır.

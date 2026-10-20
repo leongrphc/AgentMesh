@@ -1,6 +1,6 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { DesktopAPI, DesktopState } from "../src/desktop/contracts.js";
-import type { MessageDraft } from "../src/core/contracts.js";
+import type { MessageDraft, HistoryPage, MessageHistoryEntry } from "../src/core/contracts.js";
 
 const deliveryLabels = { sending: "Gönderiliyor", accepted: "Kabul edildi", queued: "Sırada", uncertain: "Teslim belirsiz" };
 
@@ -14,7 +14,6 @@ export function Messages({ state, api, taskId, selectedOnly }: {
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const submission = useRef<{ content: string; key: string }>(undefined);
-  const task = state.snapshot.tasks.find((task) => task.id === taskId);
   const inbox = state.snapshot.inboxes.find((inbox) => inbox.taskId === taskId);
   const agent = state.agents.find((agent) => agent.id === to);
   return <div className="messages-panel">
@@ -46,15 +45,43 @@ export function Messages({ state, api, taskId, selectedOnly }: {
       {notice && <p role="status">{notice}</p>}
     </form>
     {inbox && <p className="inbox-status">Seçili görev: {inbox.cursor} ardışık mesaj kabul edildi · {inbox.pending} bekleyen · {inbox.uncertain} belirsiz</p>}
-    {!state.snapshot.messages.length && <p className="empty">Ajanlar arası mesajlar burada görünecek.</p>}
-    {state.snapshot.messages.filter((message) => !selectedOnly || message.taskId === taskId
-      || (task && (message.to === task.agentId || message.to === "*"))).map((message) => {
-      const deliveries = state.snapshot.deliveries.filter((delivery) => delivery.messageId === message.id && (!selectedOnly || delivery.taskId === taskId));
-      return <article className="context-item" key={message.id}><b>{message.from === "@user" ? "Sen" : message.from} → {message.to === "*" ? "Tüm ajanlar" : message.to}</b>
-        <p>{message.body}</p><small>{message.kind} · {message.taskId === "@user" ? "Kullanıcı mesajı" : message.taskId}</small>
-        <p className="message-deliveries">{deliveries.length ? deliveries.map((delivery) =>
-          <span key={delivery.taskId}>{delivery.taskId}: {deliveryLabels[delivery.status]}{delivery.mode === "live" ? " · canlı" : " · görev istemi"}</span>) : "Teslim bekliyor"}</p>
-      </article>;
-    })}
+    <MessageHistory key={JSON.stringify([taskId, selectedOnly])} state={state} api={api} taskId={selectedOnly ? taskId : undefined} />
   </div>;
+}
+
+
+function MessageHistory({ state, api, taskId }: { state: DesktopState; api: DesktopAPI; taskId?: string }) {
+  const [page, setPage] = useState<HistoryPage<MessageHistoryEntry>>();
+  const [cursors, setCursors] = useState<number[]>([]);
+  const [refresh, setRefresh] = useState(0);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const before = cursors.at(-1);
+  const { id, workspaceRoot } = state.snapshot.project;
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true); setError("");
+    void api.messageHistory(id, workspaceRoot, taskId, before).then(result => {
+      if (!cancelled) setPage(result);
+    }, reason => { if (!cancelled) setError(String(reason)); }).finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, [id, workspaceRoot, taskId, before, refresh, state.historyCounts.messageRevision, api]);
+  return <section aria-label="Mesaj geçmişi" aria-busy={loading}>
+    <h3>Mesaj geçmişi{page ? ` · ${page.total}` : ""}</h3>
+    {loading && <p role="status">Mesajlar yükleniyor…</p>}
+    {error && <p className="file-error" role="alert">{error}</p>}
+    {page && !page.entries.length && <p className="empty">Bu kapsamda mesaj yok.</p>}
+    {page?.entries.map(({ message, deliveries, deliveryCount }) => <article className="context-item" key={message.id}>
+      <b>{message.from === "@user" ? "Sen" : message.from} → {message.to === "*" ? "Tüm ajanlar" : message.to}</b>
+      <p>{message.body}</p><small>{message.kind} · {message.taskId === "@user" ? "Kullanıcı mesajı" : message.taskId}</small>
+      <p className="message-deliveries">{deliveries.length ? deliveries.map(delivery =>
+        <span key={delivery.taskId}>{delivery.taskId}: {deliveryLabels[delivery.status]}{delivery.mode === "live" ? " · canlı" : " · görev istemi"}</span>) : "Teslim bekliyor"}</p>
+      {deliveryCount > deliveries.length && <p>{deliveryCount - deliveries.length} teslim kaydı daha var. İlgili görevi seçip Seçili görev filtresini açın.</p>}
+    </article>)}
+    <div className="context-actions">
+      <button disabled={loading || !cursors.length} onClick={() => setCursors(previous => previous.slice(0, -1))}>Daha yeni mesajlar</button>
+      <button disabled={loading || !page?.nextBefore} onClick={() => { if (page?.nextBefore) setCursors(previous => [...previous, page.nextBefore!]); }}>Daha eski mesajlar</button>
+      <button disabled={loading} onClick={() => { setCursors([]); setRefresh(value => value + 1); }}>En yeni mesajlar</button>
+    </div>
+  </section>;
 }
