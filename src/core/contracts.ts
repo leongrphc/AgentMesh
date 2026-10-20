@@ -39,6 +39,12 @@ export interface ContextHistoryPage {
   nextBefore?: number;
 }
 
+export interface HistoryPage<T> {
+  entries: T[];
+  total: number;
+  nextBefore?: number;
+}
+
 export type ContextChoice = "keep" | "accept" | "custom";
 export interface ContextConflict {
   id: string;

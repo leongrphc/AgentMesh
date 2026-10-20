@@ -3,6 +3,7 @@ import { createRoot } from "react-dom/client";
 import { TaskForm, TaskGraph } from "./task-board.js";
 import { AgentCenter } from "./agent-center.js";
 import { TestReports } from "./test-reports.js";
+import { ContextPackages } from "./context-packages.js";
 import { ContextPanel } from "./context-panel.js";
 import { MergeResolution } from "./merge-resolution.js";
 import { Messages } from "./messages.js";
@@ -132,7 +133,7 @@ function App() {
         </div><aside className="task-detail">{task && <><div className="eyebrow">SEÇİLİ GÖREV</div><h3>{task.title}</h3><code>{task.id}</code><p>{task.instruction}</p>
           <dl><dt>Ajan</dt><dd>{task.agentId}</dd><dt>Durum</dt><dd>{labels[task.status]}</dd><dt>Dosya kapsamı</dt><dd>{task.allowedPaths.join(", ") || "Demo"}</dd></dl>
           {task.summary && <div className="result"><b>Sonuç</b><p>{task.summary}</p></div>}
-          {!!task.contextPackages?.length && <details><summary>Hazırlanan context ({task.contextPackages.length})</summary><p>Her denemede ajana gönderilmek üzere hazırlanan sürümler. Bu kayıt, modelin okuduğunu doğrulamaz.</p>{task.contextPackages.map((entry) => <details key={entry.executionId}><summary>{entry.entries.length} kayıt · {entry.bytes.toLocaleString("tr-TR")} bayt · {entry.executionId.slice(0, 8)}</summary><p style={{ overflowWrap: "anywhere" }}>SHA-256: {entry.digest}</p><ul>{entry.entries.map((fact) => <li key={fact.key} style={{ overflowWrap: "anywhere" }}>{fact.key} · v{fact.revision}</li>)}</ul>{!entry.entries.length && <p>Boş context paketi.</p>}</details>)}</details>}
+          <ContextPackages key={JSON.stringify([project.id, project.workspaceRoot, task.id])} state={state} api={api} taskId={task.id} />
           {!!task.tests?.length && <TestReports reports={task.tests} stale={!!task.review && task.testDigest !== task.review.digest} />}
           {task.error && <p className="task-error">{task.error}</p>}
           {task.status === "pending_review" && <p className="review-note">Bağımlı görevler değişiklikler onaylandıktan sonra başlayabilir.</p>}

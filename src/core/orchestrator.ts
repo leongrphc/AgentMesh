@@ -28,6 +28,7 @@ import { ExecutionInbox, validateMessageDraft } from "./inbox.js";
 import { normalizeContextFacts } from "./context.js";
 import { validateContextKeys } from "./context.js";
 import { prepareContext } from "./context-package.js";
+import { historyPage } from "./history-page.js";
 
 export interface ProjectSnapshot {
   project: Project;
@@ -51,6 +52,7 @@ export class Orchestrator {
   private readonly facts = new Map<string, Map<string, Fact>>();
   private readonly factHistory = new Map<string, Map<string, Fact[]>>();
   private readonly contextConflicts = new Map<string, Map<string, ContextConflict>>();
+  private readonly resolvedContext = new Map<string, ContextConflict[]>();
   private readonly messages: AgentMessage[] = [];
   private readonly deliveries = new Map<string, MessageDelivery>();
   private readonly inboxes = new Map<string, ExecutionInbox>();
@@ -173,6 +175,23 @@ export class Orchestrator {
       ...(start > 0 ? { nextBefore: start + 1 } : {}) };
   }
 
+  historyCounts(projectId: string) {
+    if (!this.projects.has(projectId)) throw new Error("Proje bulunamadı");
+    return { resolvedDecisions: this.resolvedContext.get(projectId)?.length ?? 0,
+      contextPackages: Object.fromEntries([...this.tasks.values()].filter(task => task.projectId === projectId).map(task => [task.id, task.contextPackages?.length ?? 0])) };
+  }
+
+  resolvedContextPage(projectId: string, before?: number) {
+    if (!this.projects.has(projectId)) throw new Error("Proje bulunamadı");
+    return historyPage(this.resolvedContext.get(projectId) ?? [], before);
+  }
+
+  contextPackagesPage(projectId: string, taskId: string, before?: number) {
+    const task = this.requireTask(taskId);
+    if (task.projectId !== projectId) throw new Error("Görev başka projeye ait");
+    return historyPage(task.contextPackages ?? [], before);
+  }
+
   snapshot(projectId: string, includeHistory = true): ProjectSnapshot {
     const project = this.projects.get(projectId);
     if (!project) throw new Error(`Proje bulunamadı: ${projectId}`);
@@ -180,10 +199,14 @@ export class Orchestrator {
       project: { ...project },
       tasks: [...this.tasks.values()]
         .filter((task) => task.projectId === projectId)
-        .map((task) => structuredClone(task)),
+        .map((task) => {
+          if (includeHistory) return structuredClone(task);
+          const { contextPackages: _packages, ...current } = task;
+          return structuredClone(current);
+        }),
       context: structuredClone(Object.fromEntries(this.facts.get(projectId) ?? [])),
       contextHistory: includeHistory ? structuredClone(Object.fromEntries(this.factHistory.get(projectId) ?? [])) : {},
-      contextConflicts: structuredClone([...this.contextConflicts.get(projectId)?.values() ?? []]),
+      contextConflicts: structuredClone([...this.contextConflicts.get(projectId)?.values() ?? []].filter(conflict => includeHistory || conflict.status === "pending")),
       messages: this.messages.filter((message) => message.projectId === projectId).map((x) => ({ ...x })),
       deliveries: [...this.deliveries.values()].filter((delivery) => this.tasks.get(delivery.taskId)?.projectId === projectId).map((delivery) => ({ ...delivery })),
       inboxes: [...this.tasks.values()].filter((task) => task.projectId === projectId).map((task) => {
@@ -641,6 +664,9 @@ export class Orchestrator {
         const conflict = this.contextConflicts.get(event.projectId)!.get(event.conflictId)!;
         conflict.status = "resolved";
         conflict.resolution = { choice: event.choice, revision: event.revision, at: event.at };
+        const resolved = this.resolvedContext.get(event.projectId) ?? [];
+        resolved.push(conflict);
+        this.resolvedContext.set(event.projectId, resolved);
         break;
       }
       case "message.sent":

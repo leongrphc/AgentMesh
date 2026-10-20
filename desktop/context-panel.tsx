@@ -1,4 +1,5 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+import { PagedHistory } from "./paged-history.js";
 import type { DesktopAPI, DesktopState } from "../src/desktop/contracts.js";
 import type { ContextChoice, ContextConflict, Fact, ContextHistoryPage } from "../src/core/contracts.js";
 
@@ -66,7 +67,8 @@ function Conflict({ conflict, current, api, busy }: { conflict: ContextConflict;
 export function ContextPanel({ state, api }: { state: DesktopState; api: DesktopAPI }) {
   const { context, contextConflicts } = state.snapshot;
   const pending = contextConflicts.filter((conflict) => conflict.status === "pending");
-  const resolved = contextConflicts.filter((conflict) => conflict.status === "resolved");
+  const { id, workspaceRoot } = state.snapshot.project;
+  const loadResolved = useCallback((before?: number) => api.resolvedContext(id, workspaceRoot, before), [api, id, workspaceRoot]);
   return <div className="context-panel">
     {!!pending.length && <p role="status">{pending.length} context kararı bekliyor. Yeni görevler, kararlar çözüldükten sonra açıkça başlatılabilir.{state.busy ? " Karar vermek için çalışan görevlerin bitmesini bekleyin." : ""}</p>}
     {pending.map((conflict) => <Conflict key={conflict.id} conflict={conflict} current={context[conflict.key]!} api={api} busy={state.busy} />)}
@@ -75,11 +77,9 @@ export function ContextPanel({ state, api }: { state: DesktopState; api: Desktop
       <History fact={fact} state={state} api={api} />
     </article>)}
     {!Object.keys(context).length && <p className="empty">Ajanların paylaştığı sonuçlar burada görünecek.</p>}
-    {!!resolved.length && <details className="context-item"><summary>Çözülen kararlar · {resolved.length}</summary>
-      {resolved.map((conflict) => <article key={conflict.id}>
+    {!!state.historyCounts.resolvedDecisions && <PagedHistory title="Çözülen kararlar" total={state.historyCounts.resolvedDecisions} load={loadResolved} testId="resolved-context" render={entries => entries.map((conflict) => <article key={conflict.id}>
         <p><code>{conflict.key}</code> · {conflict.resolution?.choice === "keep" ? "Mevcut karar korundu" : conflict.resolution?.choice === "custom" ? "Kullanıcının değeri kaydedildi" : "Öneri kabul edildi"} · sürüm {conflict.resolution?.revision}</p>
         <p>Öneri: {conflict.proposal.value}</p><small>Kaynak: {conflict.proposal.sourceTaskId} · {conflict.resolution?.at}</small>
-      </article>)}
-    </details>}
+      </article>)} />}
   </div>;
 }

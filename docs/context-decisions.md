@@ -54,4 +54,9 @@ Sürüm geçmişi, ilgili anahtarın ayrıntısı açıldığında yüklenir. He
 
 Masaüstü durum yayınlarında `contextHistory` boş bırakılır; tarihçe ayrı `contextHistory(projectId, workspaceRoot, key, before?)` IPC çağrısıyla gelir. Proje veya çalışma kökü değişmişse eski pencerenin isteği reddedilir. Panel kapanır veya proje değişirse bekleyen cevabın UI'ı güncellemesi engellenir. Çekirdeğin varsayılan tam snapshot'ı ve CLI `--context` çıktısı uyumluluk için geçmişi içermeye devam eder.
 
-Bu adım sürüm geçmişinin renderer aktarımını ve listelenmesini sınırlar; journal boyutunu veya çekirdeğin replay belleğini sınırlamaz. Kabul edilmiş sürümler, görev paketlerinin anahtar/sürüm kanıtını yeniden kurabilmek için silinmez. Çözülen kararlar ve görev paketleri için sayfalama, arşivleme/retention ve diskten sorgulama sonraki işlerdir.
+Bu adım sürüm geçmişinin renderer aktarımını ve listelenmesini sınırlar; journal boyutunu veya çekirdeğin replay belleğini sınırlamaz. Kabul edilmiş sürümler, görev paketlerinin anahtar/sürüm kanıtını yeniden kurabilmek için silinmez. Arşivleme/retention ve diskten sorgulama sonraki işlerdir.
+
+
+**Çözülen kararlar** ve görev detayındaki **Hazırlanan context** de açıldığında en fazla 20 kayıt yükler. Kararlar önerinin oluşturulma zamanına göre değil, çözüm olayının journal sırasına göre listelenir. Bu nedenle eskiden bekleyen bir önerinin bugün çözülmesi eski sayfalarda atlama oluşturmaz. Paketler görevin çalıştırma denemelerinin sırasını kullanır. Her ikisinde yeni kayıtlar üstte, cursor dışlayan sıra numarasıdır; sayfa cevapları bağımsız kopyalardır.
+
+Masaüstü kompakt snapshot'ında yalnızca bekleyen context çatışmaları kalır; görevlerin `contextPackages` dizileri taşınmaz. `historyCounts` ayrı sayıları sağlar. `resolvedContext` ve `contextPackages` okuma çağrıları proje/çalışma kökü kapsamını doğrular; paket okuması ayrıca görevin aynı projede olmasını gerektirir. CLI ve çekirdeğin varsayılan tam snapshot'ı değişmez. Bu sayfalama kayıt silmez, kayıt sayısı sınırı uygular; tüm proje verileri için sabit toplam byte veya bellek sınırı sağlamaz.

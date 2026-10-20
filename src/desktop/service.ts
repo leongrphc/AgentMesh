@@ -75,7 +75,7 @@ export class DesktopService {
   state(): DesktopState {
     if (!this.engine || !this.config) throw new Error("Önce proje açın");
     const snapshot = this.engine.snapshot(this.config.projectId, false);
-    return structuredClone({ snapshot, busy: !!this.running,
+    return structuredClone({ snapshot, historyCounts: this.engine.historyCounts(this.config.projectId), busy: !!this.running,
       demo: this.demo, agents: this.config.agents.map((agent) => ({ ...agent,
         liveMessages: this.demo || (agent.provider === "codex" && agent.transport === "app-server"),
         interactivePermissions: this.demo || (agent.provider === "codex" && agent.transport === "app-server") || (agent.provider === "opencode" && agent.transport === "server") })),
@@ -85,9 +85,23 @@ export class DesktopService {
   }
 
   contextHistory(projectId: string, workspaceRoot: string, key: string, before?: number) {
+    this.requireHistoryScope(projectId, workspaceRoot);
+    return this.engine!.contextHistoryPage(projectId, key, before);
+  }
+
+  resolvedContext(projectId: string, workspaceRoot: string, before?: number) {
+    this.requireHistoryScope(projectId, workspaceRoot);
+    return this.engine!.resolvedContextPage(projectId, before);
+  }
+
+  contextPackages(projectId: string, workspaceRoot: string, taskId: string, before?: number) {
+    this.requireHistoryScope(projectId, workspaceRoot);
+    return this.engine!.contextPackagesPage(projectId, taskId, before);
+  }
+
+  private requireHistoryScope(projectId: string, workspaceRoot: string) {
     if (!this.engine || !this.config || projectId !== this.config.projectId
       || workspaceRoot !== this.engine.snapshot(projectId, false).project.workspaceRoot) throw new Error("Proje değişti; context geçmişini yeniden açın");
-    return this.engine.contextHistoryPage(projectId, key, before);
   }
 
   openDemo(): DesktopState {

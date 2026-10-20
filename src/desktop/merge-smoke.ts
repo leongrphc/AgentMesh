@@ -158,5 +158,15 @@ export async function mergeSmoke(window: BrowserWindow, service: DesktopService)
     throw new Error('Context geçmişi IPC üzerinden yüklenmedi');
   })()`);
   console.log("Context smoke başarılı: karşılaştırma, başlatma engeli ve sürüm bağlı kullanıcı kararı doğrulandı");
+  await window.webContents.executeJavaScript(`(async () => {
+    const history = document.querySelector('[data-testid="resolved-context"]');
+    if (!history) throw new Error('Çözülen karar geçmişi bulunamadı');
+    history.open = true;
+    for (let i = 0; i < 100; i++) {
+      if (history.textContent.includes('Öneri kabul edildi') && history.textContent.includes('Öneri: second')) return;
+      await new Promise(resolve => setTimeout(resolve, 50));
+    }
+    throw new Error('Çözülen karar IPC üzerinden yüklenmedi');
+  })()`);
   console.log("Merge smoke başarılı: gerçek Git çakışması, renderer çözümü, IPC kaydı ve digest onayı doğrulandı");
 }

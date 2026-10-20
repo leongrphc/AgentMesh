@@ -218,7 +218,8 @@ async function createWindow() {
         } }, 50);
       })`);
       const root = resolve("dist");
-      const prepared = service.state().snapshot.tasks.find((task) => task.id === "smoke-followup")?.contextPackages?.[0];
+      const scope = service.state().snapshot.project;
+      const prepared = service.contextPackages(scope.id, scope.workspaceRoot, "smoke-followup").entries[0];
       if (!prepared || prepared.entries.some((entry) => !entry.key.startsWith("task.")) || !prepared.entries.some((entry) => entry.key === "task.review.summary")) throw new Error("Context paketi bağımlılık seçimi yanlış");
       const previousTitle = await window.webContents.executeJavaScript(`document.querySelector('.task-row.selected .task-title strong').textContent`);
       await window.webContents.executeJavaScript(`([...document.querySelectorAll('.task-row')].find(node => node.textContent.includes('Demo sonuçlarını doğrula'))).click()`);
@@ -228,10 +229,12 @@ async function createWindow() {
           clearInterval(check); clearTimeout(timeout); resolve(true);
         } }, 50);
       })`);
-      await window.webContents.executeJavaScript(`(() => {
+      await window.webContents.executeJavaScript(`(async () => {
         const audit = [...document.querySelectorAll('.task-detail > details')].find(node => node.textContent.includes('Hazırlanan context'));
-        if (!audit || !audit.textContent.includes('SHA-256:') || !audit.textContent.includes('task.review.summary')) throw new Error('Context sürümleri gösterilmedi');
+        if (!audit) throw new Error('Context geçmişi bulunamadı');
         audit.open = true;
+        for (let i = 0; i < 100 && !audit.textContent.includes('SHA-256:'); i++) await new Promise(resolve => setTimeout(resolve, 50));
+        if (!audit.textContent.includes('SHA-256:') || !audit.textContent.includes('task.review.summary')) throw new Error('Context sürümleri gösterilmedi');
         audit.querySelectorAll('details').forEach(node => { node.open = true; });
         audit.scrollIntoView({ block: 'center' });
       })()`);
@@ -452,6 +455,14 @@ app.whenReady().then(async () => {
   });
   handle("mesh:create-task", (task) => service.createTask(task as TaskDraft));
   handle("mesh:send-message", (message) => service.sendMessage(message as MessageDraft));
+  handle("mesh:resolved-context", (projectId, workspaceRoot, before) => {
+    if ([projectId, workspaceRoot].some(value => typeof value !== "string") || (before !== undefined && typeof before !== "number")) throw new Error("Geçersiz geçmiş isteği");
+    return service.resolvedContext(projectId as string, workspaceRoot as string, before as number | undefined);
+  });
+  handle("mesh:context-packages", (projectId, workspaceRoot, taskId, before) => {
+    if ([projectId, workspaceRoot, taskId].some(value => typeof value !== "string") || (before !== undefined && typeof before !== "number")) throw new Error("Geçersiz geçmiş isteği");
+    return service.contextPackages(projectId as string, workspaceRoot as string, taskId as string, before as number | undefined);
+  });
   handle("mesh:context-history", (projectId, workspaceRoot, key, before) => {
     if ([projectId, workspaceRoot, key].some(value => typeof value !== "string") || (before !== undefined && typeof before !== "number")) throw new Error("Geçersiz context geçmişi isteği");
     return service.contextHistory(projectId as string, workspaceRoot as string, key as string, before as number | undefined);
