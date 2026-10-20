@@ -85,6 +85,17 @@ export class SqliteJournal implements EventStore {
     return (this.db.prepare("SELECT COUNT(*) AS count FROM main.events").get() as { count: number }).count;
   }
 
+  activeStorageStats(includePayloadBytes: boolean, includeAge: boolean): {
+    activeEvents: number; payloadBytes?: number; oldestEventAtMs?: number | null; invalidEventTimes?: number;
+  } {
+    this.assertOpen();
+    // Payload bytes are UTF-8 event JSON only, not SQLite pages, indexes, WAL or linked archives.
+    return this.db.prepare(`SELECT COUNT(*) AS activeEvents
+      ${includePayloadBytes ? ", COALESCE(SUM(length(CAST(payload AS BLOB))), 0) AS payloadBytes" : ""}
+      ${includeAge ? ", MIN(unixepoch(at, 'subsec')) * 1000 AS oldestEventAtMs, COALESCE(SUM(unixepoch(at, 'subsec') IS NULL), 0) AS invalidEventTimes" : ""}
+      FROM main.events`).get() as { activeEvents: number; payloadBytes?: number; oldestEventAtMs?: number | null; invalidEventTimes?: number };
+  }
+
   readEvent(id: string): StoredEvent | undefined {
     this.assertOpen();
     const row = this.db.prepare("SELECT id, at, payload FROM events WHERE id = ?").get(id);

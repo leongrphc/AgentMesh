@@ -36,7 +36,7 @@ Durum sürümü, SHA-256, son sıra numarası ve kaynak olay kimliği doğrulan�
 
 Checkpoint tablo/indeksleri türetilmiş verilerdir; küçültülmemiş journal şeması v2 kalır. Arşivler sadece kaynak olayları ve arşiv manifestini taşır; checkpoint arşive kopyalanmaz. Böylece kurtarma checkpoint'e bağımlı değildir. Ajan ayarları son kayıt sorgusuyla, başka proje görev kimlikleri de indeksli kimlik sorgusuyla alınır; checkpoint kazanımını geri alan tam açılış taraması yapılmaz.
 
-Checkpoint'in boyutu görev, güncel context, bekleyen öneri, mesaj üst bilgileri ve devam eden gönderimlerin sayısına bağlıdır. SQLite mesaj gövdeleri yerine kaynak olay kimlikleri saklanır; geçmiş facts/paket/çözülmüş öneri içerikleri dahil edilmez. Projeksiyon sürüm 3'dir; eski projeksiyon sürümü tam replay ile yeniden kurulur. Tam dışa aktarım ve tanı raporu yine gerektiğinde journal'ı tarar. Küçültme ve birleşik okuma aşağıdaki --compact akışında uygulanır; otomatik zaman/boyut politikası henüz yoktur.
+Checkpoint'in boyutu görev, güncel context, bekleyen öneri, mesaj üst bilgileri ve devam eden gönderimlerin sayısına bağlıdır. SQLite mesaj gövdeleri yerine kaynak olay kimlikleri saklanır; geçmiş facts/paket/çözülmüş öneri içerikleri dahil edilmez. Projeksiyon sürüm 3'tür; eski projeksiyon sürümü tam replay ile yeniden kurulur. Tam dışa aktarım ve tanı raporu yine gerektiğinde journal'ı tarar. Küçültme ve birleşik okuma aşağıdaki --compact akışında uygulanır; isteğe bağlı otomatik bakım eşikleri aşağıda açıklanır.
 
 
 ## Aktif journal'ı küçültme
@@ -53,17 +53,31 @@ Bağlı arşiv artık isteğe bağlı yedek değil, journal'ın **zorunlu parça
 
 Küçültme şemayı **v3** yapar; v2'ye kadar destekleyen eski uygulamalar bu dosyayı açamaz. Küçültülmemiş journal ve bağımsız arşivler v2 kalır. Fiziksel aktif alan VACUUM ve WAL checkpoint ile geri alınır. Çıktıda `compacted: true` aktarımın commit edildiğini, `vacuumed` alanı fiziksel bakımın da tamamlanıp tamamlanmadığını gösterir. Bakım başarısızsa `maintenanceError` döner; aktarım geri alınmış gibi raporlanmaz.
 
-Rotasyon geçmişi silmez. Arşivlerin toplam disk kullanımı azalmaz; ikinci rotasyon eski arşivi de içerdiğinden eski kopyalar ayrıca yer tutabilir. Otomatik yaş/boyut eşiği ve arşiv silme yoktur. Arşiv doğrulaması açılışta bütün arşivi okur; checkpoint durum replay'ini azaltır ama bu bütünlük okumasını kaldırmaz. Mesaj üst bilgileri/görev projeksiyonlarının bellek politikası ayrı açık iştir.
+Rotasyon geçmişi silmez. Arşivlerin toplam disk kullanımı azalmaz; ikinci rotasyon eski arşivi de içerdiğinden eski kopyalar ayrıca yer tutabilir. Otomatik arşiv silme yoktur. Arşiv doğrulaması açılışta bütün arşivi okur; checkpoint durum replay'ini azaltır ama bu bütünlük okumasını kaldırmaz. Mesaj üst bilgileri/görev projeksiyonlarının bellek politikası ayrı açık iştir.
 
 ## İsteğe bağlı otomatik bakım
 
 Config dosyasına şu alan eklenebilir; varsayılan olarak otomatik bakım kapalıdır:
 
 ```json
-"journalMaintenance": { "maxActiveEvents": 50000 }
+"journalMaintenance": {
+  "maxActiveEvents": 50000,
+  "maxActivePayloadBytes": 67108864,
+  "maxActiveAgeHours": 168
+}
 ```
 
-Eşik 100–10.000.000 arasında bir tam sayıdır ve yalnızca aktif journal'daki olay sayısına uygulanır. Arşivdeki geçmiş eşiğe dahil edilmez. Masaüstü projeyi açarken, görev çalıştırması bittiğinde, başka projeye geçerken ve kapanırken kontrol eder. CLI yalnızca `--execute` sonrasında kontrol eder; dry-run, inceleme, tanı ve açık arşiv komutları otomatik bakım başlatmaz. Çalışan görev/inbox veya bekleyen izin varsa checkpoint kapısı bakımı reddeder. Olay başına kontrol veya arka plan zamanlayıcısı yoktur; uzun bir çalıştırma boyunca eşik aşılabilir.
+En az bir eşik seçilir; seçilen eşiklerden herhangi birine ulaşılması bakımı tetikler. Boş aktif journal tekrar arşivlenmez; bağlı arşivdeki geçmiş ölçümlere dahil edilmez.
+
+| Ayar | Ölçüm | Geçerli tam sayı aralığı |
+| --- | --- | --- |
+| `maxActiveEvents` | Aktif olay sayısı | 100–10.000.000 |
+| `maxActivePayloadBytes` | Aktif olay JSON içeriklerinin UTF-8 bayt toplamı | 1.024–1.099.511.627.776 |
+| `maxActiveAgeHours` | Aktif olaylar arasındaki en eski kayıt zamanından geçen saat | 1–87.600 |
+
+İçerik boyutuna SQLite indeksleri, checkpoint, boş sayfalar, WAL ve arşivler dahil değildir; bu bir fiziksel disk kotası değildir. Yaş kontrolü journal olay zamanını kullanır, mesajın içerdiği tarihi kullanmaz. Gelecekteki zaman damgası henüz yaş eşiğine ulaşmış sayılmaz; geçersiz zaman damgası varsa yaş politikası hata verir. Sayı politikası tek başına kullanılıyorsa içerik boyutu veya yaş taraması yapılmaz. CLI bakım sonucunun `reasons` alanı tetiklenen eşikleri gösterir.
+
+Masaüstü projeyi açarken, görev çalıştırması bittiğinde, başka projeye geçerken ve kapanırken kontrol eder. CLI yalnızca `--execute` sonrasında kontrol eder; dry-run, inceleme, tanı ve açık arşiv komutları otomatik bakım başlatmaz. Çalışan görev/inbox veya bekleyen izin varsa checkpoint kapısı bakımı reddeder. Olay başına kontrol veya arka plan zamanlayıcısı yoktur; uzun bir çalıştırma boyunca eşik aşılabilir.
 
 Eşiğe ulaşılınca checkpoint oluşturulur; journal'ın yanındaki `archives` klasöründe zaman damgası ve rastgele kimlik içeren yeni bir dosyaya doğrulanmış arşiv alınır ve aktif journal küçültülür. Bu arşiv uygulamanın çalışması için zorunludur. Mevcut arşivler silinmez veya üzerine yazılmaz. Ayarı kaldırmak gelecekteki otomatik bakımı kapatır; mevcut arşiv bağlantısını kaldırmaz.
 
