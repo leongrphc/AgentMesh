@@ -132,6 +132,7 @@ function App() {
         </div><aside className="task-detail">{task && <><div className="eyebrow">SEÇİLİ GÖREV</div><h3>{task.title}</h3><code>{task.id}</code><p>{task.instruction}</p>
           <dl><dt>Ajan</dt><dd>{task.agentId}</dd><dt>Durum</dt><dd>{labels[task.status]}</dd><dt>Dosya kapsamı</dt><dd>{task.allowedPaths.join(", ") || "Demo"}</dd></dl>
           {task.summary && <div className="result"><b>Sonuç</b><p>{task.summary}</p></div>}
+          {!!task.contextPackages?.length && <details><summary>Hazırlanan context ({task.contextPackages.length})</summary><p>Her denemede ajana gönderilmek üzere hazırlanan sürümler. Bu kayıt, modelin okuduğunu doğrulamaz.</p>{task.contextPackages.map((entry) => <details key={entry.executionId}><summary>{entry.entries.length} kayıt · {entry.bytes.toLocaleString("tr-TR")} bayt · {entry.executionId.slice(0, 8)}</summary><p style={{ overflowWrap: "anywhere" }}>SHA-256: {entry.digest}</p><ul>{entry.entries.map((fact) => <li key={fact.key} style={{ overflowWrap: "anywhere" }}>{fact.key} · v{fact.revision}</li>)}</ul>{!entry.entries.length && <p>Boş context paketi.</p>}</details>)}</details>}
           {!!task.tests?.length && <TestReports reports={task.tests} stale={!!task.review && task.testDigest !== task.review.digest} />}
           {task.error && <p className="task-error">{task.error}</p>}
           {task.status === "pending_review" && <p className="review-note">Bağımlı görevler değişiklikler onaylandıktan sonra başlayabilir.</p>}

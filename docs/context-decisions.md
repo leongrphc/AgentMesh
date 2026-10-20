@@ -29,4 +29,21 @@ SQLite `user_version=2`, yeni olay semantiğini tanımayan eski uygulamaların b
 
 Testler: paralel öneriler, yeni görev dalgasının beklemesi, açık tekrar başlatma, stale sürüm, keep/accept/custom, proje kapsamı, snapshot'ın dışarıdan değiştirilememesi, eski journal replay, SQLite v1→v2 geçişi, gelecek sürüm reddi, gerçek Git digest onayı ve CLI çözümü. Electron smoke karşılaştırma ekranını, bekleyen bağımlı görev için Başlat engelini ve kullanıcı kararından sonraki sürümü doğrular.
 
-Açık kapsam: görevle ilgili anahtarları seçen sınırlı context paketleri, tüketilen sürümlerin görev bazında kaydı ve büyük geçmişler için sayfalama/retention. Mevcut istem yalnızca kabul edilmiş güncel değerleri ve sürümlerini içerir; geçmiş veya bekleyen öneri otomatik isteme eklenmez.
+## Görev context paketleri
+
+Görev tanımındaki isteğe bağlı `contextKeys` ve Yeni görev formundaki context kapsamı aynı politikayı kullanır:
+
+- Alan yoksa tüm kabul edilmiş proje kararları seçilir. İlgisiz görev özetleri eklenmez.
+- `contextKeys: ["api.contract"]` yalnızca tam eşleşen anahtarları seçer.
+- `contextKeys: []` ek karar seçmez.
+- Her durumda doğrudan ve dolaylı bağımlılıkların mevcut özetleri eklenir. Gelecekte üretilecek anahtar için üretici görevi bağımlılıklara ekleyin.
+
+Seçilen anahtar çalıştırma anında yoksa görev model çağrısından ve worktree oluşturmadan önce başarısız olur. Paket en fazla 128 kayıt ve UTF-8 JSON olarak 256 KiB olabilir; sessiz kırpma yapılmaz. Kapsamı daraltın; yalnızca bağımlılık özetleri bile sınırı aşıyorsa görev zincirini bölün. Bunlar byte/kayıt sınırlarıdır, sağlayıcı token limiti değildir. Kaydedilmiş görevin seçim politikasını değiştirmek config drift sayılır; yeni görev kimliği kullanın.
+
+`task.context.prepared` her deneme için executionId, politika sürümü, SHA-256, byte sayısı ve anahtar/sürüm listesini saklar. Değerler yeniden kopyalanmaz; `contextHistory` ile eşleştirilebilir. Görev detayındaki **Hazırlanan context** ve CLI görev raporundaki `contextPackages` bu kayıtları gösterir. Yeniden denemeler ayrı kayıt üretir; eski görevlerde geriye dönük kanıt üretilmez. Bu olay adaptöre gönderilmek üzere hazırlanan girdiyi belgeler, sağlayıcının kabul ettiğini veya modelin okuduğunu kanıtlamaz; hazırlık sonrası iptal/hata olabilir.
+
+Seçim yalnızca yeni context paketini sınırlar. Devam ettirilen native oturum önceki girdileri hatırlayabilir; görev talimatı, inbox mesajları ve çalışma dosyaları ayrı girdilerdir. Bu özellik veri erişimi izolasyonu sağlamaz. Geçmiş ve bekleyen öneriler otomatik pakete eklenmez. Eski sürüm uygulamalar yeni seçim politikasını uygulamaz; bu özellik için güncel uygulama kullanılmalıdır.
+
+Doğrulama: deterministik seçim/hash, dolaylı bağımlılıklar, açık/boş seçim, eksik anahtar, UTF-8 boyut/kayıt sınırları, config drift, mutable girdi, tekrar deneme ve journal replay testleri. Electron smoke form → IPC → görev → bağımlılık paketi ve sürüm detayını doğrular; gerçek model çağırmaz.
+
+Açık kapsam: büyük geçmişler için sayfalama/retention ve anahtar bazında çakışma etki analizi.

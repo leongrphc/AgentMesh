@@ -1,4 +1,5 @@
 import type { AgentTask } from "./contracts.js";
+import { validateContextKeys } from "./context.js";
 
 export interface Config {
   projectId: string;
@@ -46,6 +47,7 @@ export function validate(config: Config): void {
       throw new Error(`Geçersiz görev: ${task?.id}`);
     }
     seen.add(task.id);
+    validateContextKeys(task.contextKeys);
   }
   for (const task of config.tasks) {
     if (task.dependsOn.some((id) => !seen.has(id))) throw new Error(`Bulunmayan görev bağımlılığı: ${task.id}`);
@@ -60,7 +62,7 @@ export function reconcileTasks(config: Config, existing: readonly AgentTask[], r
   for (const task of existing) {
     if (!agents.has(task.agentId)) throw new Error(`Config uyumsuzluğu: ${task.id} görevinin ${task.agentId} ajanı eksik. Ajan eşlemesini geri ekleyin.`);
   }
-  const fields = ["title", "instruction", "agentId", "dependsOn", "allowedPaths"] as const;
+  const fields = ["title", "instruction", "agentId", "dependsOn", "allowedPaths", "contextKeys"] as const;
   const value = (task: AgentTask, field: typeof fields[number]) => {
     const input = task[field];
     return Array.isArray(input) ? JSON.stringify([...new Set(input)].sort()) : input;

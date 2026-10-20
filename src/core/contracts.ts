@@ -21,6 +21,8 @@ export interface AgentTask {
   dependsOn: string[];
   /** Daha sonra worktree/izin sınırlarına bağlanacak dosya yolları. */
   allowedPaths: string[];
+  /** Undefined selects all project decisions; an array selects exact additional keys. Dependency summaries remain included. */
+  contextKeys?: string[];
 }
 
 export interface Fact {
@@ -122,6 +124,7 @@ export interface Project {
 }
 
 export interface TaskRecord extends AgentTask {
+  contextPackages?: ContextPackage[];
   status: TaskStatus;
   summary?: string;
   error?: string;
@@ -134,6 +137,14 @@ export interface TaskRecord extends AgentTask {
   testDigest?: string;
 }
 
+export interface ContextPackage {
+  policyVersion: 1;
+  executionId: string;
+  digest: string;
+  bytes: number;
+  entries: Array<{ key: string; revision: number }>;
+}
+
 export type DomainEvent =
   | { type: "project.created"; project: Project }
   | { type: "project.agents.configured"; projectId: string; agents: AgentConfig[]; sourceAgents: AgentConfig[] }
@@ -143,6 +154,7 @@ export type DomainEvent =
   | { type: "permission.resolved"; projectId: string; taskId: string; executionId: string; requestId: string; decision: PermissionDecision; source: PermissionSource }
   | { type: "task.created"; task: AgentTask }
   | { type: "task.started"; projectId: string; taskId: string }
+  | { type: "task.context.prepared"; projectId: string; taskId: string; package: ContextPackage }
   | { type: "task.completed"; projectId: string; taskId: string; summary: string; tests?: TestReport[] }
   | { type: "task.failed"; projectId: string; taskId: string; error: string }
   | { type: "task.blocked"; projectId: string; taskId: string }

@@ -185,6 +185,16 @@ async function createWindow() {
         } }, 50);
       })`);
       await window.webContents.executeJavaScript(`(() => {
+        const mode = document.querySelector('[name="contextMode"]');
+        mode.value = 'selected'; mode.dispatchEvent(new Event('change', { bubbles: true }));
+      })()`);
+      await window.webContents.executeJavaScript(`new Promise((resolve, reject) => {
+        const timeout = setTimeout(() => reject(new Error('Context seçimi açılmadı')), 5000);
+        const check = setInterval(() => { if (document.querySelector('[name="contextKeys"]')) {
+          clearInterval(check); clearTimeout(timeout); resolve(true);
+        } }, 50);
+      })`);
+      await window.webContents.executeJavaScript(`(() => {
         const form = document.querySelector('.task-form form');
         form.querySelector('[name="id"]').value = 'smoke-followup';
         form.querySelector('[name="title"]').value = 'Demo sonuçlarını doğrula';
@@ -199,6 +209,7 @@ async function createWindow() {
         } }, 50);
       })`);
       if (!service.state().snapshot.tasks.some((task) => task.id === "smoke-followup" && task.dependsOn.includes("review"))) throw new Error("Görev bağımlılığı kaydedilmedi");
+      if (service.state().snapshot.tasks.find((task) => task.id === "smoke-followup")?.contextKeys?.length !== 0) throw new Error("Boş context seçimi kaydedilmedi");
       await window.webContents.executeJavaScript(`document.querySelector('[data-testid="start"]').click()`);
       await window.webContents.executeJavaScript(`new Promise((resolve, reject) => {
         const timeout = setTimeout(() => reject(new Error('Yeni görev tamamlanmadı')), 10000);
@@ -207,6 +218,28 @@ async function createWindow() {
         } }, 50);
       })`);
       const root = resolve("dist");
+      const prepared = service.state().snapshot.tasks.find((task) => task.id === "smoke-followup")?.contextPackages?.[0];
+      if (!prepared || prepared.entries.some((entry) => !entry.key.startsWith("task.")) || !prepared.entries.some((entry) => entry.key === "task.review.summary")) throw new Error("Context paketi bağımlılık seçimi yanlış");
+      const previousTitle = await window.webContents.executeJavaScript(`document.querySelector('.task-row.selected .task-title strong').textContent`);
+      await window.webContents.executeJavaScript(`([...document.querySelectorAll('.task-row')].find(node => node.textContent.includes('Demo sonuçlarını doğrula'))).click()`);
+      await window.webContents.executeJavaScript(`new Promise((resolve, reject) => {
+        const timeout = setTimeout(() => reject(new Error('Context görev detayı açılmadı')), 5000);
+        const check = setInterval(() => { if (document.querySelector('.task-detail > code')?.textContent === 'smoke-followup') {
+          clearInterval(check); clearTimeout(timeout); resolve(true);
+        } }, 50);
+      })`);
+      await window.webContents.executeJavaScript(`(() => {
+        const audit = [...document.querySelectorAll('.task-detail > details')].find(node => node.textContent.includes('Hazırlanan context'));
+        if (!audit || !audit.textContent.includes('SHA-256:') || !audit.textContent.includes('task.review.summary')) throw new Error('Context sürümleri gösterilmedi');
+        audit.open = true;
+        audit.querySelectorAll('details').forEach(node => { node.open = true; });
+        audit.scrollIntoView({ block: 'center' });
+      })()`);
+      mkdirSync(root, { recursive: true });
+      await new Promise((resolve) => setTimeout(resolve, 250));
+      writeFileSync(join(root, "desktop-context-package.png"), (await window.capturePage()).toPNG());
+      await window.webContents.executeJavaScript(`([...document.querySelectorAll('.task-row')].find(node => node.querySelector('.task-title strong').textContent === ${JSON.stringify(previousTitle)})).click()`);
+      await window.webContents.executeJavaScript(`new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))`);
       await window.webContents.executeJavaScript(`(() => {
         const reports = document.querySelector('.task-detail .test-reports');
         if (!reports?.textContent.includes('Çalıştırılmadı') || !reports.textContent.includes('bağımsız olarak çalıştırmadı')) {

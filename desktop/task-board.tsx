@@ -8,6 +8,7 @@ export function TaskForm({ state, onClose, onCreate }: {
   const dialog = useRef<HTMLDialogElement>(null);
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
+  const [contextMode, setContextMode] = useState("all");
   useEffect(() => { dialog.current?.showModal(); }, []);
   return <dialog className="task-form review-dialog" ref={dialog} onCancel={(event) => { if (saving) event.preventDefault(); else onClose(); }} aria-labelledby="new-task-title">
     <div className="review-header"><div><div className="eyebrow">GÖREV PLANLAMA</div><h2 id="new-task-title">Yeni görev</h2></div><button disabled={saving} aria-label="Görev formunu kapat" onClick={onClose}>×</button></div>
@@ -19,6 +20,7 @@ export function TaskForm({ state, onClose, onCreate }: {
         await onCreate({ id: String(values.get("id")).trim(), title: String(values.get("title")).trim(),
           instruction: String(values.get("instruction")).trim(), agentId: String(values.get("agentId")),
           dependsOn: values.getAll("dependsOn").map(String),
+          ...(contextMode === "selected" ? { contextKeys: String(values.get("contextKeys") ?? "").split(/\r?\n/).map((line) => line.trim()).filter(Boolean) } : {}),
           allowedPaths: String(values.get("allowedPaths")).split(/\r?\n/).map((line) => line.trim()).filter(Boolean) });
         onClose();
       } catch (e) { setError(e instanceof Error ? e.message : String(e)); }
@@ -29,6 +31,9 @@ export function TaskForm({ state, onClose, onCreate }: {
       <label>Başlık<input name="title" required maxLength={200} placeholder="Giriş servisini geliştir" /></label>
       <label>Talimat<textarea name="instruction" required rows={4} maxLength={16000} placeholder="Beklenen davranışı ve kabul kriterlerini yazın." /></label>
       <label>İzinli dosya desenleri<textarea name="allowedPaths" required rows={2} defaultValue={"src/**"} /></label><p className="form-help">Her satıra bir desen. Dosya değişiklikleri görev sonunda bu kapsamla denetlenir.</p>
+      <label>Ortak context kapsamı<select name="contextMode" value={contextMode} onChange={(event) => setContextMode(event.target.value)}><option value="all">Tüm proje kararları</option><option value="selected">Seçtiğim anahtarlar</option></select></label>
+      {contextMode === "selected" && <label>Context anahtarları<textarea name="contextKeys" rows={2} placeholder="api.contract" /><span className="form-help">Her satıra tam bir anahtar yazın. Boş bırakırsanız yalnızca bağımlı görevlerin özetleri eklenir.</span></label>}
+      <p className="form-help">Önceki bağımlılıkların özetleri her zaman eklenir. Seçilen anahtarlar görev başladığında mevcut olmalıdır.</p>
       <fieldset><legend>Önce tamamlanması gereken görevler</legend><div className="dependency-options">{state.snapshot.tasks.map((task) => <label key={task.id}><input type="checkbox" name="dependsOn" value={task.id} /><span>{task.title}<small>{task.id}</small></span></label>)}</div>{!state.snapshot.tasks.length && <p className="form-help">İlk görev bağımsız başlayacak.</p>}</fieldset>
     </div><div className="review-actions"><button type="button" disabled={saving} onClick={onClose}>Vazgeç</button><button className="primary" disabled={saving || !state.agents.length}>{saving ? "Ekleniyor…" : "Görevi ekle"}</button></div></form>
   </dialog>;

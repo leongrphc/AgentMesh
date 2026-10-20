@@ -26,6 +26,8 @@ import { validateAgentEdit } from "./agent-settings.js";
 import { normalizeTestReports } from "./test-reports.js";
 import { ExecutionInbox, validateMessageDraft } from "./inbox.js";
 import { normalizeContextFacts } from "./context.js";
+import { validateContextKeys } from "./context.js";
+import { prepareContext } from "./context-package.js";
 
 export interface ProjectSnapshot {
   project: Project;
@@ -144,6 +146,7 @@ export class Orchestrator {
   }
 
   addTask(task: AgentTask): void {
+    validateContextKeys(task.contextKeys);
     if (!this.projects.has(task.projectId)) throw new Error(`Proje bulunamadı: ${task.projectId}`);
     if (this.tasks.has(task.id)) throw new Error(`Görev ID'si zaten mevcut: ${task.id}`);
     if (!this.adapters.has(task.agentId)) throw new Error(`Ajan kayıtlı değil: ${task.agentId}`);
@@ -157,7 +160,7 @@ export class Orchestrator {
         throw new Error(`Geçersiz bağımlılık: ${dependencyId}`);
       }
     }
-    this.emit({ type: "task.created", task });
+    this.emit({ type: "task.created", task: structuredClone(task) });
   }
 
   snapshot(projectId: string): ProjectSnapshot {
@@ -334,6 +337,7 @@ export class Orchestrator {
     let permissionEnd: "execution_ended" | "disconnect" = "execution_ended";
     let inbox: ExecutionInbox | undefined;
     try {
+      const contextPackage = prepareContext(task, snapshot.tasks, snapshot.context, executionId);
       let workspaceRoot = snapshot.project.workspaceRoot;
       if (adapter.connection !== "mock") {
         if (!this.worktrees) throw new Error("Gerçek ajan için WorktreeManager gereklidir");
@@ -350,6 +354,8 @@ export class Orchestrator {
       controller = new AbortController();
       this.controllers.set(task.id, controller);
       this.emit({ type: "task.started", projectId: task.projectId, taskId: task.id });
+      if (controller.signal.aborted) return;
+      this.emit({ type: "task.context.prepared", projectId: task.projectId, taskId: task.id, package: contextPackage.metadata });
       if (controller.signal.aborted) return;
       const active = () => !!controller && !controller.signal.aborted && this.controllers.get(task.id) === controller && this.requireTask(task.id).status === "running";
       let initialBytes = 0;
@@ -383,7 +389,7 @@ export class Orchestrator {
       const output = await adapter.execute({
         task,
         workspaceRoot,
-        context: snapshot.context,
+        context: contextPackage.context,
         inbox: structuredClone(initial),
         knownAgentIds: this.recipientIds(task.projectId),
         liveMessages: adapter.liveMessages === true,
@@ -533,12 +539,18 @@ export class Orchestrator {
           ...event.task,
           dependsOn: [...event.task.dependsOn],
           allowedPaths: [...event.task.allowedPaths],
+          ...(event.task.contextKeys === undefined ? {} : { contextKeys: [...event.task.contextKeys] }),
           status: "pending",
         });
         break;
       case "task.started":
         this.requireTask(event.taskId).status = "running";
         break;
+      case "task.context.prepared": {
+        const task = this.requireTask(event.taskId);
+        (task.contextPackages ??= []).push(structuredClone(event.package));
+        break;
+      }
       case "task.completed": {
         const task = this.requireTask(event.taskId);
         task.status = "completed";

@@ -1,3 +1,8 @@
+export function validateContextKeys(keys: unknown): void {
+  if (keys !== undefined && (!Array.isArray(keys) || keys.length > 128 || new Set(keys).size !== keys.length
+    || keys.some((key) => typeof key !== "string" || !key.trim() || key.length > 160))) throw new Error("Geçersiz context anahtar seçimi");
+}
+
 /** Shared validation for native envelopes and directly registered adapters. */
 export function normalizeContextFacts(value: unknown): Array<{ key: string; value: string }> {
   if (value === undefined) return [];

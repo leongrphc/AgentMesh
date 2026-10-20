@@ -38,7 +38,7 @@ async function main(): Promise<void> {
   if (!executing && !reviewing && !approving && !retrying && !diagnostics && !contextReview && !resolvingContext) {
     console.log(JSON.stringify({
       dryRun: true, repoPath, projectId: config.projectId,
-      agents: config.agents, tasks: config.tasks.map(({ id, agentId, dependsOn, allowedPaths }) => ({ id, agentId, dependsOn, allowedPaths })),
+      agents: config.agents, tasks: config.tasks.map(({ id, agentId, dependsOn, allowedPaths, contextKeys }) => ({ id, agentId, dependsOn, allowedPaths, contextKeys })),
       instruction: needsDesktop
         ? "Bu config etkileşimli izin gerektirir; çalıştırmak için masaüstü uygulamasında açın. CLI --review, --approve ve --retry komutları kullanılabilir."
         : "--execute [--stream]: ajanları çalıştır, --review: diff görüntüle, --approve TASK --digest SHA256: onayla, --retry TASK: görevi yeniden kuyruğa al.",
@@ -145,6 +145,7 @@ async function main(): Promise<void> {
         id: task.id, agentId: task.agentId, status: task.status,
         summary: task.summary, error: task.error, sessionId: task.sessionId,
         tests: task.tests,
+        contextPackages: task.contextPackages,
         mergeConflict: task.mergeConflict,
         testsStale: !!task.tests?.length && !!changes && task.testDigest !== changes.digest,
         worktree: task.worktree,

@@ -193,7 +193,7 @@ export class DesktopService {
     if (this.running) throw new Error("Görev eklemeden önce çalışmayı durdurun");
     if (!draft || typeof draft !== "object" || Array.isArray(draft)) throw new Error("Geçersiz görev");
     const task = { id: draft.id, title: draft.title, instruction: draft.instruction, agentId: draft.agentId,
-      dependsOn: draft.dependsOn, allowedPaths: draft.allowedPaths, projectId: this.config!.projectId };
+      dependsOn: draft.dependsOn, allowedPaths: draft.allowedPaths, contextKeys: draft.contextKeys, projectId: this.config!.projectId };
     validate({ ...this.config!, tasks: [...this.state().snapshot.tasks, task] });
     this.engine!.addTask(task);
   }
