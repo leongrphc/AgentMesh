@@ -86,6 +86,43 @@ test("Codex message test uses ephemeral read-only thread and sends only the user
   assert.equal((await adapter("conversation").execute(input())).summary, "Selam!");
 });
 
+test("Codex retains an early result until the start response validates its turn scope", async () => {
+  for (const finishEarly of [false, true]) {
+  const early = new CodexAppServerAdapter("a", { conversationOnly: true, clientFactory: options => ({
+    async request(method: string) {
+      if (method === "initialize") return {};
+      if (method === "thread/start") return { thread: { id: "thread-1" } };
+      if (method !== "turn/start") throw new Error("Unexpected request");
+      options.onNotification("item/completed", { threadId: "thread-1", turnId: "turn-1", item: { type: "agentMessage", text: "Early answer" } });
+      options.onNotification("item/completed", { threadId: "thread-1", turnId: "foreign-turn", item: { type: "agentMessage", text: "Wrong turn" } });
+      options.onNotification("item/completed", { threadId: "foreign-thread", turnId: "turn-1", item: { type: "agentMessage", text: "Wrong thread" } });
+      const finish = () => options.onNotification("turn/completed", { threadId: "thread-1", turn: { id: "turn-1", status: "completed" } });
+      if (finishEarly) finish(); else setImmediate(finish);
+      return { turn: { id: "turn-1", status: "inProgress" } };
+    },
+    notify() {}, async close() {},
+  }) as unknown as JsonlRpcClient });
+  assert.equal((await early.execute(input())).summary, "Early answer");
+  }
+});
+
+test("Codex rejects excessive early notifications before publishing a result", async () => {
+  for (const oversized of [false, true]) {
+    const adapter = new CodexAppServerAdapter("a", { conversationOnly: true, clientFactory: options => ({
+      async request(method: string) {
+        if (method === "initialize") return {};
+        if (method === "thread/start") return { thread: { id: "thread-1" } };
+        for (let i = 0; i < (oversized ? 1 : 65); i++) options.onNotification("item/completed", {
+          threadId: "thread-1", turnId: "turn-1", item: { type: "agentMessage", text: oversized ? "x".repeat(1024 * 1024) : "result" },
+        });
+        return { turn: { id: "turn-1", status: "inProgress" } };
+      },
+      notify() {}, async close() {},
+    }) as unknown as JsonlRpcClient });
+    await assert.rejects(adapter.execute(input()), /erken bildirim sınırı/);
+  }
+});
+
 test("Codex App Server streams while waiting, supports resume and grants only accept-once", async () => {
   let prompts = 0, streaming = false;
   const output = await adapter("command").execute({ ...input(), sessionId: "thread-1",

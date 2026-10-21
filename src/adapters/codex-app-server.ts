@@ -17,6 +17,13 @@ export class CodexAppServerAdapter implements AgentAdapter {
   async execute(input: AgentExecution): Promise<AgentResult> {
     let threadId = input.sessionId, turnId: string | undefined, summary = "";
     let ended = false;
+    let startingTurn = false, earlyBytes = 0;
+    const earlyNotifications: Array<{ method: string; params: RpcRecord }> = [];
+    let handleNotification!: (method: string, params: RpcRecord) => void;
+    const drainEarlyNotifications = () => {
+      const pending = earlyNotifications.splice(0); earlyBytes = 0;
+      for (const notification of pending) handleNotification(notification.method, notification.params);
+    };
     let unsubscribeInbox: (() => Promise<void>) | undefined;
     const files = new Map<string, string[]>();
     let finish!: () => void, fail!: (error: Error) => void;
@@ -32,12 +39,21 @@ export class CodexAppServerAdapter implements AgentAdapter {
       executable: this.options.executable ?? (process.platform === "win32" ? "codex.exe" : "codex"), args: ["app-server"] }));
     const client = factory({ cwd: input.workspaceRoot, signal: input.signal, onOutput: input.onOutput,
       onExit: fail,
-      onNotification: (method, params) => {
+      onNotification: handleNotification = (method, params) => {
         if (ended) return;
+        if (startingTurn && !turnId && method !== "turn/started" && params.threadId === threadId) {
+          earlyBytes += Buffer.byteLength(JSON.stringify(params)) + Buffer.byteLength(method);
+          if (earlyNotifications.length >= 64 || earlyBytes > 1024 * 1024) {
+            ended = true; fail(new Error("Codex erken bildirim sınırı aşıldı")); return;
+          }
+          earlyNotifications.push({ method, params }); return;
+        }
         if (method === "turn/started" && params.threadId === threadId && typeof record(params.turn).id === "string") {
           const id = record(params.turn).id as string;
           if (turnId && turnId !== id) { ended = true; fail(new Error("Codex beklenmeyen aktif tur bildirdi")); return; }
           turnId = id;
+          drainEarlyNotifications();
+          if (ended) return;
         }
         if (!isScoped(params)) {
           if (method !== "turn/completed" || params.threadId !== threadId || record(params.turn).id !== turnId || !turnId) return;
@@ -95,12 +111,15 @@ export class CodexAppServerAdapter implements AgentAdapter {
       if (!threadId) throw new Error("Codex thread kimliği dönmedi");
       if (input.sessionId && threadId !== input.sessionId) throw new Error("Codex resume farklı thread döndürdü");
       input.onSession?.(threadId);
+      startingTurn = true;
       const started = await client.request("turn/start", { threadId, input: [{ type: "text", text: this.options.conversationOnly ? input.task.instruction : buildPrompt(input) }],
         cwd: input.workspaceRoot, approvalPolicy: this.options.conversationOnly ? "never" : "on-request", approvalsReviewer: "user",
         sandboxPolicy: this.options.conversationOnly ? { type: "readOnly" } : { type: "workspaceWrite", writableRoots: [input.workspaceRoot], networkAccess: false } });
       const returnedId = record(started.turn).id;
       if (typeof returnedId !== "string" || (turnId && turnId !== returnedId)) throw new Error("Codex turn kimliği eşleşmedi");
       turnId = returnedId;
+      startingTurn = false;
+      drainEarlyNotifications();
       input.acknowledgeInbox?.();
       if (!this.options.conversationOnly && !ended && input.subscribeInbox) {
         unsubscribeInbox = input.subscribeInbox(async (message) => {
