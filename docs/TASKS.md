@@ -9,6 +9,10 @@
 
 Bu dosya, yarın kaldığımız yerden devam etmek için tek kontrol listesidir. Mimari detaylar `docs/architecture.md`, protokol `docs/agent-protocol.md`, ilk kapsam `docs/mvp.md` içinde.
 
+## Deneme kontrol noktası — 21 Ekim
+
+**129/129 test**, TypeScript, masaüstü derlemesi ve Electron smoke başarılı. SQLite inbox sayaçları SQL üzerinden hesaplanıyor; Codex tur başlatma yanıtından önce gelen sonuçları kaybetme yarışı giderildi. Bu turda gerçek model çağrısı yapılmadı. Yeni özelliklerden önce kullanıcı denemesi için [açılış ve deneme adımları](TRYOUT.md) hazırlandı. Geniş ürün goal’i tamamlanmış değildir; aşağıdaki açık işler korunur.
+
 ## Hedef ürün
 
 Codex, OpenCode, Claude, Antigravity ve diğer API modellerini **tek IDE içinde** aynı proje üzerinde görevlendirmek; 3–4 veya daha fazla bağımsız ajanı paralel çalıştırmak; ajanlar arası mesaj ve yapılandırılmış ortak context paylaşmak. Bir ajan plan yaparken diğerleri farklı worktree'lerde kod yazabilsin, yönetici ajan değiştirilebilsin. Sağlayıcıların özel sohbet geçmişlerini birbirine kopyalamak yerine **görevler, kararlar, mesajlar, sonuçlar ve oturum kimlikleri** ortaklaştırılsın. CLI ile kullanılabilen servisler kendi desteklenen arayüzleri üzerinden bağlansın; API gerektirenler API anahtarıyla çalışsın.

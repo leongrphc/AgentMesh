@@ -4,6 +4,8 @@ Codex, OpenCode, Claude, Antigravity ve API tabanlı modelleri bir orkestratör 
 
 > Durum: **MVP masaüstü prototipi**. Electron/React arayüzünde proje seçimi, görevler, ajan durumları, canlı olaylar, Monaco dosya editörü, görev PTY terminalleri ve ortak context/mesajlar var. SQLite orkestratör, Git worktree ve Codex/OpenCode/Antigravity/Claude headless adaptörleriyle çalışır. Claude bağlantısı API anahtarı kullanır. Varsayılan demo modelleri çağırmaz.
 
+21 Ekim yerel deneme kontrol noktası: **129/129 test ve Electron smoke başarılı**. [Deneme adımları ve kalan kapsam](docs/TRYOUT.md).
+
 ## Hızlı başlangıç
 
 Windows / PowerShell, Node.js 22.12+:
