@@ -1,6 +1,6 @@
 # AgentMesh IDE — görev listesi ve devam notları
 
-**Son güncelleme:** 20 Ekim 2026
+**Son güncelleme:** 21 Ekim 2026
 
 **Çalışma alanı:** `D:\WebGpt`  
 **Dal:** `main`  
@@ -102,7 +102,8 @@ Codex, OpenCode, Claude, Antigravity ve diğer API modellerini **tek IDE içinde
   - [x] Aktif olaylar için isteğe bağlı `maxActivePayloadBytes` ve `maxActiveAgeHours`: UTF-8 içerik boyutu, UTC kayıt yaşı, herhangi bir eşikte bakım ve tetiklenme nedenleri. Arşivdeki geçmiş/boş aktif journal yeniden bakım tetiklemez; fiziksel disk kotası değildir.
   - [x] İsteğe bağlı `keepManagedArchives`: başarılı otomatik rotasyonla atomik sahiplik kaydı, güncel arşiv + geçmiş eşitliği doğrulaması, kilit/kapsam kontrolleri ve eski kopyaları sınırlama. Elle alınan/kayıtsız arşivler korunur; olay geçmişi silinmez. Hedefi eksik yan dosya bağlantıları ve klasör junction yönlendirmeleri de reddedilir; 10 bakım testi ve TypeScript ile doğrulandı.
   - [x] SQLite mesaj üst bilgilerini de çekirdek/checkpoint belleğinden çıkarma; disk sayımı/sayfalaması, kaynak kapsamlı indeksli idempotency araması ve üst sınırı sabit akışlı inbox okuması. Checkpoint v4; eski projeksiyonlar replay edilir.
-  - [ ] Görev geçmişlerinin bellek politikası; toplam disk kotası ve olay geçmişini silme politikası. JSONL fallback tam mesajları ve teslim geçmişini bellekte tutar; SQLite inbox sayaçları görev bazlı geçici durum haritası kullanır.
+  - [x] SQLite inbox cursor/pending/uncertain sayaçlarını SQL içinde hesaplama; Node tarafına teslim geçmişi taşınmaz. Eksik/sırasız teslim, son durum, proje/görev kapsamı ve arşiv/tail eşdeğerlik testleri geçti.
+  - [ ] Görev geçmişlerinin bellek politikası; toplam disk kotası ve olay geçmişini silme politikası. JSONL fallback tam mesajları ve teslim geçmişini bellekte tutar.
 - [ ] **CORE-012:** Güvenli log saklama/retention, hata teşhisi, oturum sağlığı ve yeniden başlatma kurtarma senaryoları.
 - [ ] **CORE-013 / Config uyumu:** Kayıtlı görev ve ajan tanımlarını açık güncelleme akışıyla uzlaştırma.
   - [x] Desktop yeniden açma ve CLI execute öncesi toplu görev kontrolü: aynı ID'de başlık/talimat/ajan/bağımlılık/kapsam farkı alan adlarıyla reddedilir; ham talimat hata metnine alınmaz. UI görevleri korunur; eksik ajan eşlemesi ve başka projedeki görev ID çakışması yeni görev eklenmeden reddedilir. Dizi sırası anlamsız fark üretmez; tekrarlı bağımlılıklar config doğrulamasında reddedilir. Başarısız açılış eski projeyi/journal'ı kullanılabilir bırakır.

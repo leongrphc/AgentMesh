@@ -6,6 +6,7 @@ import type { DomainEvent, StoredEvent, ContextHistoryPage, HistoryPage, Context
 export type StoredMessageReference = Omit<AgentMessage, "body"> & { eventId: string };
 
 export interface EventStore {
+  inboxStats?(projectId: string, taskId: string, agentId: string): { cursor: number; pending: number; uncertain: number };
   scanMessageReferences?(projectId: string): Iterable<StoredMessageReference>;
   messageReferencePage?(projectId: string, taskId?: string, agentId?: string, before?: number): HistoryPage<StoredMessageReference>;
   messageCount?(projectId: string): number;

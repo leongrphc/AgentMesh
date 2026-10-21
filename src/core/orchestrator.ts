@@ -320,6 +320,7 @@ export class Orchestrator {
       messages: includeHistory ? [...this.messageRecords(projectId)].map(message => this.materializeMessage(message)) : [],
       deliveries: includeHistory ? [...this.deliveryRecords()].filter((delivery) => this.tasks.get(delivery.taskId)?.projectId === projectId).map((delivery) => ({ ...delivery })) : [],
       inboxes: [...this.tasks.values()].filter((task) => task.projectId === projectId).map((task) => {
+        if (this.journal.inboxStats) return { taskId: task.id, ...this.journal.inboxStats(projectId, task.id, task.agentId) };
         const statuses = new Map([...this.deliveryRecords(task.id)].map(delivery => [delivery.messageId, delivery.status]));
         let cursor = 0, pending = 0, uncertain = 0, gap = false;
         for (const message of this.messagesFor(task)) {

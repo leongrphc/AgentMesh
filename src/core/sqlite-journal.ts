@@ -150,6 +150,25 @@ export class SqliteJournal implements EventStore {
     return row ? JSON.parse(row.payload as string).delivery : undefined;
   }
 
+  inboxStats(projectId: string, taskId: string, agentId: string): { cursor: number; pending: number; uncertain: number } {
+    this.assertOpen();
+    // Return only aggregates to Node; keep the per-message join inside SQLite.
+    const row = this.db.prepare(`WITH relevant AS (
+      SELECT json_extract(payload, '$.message.id') AS message_id, ROW_NUMBER() OVER (ORDER BY sequence) AS ordinal
+      FROM events WHERE project_id = ? AND json_extract(payload, '$.type') = 'message.sent'
+      AND json_extract(payload, '$.message.taskId') <> ? AND json_extract(payload, '$.message.to') IN (?, '*')
+    ), receipts AS (
+      SELECT json_extract(payload, '$.delivery.messageId') AS message_id, json_extract(payload, '$.delivery.status') AS status,
+      ROW_NUMBER() OVER (PARTITION BY json_extract(payload, '$.delivery.messageId') ORDER BY sequence DESC) AS latest
+      FROM events WHERE json_extract(payload, '$.type') = 'message.delivery' AND json_extract(payload, '$.delivery.taskId') = ?
+    ), statuses AS (
+      SELECT relevant.ordinal, receipts.status FROM relevant LEFT JOIN receipts ON relevant.message_id = receipts.message_id AND receipts.latest = 1
+    ) SELECT COALESCE(MIN(CASE WHEN status IS NULL OR status <> 'accepted' THEN ordinal END) - 1, COUNT(*)) AS cursor,
+      COALESCE(SUM(CASE WHEN status IS NULL OR status <> 'accepted' THEN 1 ELSE 0 END), 0) AS pending,
+      COALESCE(SUM(CASE WHEN status = 'uncertain' THEN 1 ELSE 0 END), 0) AS uncertain FROM statuses`).get(projectId, taskId, agentId, taskId)!;
+    return { cursor: row.cursor as number, pending: row.pending as number, uncertain: row.uncertain as number };
+  }
+
   *scanDeliveries(taskId?: string, messageId?: string): Iterable<MessageDelivery> {
     this.assertOpen();
     const filters = ["json_extract(payload, '$.type') = 'message.delivery'"];
