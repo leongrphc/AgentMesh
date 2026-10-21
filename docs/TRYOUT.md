@@ -1,6 +1,6 @@
 # Yerel deneme sürümü — 21 Ekim 2026
 
-Bu kontrol noktası masaüstü MVP'sini denemek içindir. Kurulum paketi henüz yok; mevcut çalışma alanından açılır:
+Bu kontrol noktası masaüstü MVP'sini denemek içindir. Taşınabilir Windows klasörü üretilebilir; kurulum sihirbazı ve otomatik güncelleme henüz yok. Mevcut çalışma alanından açmak için:
 
 ```powershell
 cd D:\WebGpt
@@ -27,4 +27,12 @@ Gerçek proje ve sağlayıcı kurulumu için [README](../README.md) adımların�
 
 ## Kalan kapsam
 
-Tam ürün planı henüz bitmedi. Gerçek sağlayıcılarla kod/araç/resume kabul testleri, OpenCode canlı inbox, genel OS sandbox, config revizyonlarını uzlaştırma ekranı ve dağıtılabilir kurulum paketi açık. Ayrıntılı takip [TASKS.md](TASKS.md) içinde. Bu sürüm yerel deneme için doğrulanmış bir kontrol noktasıdır.
+Tam ürün planı henüz bitmedi. Gerçek sağlayıcılarla kod/araç/resume kabul testleri, OpenCode canlı inbox, genel OS sandbox, config revizyonlarını uzlaştırma ekranı ve kurulum sihirbazı/otomatik güncelleme açık. Ayrıntılı takip [TASKS.md](TASKS.md) içinde. Bu sürüm yerel deneme için doğrulanmış bir kontrol noktasıdır.
+
+## Taşınabilir Windows paketi
+
+`npm run desktop:package`, `dist/releases/AgentMesh-0.1.0-win-<mimari>-<benzersiz ek>` altında Electron ve native terminal bağımlılıklarını içeren ayrı bir klasör üretir. Önceki paketlerin üzerine yazmaz. Klasördeki `AgentMesh.exe` ile açın; klasörün tamamını birlikte taşıyın. Hedef bilgisayarda Node/npm gerekmez. Gerçek Git projeleri için Git, sağlayıcılar için ilgili CLI ve hesap kurulumu gerekir. Kullanıcı verileri Electron kullanıcı veri dizininde saklanır; uygulama klasörünün yanında tutulmaz.
+
+Paket imzasız yerel deneme içindir; yayımlanmış/signed bir sürüm veya otomatik güncelleme kanalı değildir. `build-info.json`, sürüm, mimari, Electron sürümü ve yalnızca yürütülebilir dosyanın SHA-256 değerini içerir; tüm paketin bütünlüğünü doğrulamaz.
+
+21 Ekim paket kabulü: paket kaynak depo dışındaki geçici dizine kopyalanıp kendi exe dosyasıyla çalıştırıldı. Tam Electron smoke (Monaco, gerçek PTY, context ve merge çözümü dahil) exit 0 ile geçti. Bu, mevcut Windows bilgisayarında doğrulandı; temiz bilgisayar kabulü henüz yapılmadı. Paket üretimi üçüncü taraf lisans bildirimlerini de ekler.

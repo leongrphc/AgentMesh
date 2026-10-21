@@ -133,6 +133,7 @@ Codex, OpenCode, Claude, Antigravity ve diğer API modellerini **tek IDE içinde
 - [ ] **ORCH-002:** Bütçe/token/kota, rate-limit, timeout, eşzamanlılık, başarısızlık ve maliyet politikaları.
 - [ ] **ORCH-003:** Ajan bazlı yetki profilleri, kimlik bilgilerini OS credential store'da saklama, gizli bilgileri context'ten uzak tutma.
 - [ ] **RELEASE-001:** Windows paketleme, otomatik güncelleme, kurulum/dağıtım ve kabul testleri.
+  - [x] `npm run desktop:package`: Electron, derlenmiş uygulama ve native PTY bağımlılıklarıyla benzersiz taşınabilir Windows klasörü; Node/npm olmadan exe üzerinden açılış. Depo dışına kopyalanan paketin kendi exe dosyasıyla tam Electron smoke başarılı. Üçüncü taraf lisans bildirimleri dahil. İmzasız yerel deneme; temiz makine kabulü, kurulum ve otomatik güncelleme açık.
 
 ## Devam ederken
 

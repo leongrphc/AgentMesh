@@ -15,7 +15,8 @@
     "desktop:smoke:editor": "npm run desktop:build && node scripts/run-desktop.mjs --smoke-test --editor-smoke-test",
     "desktop:smoke:window": "npm run desktop:build && node scripts/run-desktop.mjs --window-smoke-test",
     "desktop:smoke:opencode-tui": "npm run desktop:build && node scripts/run-desktop.mjs --opencode-tui-smoke-test",
-    "smoke:opencode": "tsx src/smoke-opencode.ts"
+    "smoke:opencode": "tsx src/smoke-opencode.ts",
+    "desktop:package": "npm run desktop:build && node scripts/package-desktop.mjs"
   },
   "devDependencies": {
     "@types/node": "^24.0.0",
