@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, ipcMain, net, protocol } from "electron";
+import { app, BrowserWindow, dialog, ipcMain, Menu, nativeTheme, net, protocol } from "electron";
 import { resolve, relative, isAbsolute, join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { mkdirSync, writeFileSync } from "node:fs";
@@ -28,13 +28,24 @@ const smokeAssetRequests = new Set<string>();
 /** Per-run smoke data. scripts/run-desktop.mjs removes it after a successful run; failures keep it for debugging. */
 const smokeDataRoot = resolve(".agentmesh", "desktop-smoke", String(process.pid));
 
+/** Native window buttons drawn over the app's own title bar, coloured to match the active theme. */
+const titleBarOverlay = () => nativeTheme.shouldUseDarkColors
+  ? { color: "#1c202b", symbolColor: "#b5bacb", height: 40 }
+  : { color: "#ffffff", symbolColor: "#3f4555", height: 40 };
+
 async function createWindow() {
-  window = new BrowserWindow({ width: 1440, height: 950, minWidth: 960, minHeight: 640,
-    show: false, backgroundColor: "#17222d", title: "AgentMesh",
+  window = new BrowserWindow({ width: 1440, height: 950, minWidth: 1024, minHeight: 640,
+    show: false, backgroundColor: nativeTheme.shouldUseDarkColors ? "#171a23" : "#eef0f4", title: "AgentMesh",
+    // The renderer draws the title bar (project switcher, run controls); Windows keeps its own buttons.
+    titleBarStyle: "hidden", titleBarOverlay: titleBarOverlay(),
     webPreferences: { preload: join(__dirname, "preload.cjs"), nodeIntegration: false,
       contextIsolation: true, sandbox: true, webSecurity: true, webviewTag: false, backgroundThrottling: !smoke },
   });
   window.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
+  const themed = window;
+  const syncTitleBar = () => { if (!themed.isDestroyed() && process.platform !== "darwin") themed.setTitleBarOverlay(titleBarOverlay()); };
+  nativeTheme.on("updated", syncTitleBar);
+  themed.once("closed", () => nativeTheme.off("updated", syncTitleBar));
   window.webContents.session.setPermissionRequestHandler((_contents, _permission, callback) => callback(false));
   window.webContents.session.setPermissionCheckHandler(() => false);
   window.webContents.on("will-navigate", (event) => event.preventDefault());
@@ -119,17 +130,16 @@ async function createWindow() {
       })()`);
       const terminalBounds = await window.webContents.executeJavaScript(`(() => {
         const r = document.querySelector('.terminal-panel').getBoundingClientRect();
-        return { x: r.x + scrollX, y: r.y + scrollY, width: r.width, height: r.height, scale: 1 };
+        return { x: Math.round(r.x), y: Math.round(r.y), width: Math.round(r.width), height: Math.round(r.height) };
       })()`);
-      window.webContents.debugger.attach("1.3");
-      try {
-        let captureTimeout: ReturnType<typeof setTimeout> | undefined;
-        const screenshot = await Promise.race([
-          window.webContents.debugger.sendCommand("Page.captureScreenshot", { format: "png", captureBeyondViewport: true, clip: terminalBounds }),
-          new Promise<never>((_, reject) => { captureTimeout = setTimeout(() => reject(new Error("Terminal ekran görüntüsü 15 saniyede alınamadı")), 15000); }),
-        ]).finally(() => clearTimeout(captureTimeout));
-        writeFileSync(resolve("dist", "desktop-terminal.png"), Buffer.from(screenshot.data, "base64"));
-      } finally { window.webContents.debugger.detach(); }
+      // The IDE layout is viewport-sized, so the terminal is always on screen. CDP's captureScreenshot
+      // waits for a new frame, which a hidden, static window never produces; capturePage does not.
+      let captureTimeout: ReturnType<typeof setTimeout> | undefined;
+      const terminalShot = await Promise.race([
+        window.capturePage(terminalBounds),
+        new Promise<never>((_, reject) => { captureTimeout = setTimeout(() => reject(new Error("Terminal ekran görüntüsü 15 saniyede alınamadı")), 15000); }),
+      ]).finally(() => clearTimeout(captureTimeout));
+      writeFileSync(resolve("dist", "desktop-terminal.png"), terminalShot.toPNG());
       await window.webContents.executeJavaScript(`(async () => {
         document.querySelector('[data-testid="terminal-close"]').click();
         for (let i = 0; i < 200; i++) {
@@ -355,6 +365,8 @@ async function createWindow() {
 }
 
 app.whenReady().then(async () => {
+  // No File/Edit/View/Window menu: every action lives in the app's own title bar.
+  Menu.setApplicationMenu(null);
   service = new DesktopService(smoke ? smokeDataRoot : join(app.getPath("userData"), "projects"));
   if (smoke || !service.openLastProject()) service.openDemo();
   const rendererRoot = resolve(__dirname, "../renderer");

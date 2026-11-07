@@ -61,7 +61,7 @@ function ProjectMenu({ state, api, disabled, guard, act }: {
   </details>;
 }
 
-export function TopBar({ state, api, pending, ready, blocked, guard, act, onAgents, onStart }: {
+export function TopBar({ state, api, pending, ready, blocked, guard, act, onStart }: {
   state: DesktopState;
   api: DesktopAPI;
   pending: boolean;
@@ -69,7 +69,6 @@ export function TopBar({ state, api, pending, ready, blocked, guard, act, onAgen
   blocked: boolean;
   guard: () => boolean;
   act: (action: () => Promise<unknown>) => void;
-  onAgents: () => void;
   onStart: () => void;
 }) {
   const running = state.snapshot.tasks.filter((task) => task.status === "running").length;
@@ -83,7 +82,6 @@ export function TopBar({ state, api, pending, ready, blocked, guard, act, onAgen
       {state.busy ? `${running} ajan çalışıyor` : "Boşta"}
     </div>
     <div className="run-actions">
-      <button className="ghost" data-testid="agent-center" onClick={onAgents}>Ajanlar <span className="count">{state.agents.length}</span></button>
       {state.busy && <button disabled={pending} onClick={() => act(() => api.cancel())}>Durdur</button>}
       <button className="primary" data-testid="start" disabled={state.busy || !ready || pending || blocked} onClick={onStart}>
         {state.busy ? "Çalışıyor…" : "▶ Ajanları başlat"}
