@@ -32,6 +32,11 @@ const DOMAIN_LABELS: Partial<Record<DomainEvent["type"], string>> = {
 };
 
 export function describeEvent(event: DomainEvent): string {
+  if (event.type === "task.usage.recorded") {
+    const cost = event.usage?.costUsd !== undefined ? ` · ${formatCost(event.usage.costUsd)}` : "";
+    const tokens = event.usage?.inputTokens || event.usage?.outputTokens ? ` · ${formatTokens((event.usage.inputTokens ?? 0) + (event.usage.outputTokens ?? 0))} token` : "";
+    return `Ajan çalışması bitti: ${formatDuration(event.durationMs)}${cost}${tokens}`;
+  }
   if (event.type === "task.reassigned") return `Görev ${event.previousAgentId} ajanından ${event.agentId} ajanına devredildi`;
   const label = DOMAIN_LABELS[event.type] ?? event.type;
   const error = "error" in event && typeof event.error === "string" ? event.error : undefined;
@@ -41,6 +46,19 @@ export function describeEvent(event: DomainEvent): string {
 export function eventTaskId(event: DomainEvent): string | undefined {
   if ("taskId" in event && typeof event.taskId === "string") return event.taskId;
   return event.type === "task.created" ? event.task.id : undefined;
+}
+
+export function formatDuration(ms: number): string {
+  const seconds = Math.round(ms / 1000);
+  return seconds < 60 ? `${seconds} sn` : `${Math.floor(seconds / 60)} dk ${seconds % 60} sn`;
+}
+
+export function formatCost(usd: number): string {
+  return usd < 0.01 ? "<$0,01" : "$" + usd.toFixed(2).replace(".", ",");
+}
+
+export function formatTokens(count: number): string {
+  return count >= 1_000_000 ? `${(count / 1_000_000).toFixed(1).replace(".", ",")} M` : count >= 1000 ? `${Math.round(count / 1000)} B` : String(count);
 }
 
 function record(value: unknown): Record<string, unknown> | undefined {

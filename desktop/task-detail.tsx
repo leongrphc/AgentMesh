@@ -3,6 +3,7 @@ import type { TaskRecord } from "../src/core/contracts.js";
 import type { DesktopAPI, DesktopState } from "../src/desktop/contracts.js";
 import { ContextPackages } from "./context-packages.js";
 import { laneStyle } from "./lanes.js";
+import { formatCost, formatDuration, formatTokens } from "../src/desktop/event-text.js";
 import { STATUS_LABEL } from "./task-rail.js";
 import { TestReports } from "./test-reports.js";
 
@@ -58,6 +59,12 @@ export function TaskDetail({ task, state, api, pending, act, onReview }: {
       {task.worktree && <code className="branch" title={task.worktree.path}>{task.worktree.branch}</code>}
     </div>
     <h3>{task.title}</h3>
+    {task.usage && <p className="usage-line" title="Bu görevin tüm çalıştırmalarının toplamı">
+      {formatDuration(task.usage.durationMs)} ajan süresi
+      {task.usage.costUsd !== undefined && <> · {formatCost(task.usage.costUsd)}</>}
+      {(task.usage.inputTokens || task.usage.outputTokens) ? <> · {formatTokens((task.usage.inputTokens ?? 0) + (task.usage.outputTokens ?? 0))} token</> : null}
+      {task.usage.runs > 1 && <> · {task.usage.runs} çalıştırma</>}
+    </p>}
     <code>{task.id}</code>
 
     {hint && <p className={`next-step ${task.status}`}>{hint}</p>}

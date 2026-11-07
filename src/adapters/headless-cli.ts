@@ -1,6 +1,6 @@
 import { existsSync } from "node:fs";
 import { join } from "node:path";
-import type { AgentAdapter, AgentExecution, AgentResult } from "../core/contracts.js";
+import type { AgentAdapter, AgentExecution, AgentResult, AgentUsage } from "../core/contracts.js";
 import { safeLog } from "../core/safe-log.js";
 import { record } from "./jsonl-rpc.js";
 import { buildPrompt, runJsonlProcess, type ProcessRunner } from "./cli-process.js";
@@ -13,6 +13,17 @@ export function headlessCommand(provider: HeadlessProvider): string {
     ? join(process.env.LOCALAPPDATA ?? "", "agy", "bin", "agy.exe")
     : join(process.env.APPDATA ?? "", "npm", "node_modules", "@anthropic-ai", "claude-code", "bin", "claude.exe");
   return existsSync(installed) ? installed : provider === "antigravity" ? "agy.exe" : "claude.exe";
+}
+
+/** Cost and token totals from a Claude Code result event; cached input counts as input. */
+function claudeUsage(result: Record<string, unknown>): AgentUsage | undefined {
+  const usage = record(result.usage);
+  const count = (...values: unknown[]) => values.reduce<number>((sum, value) => sum + (typeof value === "number" && Number.isFinite(value) ? value : 0), 0);
+  const cost = typeof result.total_cost_usd === "number" && Number.isFinite(result.total_cost_usd) ? result.total_cost_usd : undefined;
+  const inputTokens = count(usage.input_tokens, usage.cache_creation_input_tokens, usage.cache_read_input_tokens);
+  const outputTokens = count(usage.output_tokens);
+  if (cost === undefined && !inputTokens && !outputTokens) return undefined;
+  return { ...(cost !== undefined ? { costUsd: cost } : {}), inputTokens, outputTokens };
 }
 
 function validSession(id: unknown): id is string { return typeof id === "string" && /^[\w-]{1,200}$/.test(id); }
@@ -85,6 +96,8 @@ export class HeadlessCliAdapter implements AgentAdapter {
     const summary = agy ? result.response : result.result;
     if (typeof summary !== "string" || !summary.trim()) throw new Error(`${this.provider}: sonuç özeti boş`);
     const output = { summary: summary.trim(), sessionId: id };
-    return this.options.conversationOnly ? output : normalizeTaskResult(output, input.knownAgentIds);
+    const usage = agy ? undefined : claudeUsage(result);
+    const normalized = this.options.conversationOnly ? output : normalizeTaskResult(output, input.knownAgentIds);
+    return usage ? { ...normalized, usage } : normalized;
   }
 }

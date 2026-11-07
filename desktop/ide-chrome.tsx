@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import type { DesktopState } from "../src/desktop/contracts.js";
 import { laneStyle } from "./lanes.js";
+import { formatCost, formatTokens } from "../src/desktop/event-text.js";
 
 function Icon({ children }: { children: ReactNode }) {
   return <svg viewBox="0 0 24 24" aria-hidden className="icon">{children}</svg>;
@@ -47,6 +48,16 @@ export function StatusBar({ state }: { state: DesktopState }) {
       title={running.some((task) => task.agentId === agent.id) ? `${agent.id} çalışıyor` : agent.id}>
       <span className={`sb-line ${running.some((task) => task.agentId === agent.id) ? "active" : ""}`} />{agent.id}
     </span>)}
+    {(() => {
+      const used = state.snapshot.tasks.map((task) => task.usage).filter((usage) => !!usage);
+      if (!used.length) return null;
+      const cost = used.reduce((sum, usage) => sum + (usage.costUsd ?? 0), 0);
+      const tokens = used.reduce((sum, usage) => sum + (usage.inputTokens ?? 0) + (usage.outputTokens ?? 0), 0);
+      return <span className="sb-item" title="Bu projedeki tüm ajan çalışmalarının toplamı">
+        {used.some((usage) => usage.costUsd !== undefined) ? formatCost(cost) : null}
+        {tokens ? ` ${formatTokens(tokens)} token` : null}
+      </span>;
+    })()}
     <span className="sb-item">En fazla {state.maxParallel} paralel</span>
     {state.uncommittedChanges && <span className="sb-item sb-warn">Commit edilmemiş değişiklik</span>}
   </footer>;

@@ -110,9 +110,18 @@ export type AgentOutput =
   | { channel: "stdout"; data: Record<string, unknown> }
   | { channel: "stderr"; data: string };
 
+/** What one agent run consumed, as reported by the provider. */
+export interface AgentUsage {
+  /** Billed cost in US dollars, when the provider reports one (Claude does; ChatGPT-login Codex does not). */
+  costUsd?: number;
+  inputTokens?: number;
+  outputTokens?: number;
+}
+
 export interface AgentResult {
   summary: string;
   sessionId?: string;
+  usage?: AgentUsage;
   facts?: ReadonlyArray<{ key: string; value: string }>;
   messages?: ReadonlyArray<Pick<AgentMessage, "to" | "kind" | "body">>;
   tests?: TestReport[];
@@ -167,6 +176,8 @@ export interface TaskRecord extends AgentTask {
   handoff?: { from: string; at: string };
   /** Latest reviewer feedback; addressed once the agent has produced a new review. */
   feedback?: { text: string; at: string; round: number; addressed: boolean };
+  /** Totals over every run of this task, including change rounds and retries. */
+  usage?: AgentUsage & { durationMs: number; runs: number };
 }
 
 export interface ContextPackage {
@@ -194,6 +205,7 @@ export type DomainEvent =
   | { type: "task.interrupted"; projectId: string; taskId: string }
   | { type: "task.cancelled"; projectId: string; taskId: string }
   | { type: "task.retried"; projectId: string; taskId: string }
+  | { type: "task.usage.recorded"; projectId: string; taskId: string; durationMs: number; usage?: AgentUsage }
   | { type: "task.changes.requested"; projectId: string; taskId: string; feedback: string; at: string }
   | { type: "task.reassigned"; projectId: string; taskId: string; agentId: string; previousAgentId: string; at: string }
   | { type: "task.session.saved"; projectId: string; taskId: string; sessionId: string }

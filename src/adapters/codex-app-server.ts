@@ -1,6 +1,6 @@
 import { codexEnv } from "./codex-profiles.js";
 import { isAbsolute, matchesGlob, relative, resolve, sep } from "node:path";
-import type { AgentAdapter, AgentExecution, AgentResult } from "../core/contracts.js";
+import type { AgentAdapter, AgentExecution, AgentResult, AgentUsage } from "../core/contracts.js";
 import { buildPrompt } from "./cli-process.js";
 import { normalizeTaskResult } from "./task-result.js";
 import { JsonlRpcClient, record, type RpcOptions, type RpcRecord } from "./jsonl-rpc.js";
@@ -18,6 +18,7 @@ export class CodexAppServerAdapter implements AgentAdapter {
   async execute(input: AgentExecution): Promise<AgentResult> {
     let threadId = input.sessionId, turnId: string | undefined, summary = "";
     let ended = false;
+    const usage: AgentUsage = {};
     let startingTurn = false, earlyBytes = 0;
     const earlyNotifications: Array<{ method: string; params: RpcRecord }> = [];
     let handleNotification!: (method: string, params: RpcRecord) => void;
@@ -58,6 +59,12 @@ export class CodexAppServerAdapter implements AgentAdapter {
         }
         if (!isScoped(params)) {
           if (method !== "turn/completed" || params.threadId !== threadId || record(params.turn).id !== turnId || !turnId) return;
+        }
+        if (method === "thread/tokenUsage/updated") {
+          // "last" is the latest model request only; summing it over the turn avoids counting earlier turns of a resumed thread.
+          const last = record(record(params.tokenUsage).last);
+          if (typeof last.inputTokens === "number") usage.inputTokens = (usage.inputTokens ?? 0) + last.inputTokens;
+          if (typeof last.outputTokens === "number") usage.outputTokens = (usage.outputTokens ?? 0) + last.outputTokens;
         }
         const item = record(params.item);
         if (method === "item/started" && item.type === "fileChange" && typeof item.id === "string") {
@@ -136,7 +143,8 @@ export class CodexAppServerAdapter implements AgentAdapter {
       await unsubscribeInbox?.();
       if (!summary.trim()) throw new Error("Codex turunda ajan sonucu bulunamadı");
       const output = { sessionId: threadId, summary: summary.trim() };
-      return this.options.conversationOnly ? output : normalizeTaskResult(output, input.knownAgentIds);
+      const normalized = this.options.conversationOnly ? output : normalizeTaskResult(output, input.knownAgentIds);
+      return usage.inputTokens || usage.outputTokens ? { ...normalized, usage: { ...usage } } : normalized;
     } finally { ended = true; await client.close(); await unsubscribeInbox?.(); }
   }
 }

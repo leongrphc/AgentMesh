@@ -11,6 +11,7 @@ import type {
   Fact,
   Project,
   ProjectSettings,
+  AgentUsage,
   StoredEvent,
   TaskRecord,
   MessageDraft,
@@ -38,6 +39,14 @@ import { materializeHistory } from "./materialize-history.js";
  * A task taken over from another agent starts a fresh provider session, so the new agent is told
  * that partial work may already be in its worktree and should be continued rather than redone.
  */
+/** Usage numbers come from provider output; keep only finite, non-negative values. */
+function sanitizeUsage(usage: AgentUsage): AgentUsage {
+  const ok = (value: unknown) => typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : undefined;
+  const costUsd = ok(usage.costUsd), inputTokens = ok(usage.inputTokens), outputTokens = ok(usage.outputTokens);
+  return { ...(costUsd !== undefined ? { costUsd } : {}), ...(inputTokens !== undefined ? { inputTokens: Math.round(inputTokens) } : {}),
+    ...(outputTokens !== undefined ? { outputTokens: Math.round(outputTokens) } : {}) };
+}
+
 function handoffTask(task: TaskRecord): TaskRecord {
   const notes: string[] = [];
   if (task.handoff && !task.sessionId) {
@@ -567,6 +576,7 @@ export class Orchestrator {
     let controller: AbortController | undefined;
     const executionId = randomUUID();
     let permissionEnd: "execution_ended" | "disconnect" = "execution_ended";
+    let runStarted: number | undefined;
     let inbox: ExecutionInbox | undefined;
     try {
       const contextPackage = prepareContext(task, snapshot.tasks, snapshot.context, executionId);
@@ -625,6 +635,7 @@ export class Orchestrator {
       this.emitBatch(initial.map((message) => ({ type: "message.delivery" as const, projectId: task.projectId,
         delivery: { taskId: task.id, messageId: message.id, executionId, status: "sending" as const, mode: "prompt" as const } })));
       let sent = 0;
+      runStarted = Date.now();
       const output = await adapter.execute({
         task: handoffTask(task),
         workspaceRoot,
@@ -662,6 +673,9 @@ export class Orchestrator {
         }),
       });
       if (controller.signal.aborted || this.requireTask(task.id).status === "cancelled") return;
+      this.emit({ type: "task.usage.recorded", projectId: task.projectId, taskId: task.id, durationMs: Date.now() - runStarted,
+        ...(output.usage ? { usage: sanitizeUsage(output.usage) } : {}) });
+      runStarted = undefined;
       await inbox.close();
       if (controller.signal.aborted || this.requireTask(task.id).status === "cancelled") return;
       acknowledgeInbox();
@@ -701,6 +715,8 @@ export class Orchestrator {
     } catch (error) {
       permissionEnd = "disconnect";
       if (this.requireTask(task.id).status === "cancelled") return;
+      // A failed run still took time; record it so the task's totals stay honest.
+      if (runStarted !== undefined) this.emit({ type: "task.usage.recorded", projectId: task.projectId, taskId: task.id, durationMs: Date.now() - runStarted });
       this.emit({
         type: "task.failed",
         projectId: task.projectId,
@@ -847,6 +863,17 @@ export class Orchestrator {
       case "task.session.saved":
         this.requireTask(event.taskId).sessionId = event.sessionId;
         break;
+      case "task.usage.recorded": {
+        const task = this.requireTask(event.taskId);
+        const total = task.usage ?? { durationMs: 0, runs: 0 };
+        const add = (a?: number, b?: number) => a === undefined && b === undefined ? undefined : (a ?? 0) + (b ?? 0);
+        const costUsd = add(total.costUsd, event.usage?.costUsd);
+        const inputTokens = add(total.inputTokens, event.usage?.inputTokens);
+        const outputTokens = add(total.outputTokens, event.usage?.outputTokens);
+        task.usage = { durationMs: total.durationMs + event.durationMs, runs: total.runs + 1,
+          ...(costUsd !== undefined ? { costUsd } : {}), ...(inputTokens !== undefined ? { inputTokens } : {}), ...(outputTokens !== undefined ? { outputTokens } : {}) };
+        break;
+      }
       case "task.changes.requested": {
         const task = this.requireTask(event.taskId);
         task.status = "pending";
