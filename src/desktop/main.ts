@@ -411,7 +411,7 @@ app.whenReady().then(async () => {
   });
   handle("mesh:open-folder", async () => {
     if (service.state().busy) throw new Error("Proje açmadan önce çalışmayı durdurun");
-    const result = await dialog.showOpenDialog(window!, { title: "Proje klasörünü seç (Git deposu)", properties: ["openDirectory"] });
+    const result = await dialog.showOpenDialog(window!, { title: "Proje klasörünü seç", properties: ["openDirectory"] });
     return result.canceled ? service.state() : service.openFolder(result.filePaths[0]!);
   });
   handle("mesh:open-recent", (path) => {

@@ -43,7 +43,7 @@ function ProjectMenu({ state, api, disabled, guard, act }: {
     </summary>
     <div className="menu-panel" role="menu">
       <button role="menuitem" className="menu-primary" disabled={disabled} onClick={() => run(() => api.openFolder())}>
-        <b>Klasör aç…</b><small>Bir Git deposunu proje olarak aç</small>
+        <b>Klasör aç…</b><small>Herhangi bir proje klasörünü aç; Git deposu değilse başlatılır</small>
       </button>
       {!!state.recent.length && <div className="menu-label">Son projeler</div>}
       {state.recent.map((item) => <button role="menuitem" key={item.path} disabled={disabled || item.path.toLowerCase() === root.toLowerCase()}

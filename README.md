@@ -16,7 +16,7 @@ npm install
 npm run desktop
 ```
 
-1. Sol üstteki proje menüsünden **Klasör aç…** ile herhangi bir Git deposunu seç. Depoda en az bir commit olmalı ve commit edilmemiş değişiklik bulunmamalı.
+1. Sol üstteki proje menüsünden **Klasör aç…** ile proje klasörünü seç. Klasör Git deposu değilse AgentMesh bir depo başlatır ve mevcut dosyaları ilk commit olarak kaydeder (`node_modules`, build çıktıları ve `.env` dosyaları hariç). Zaten bir depoysa commit edilmemiş değişiklik bulunmamalı; ajanlar son commit'ten çalışır.
 2. **＋ Yeni görev** ile ajana ne yapacağını yaz. Başlık ve talimat yeterli; ajan olarak Claude ya da Codex seç.
 3. **▶ Ajanları başlat**. Ajan görevi proje klasöründeki `.agentmesh/worktrees/` altında, kendi dalında yapar. Senin dosyaların bu sırada değişmez. İlerleme sağdaki **Etkinlik** panelinde akar.
 4. Görev *İnceleme bekliyor* olunca **Değişiklikleri incele** → diff'e bak → **Onayla ve birleştir**. Onaylanan işler `agentmesh/integration-…` dalında birikir.

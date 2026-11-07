@@ -146,6 +146,7 @@ function App() {
         if (result) setNotice(`${result.commits} onaylı commit "${result.branch}" dalına ${result.fastForward ? "eklendi" : "birleştirildi"}. Dosyalar klasörünüzde.`);
       })}>Projeme uygula</button>
     </div>}
+    {state.openNotice && <div className="banner info" role="status"><p>{state.openNotice}</p></div>}
     {notice && <div className="banner ok" role="status"><p>{notice}</p><button className="icon-button" aria-label="Bildirimi kapat" onClick={() => setNotice("")}>×</button></div>}
     <PermissionPanel state={state} api={api} pending={pending} act={(action) => void act(action)} />
   </>;

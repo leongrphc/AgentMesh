@@ -1,11 +1,11 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { homedir, tmpdir } from "node:os";
+import { join, parse } from "node:path";
 import { test } from "node:test";
 import { DesktopService } from "../src/desktop/service.js";
-import { folderConfig, readRecent, rememberRecent, resolveRepository } from "../src/desktop/folder-project.js";
+import { folderConfig, prepareRepository, readRecent, rememberRecent, resolveRepository, unsafeRepositoryRoot } from "../src/desktop/folder-project.js";
 
 const git = (cwd: string, ...args: string[]) => execFileSync("git", ["-C", cwd, ...args], { encoding: "utf8" });
 const commit = (cwd: string) => git(cwd, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "init");
@@ -110,4 +110,51 @@ test("a vanished last project falls back without throwing", async () => {
     rememberRecent(root, join(root, "gone"));
     assert.equal(service.openLastProject(), false);
   } finally { await service.close(); rmSync(root, { recursive: true, force: true }); }
+});
+
+test("a plain folder becomes a repository whose first commit leaves out dependencies, build output and secrets", () => {
+  const root = mkdtempSync(join(tmpdir(), "mesh-init-"));
+  try {
+    const plain = join(root, "plain");
+    mkdirSync(join(plain, "src"), { recursive: true });
+    mkdirSync(join(plain, "node_modules", "lib"), { recursive: true });
+    writeFileSync(join(plain, "src", "app.ts"), "export const x = 1;\n");
+    writeFileSync(join(plain, "node_modules", "lib", "index.js"), "module.exports = 1;\n");
+    writeFileSync(join(plain, ".env"), "SECRET=1\n");
+    writeFileSync(join(plain, ".env.example"), "SECRET=\n");
+    const opened = prepareRepository(plain);
+    assert.match(opened.notice ?? "", /Git deposu değildi/);
+    const committed = git(opened.root, "ls-tree", "-r", "--name-only", "HEAD").trim().split("\n").sort();
+    assert.deepEqual(committed, [".env.example", "src/app.ts"]);
+    assert.equal(git(opened.root, "status", "--porcelain").trim(), "", "excluded files do not show up as changes");
+    assert.equal(prepareRepository(plain).notice, undefined, "opening again changes nothing");
+
+    const empty = join(root, "empty");
+    git(root, "init", "-q", empty);
+    writeFileSync(join(empty, "a.txt"), "a");
+    assert.match(prepareRepository(empty).notice ?? "", /hiç commit yoktu/);
+    assert.equal(git(empty, "ls-tree", "-r", "--name-only", "HEAD").trim(), "a.txt");
+    assert.throws(() => prepareRepository(join(root, "missing")), /bulunamadı/);
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
+test("drive roots, the home folder and Windows itself are never turned into repositories", () => {
+  assert.match(unsafeRepositoryRoot(homedir()) ?? "", /kullanıcı klasörü/);
+  assert.match(unsafeRepositoryRoot(parse(tmpdir()).root) ?? "", /sürücü/);
+  if (process.env.SystemRoot) assert.match(unsafeRepositoryRoot(join(process.env.SystemRoot, "System32")) ?? "", /Windows/);
+  assert.equal(unsafeRepositoryRoot(tmpdir()), undefined);
+});
+
+test("opening a plain folder in the desktop app reports what was created", async () => {
+  const root = mkdtempSync(join(tmpdir(), "mesh-open-plain-"));
+  const folder = join(root, "notes");
+  mkdirSync(folder);
+  writeFileSync(join(folder, "todo.md"), "- one\n");
+  const service = new DesktopService(join(root, "data"));
+  try {
+    const state = service.openFolder(folder);
+    assert.equal(state.source, "folder");
+    assert.match(state.openNotice ?? "", /1 dosyayı ilk commit/);
+    assert.equal(state.uncommittedChanges, false);
+  } finally { await service.close(); rmSync(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }); }
 });

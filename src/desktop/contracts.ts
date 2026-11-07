@@ -36,6 +36,8 @@ export interface DesktopState {
   codexProfiles: Array<{ name: string; path: string }>;
   /** Approved commits on the integration branch that the user's checked-out branch does not have yet. */
   integrationPending: number;
+  /** What opening the project changed, e.g. a Git repository was created for the folder. */
+  openNotice?: string;
   /** Branch that receives approved changes (absent for the demo). */
   integrationBranch?: string;
   /** File scope suggested for new tasks. */

@@ -21,7 +21,7 @@ import type { MessageDraft } from "../core/contracts.js";
 import { maintainJournal } from "../core/journal-maintenance.js";
 import { listCodexProfiles } from "../adapters/codex-profiles.js";
 import { describeEvent, describeOutput, eventTaskId } from "./event-text.js";
-import { DEFAULT_ALLOWED_PATHS, folderConfig, hasUncommittedChanges, readRecent, rememberRecent, repositoryKey, resolveRepository } from "./folder-project.js";
+import { DEFAULT_ALLOWED_PATHS, folderConfig, hasUncommittedChanges, readRecent, rememberRecent, prepareRepository, repositoryKey } from "./folder-project.js";
 
 export class DesktopService {
   readonly terminals = new Terminals();
@@ -63,6 +63,8 @@ export class DesktopService {
   private uncommitted = false;
   private integration?: string;
   private integrationPending = 0;
+  /** One-off message about what opening the project changed (e.g. a repository was created). */
+  private openNotice?: string;
   private codexProfiles = listCodexProfiles();
   private running?: Promise<void>;
   private abort?: AbortController;
@@ -85,7 +87,7 @@ export class DesktopService {
     if (!this.engine || !this.config) throw new Error("Önce proje açın");
     const snapshot = this.engine.snapshot(this.config.projectId, false);
     return structuredClone({ snapshot, historyCounts: this.engine.historyCounts(this.config.projectId), busy: !!this.running,
-      demo: this.demo, source: this.source, recent: readRecent(this.dataRoot), uncommittedChanges: this.uncommitted, integrationBranch: this.integration, integrationPending: this.integrationPending, codexProfiles: this.codexProfiles,
+      demo: this.demo, source: this.source, recent: readRecent(this.dataRoot), uncommittedChanges: this.uncommitted, integrationBranch: this.integration, integrationPending: this.integrationPending, openNotice: this.openNotice, codexProfiles: this.codexProfiles,
       defaultAllowedPaths: this.source === "folder" ? DEFAULT_ALLOWED_PATHS : ["src/**"], agents: this.config.agents.map((agent) => ({ ...agent,
         liveMessages: this.demo || (agent.provider === "codex" && agent.transport === "app-server"),
         interactivePermissions: this.demo || (agent.provider === "codex" && agent.transport === "app-server") || (agent.provider === "opencode" && agent.transport === "server") })),
@@ -141,9 +143,10 @@ export class DesktopService {
 
   /** Opens any Git repository as a project without a hand-written config file. */
   openFolder(folder: string): DesktopState {
-    const root = resolveRepository(folder);
+    const { root, notice } = prepareRepository(folder);
     this.open(folderConfig(root, listCodexProfiles()), join(this.dataRoot, "repos", repositoryKey(root), "events.sqlite"), false, "folder");
     rememberRecent(this.dataRoot, root);
+    this.openNotice = notice;
     return this.state();
   }
 
@@ -199,6 +202,7 @@ export class DesktopService {
       this.sourceAgents = sourceAgents;
       this.demo = demo;
       this.source = source;
+      this.openNotice = undefined;
       this.uncommitted = !demo && hasUncommittedChanges(config.repoPath);
       // Informational only: a config may point at a folder that becomes a repository later.
       try { this.integration = demo ? undefined : integrationBranch(config.repoPath); }
