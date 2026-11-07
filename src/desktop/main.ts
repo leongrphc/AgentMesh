@@ -421,26 +421,8 @@ app.whenReady().then(async () => {
     if (!service.state().recent.some((item) => item.path === path)) throw new Error("Proje son açılanlar listesinde yok");
     return service.openFolder(path);
   });
-  handle("mesh:apply-integration", async () => {
-    const state = service.state();
-    if (!state.integrationPending || !state.integrationBranch) throw new Error("Projenize uygulanacak yeni onaylı değişiklik yok.");
-    const result = await dialog.showMessageBox(window!, { type: "question", title: "Projeme uygula",
-      message: `${state.integrationPending} onaylı commit projenizin açık dalına birleştirilsin mi?`,
-      detail: [`Kaynak: ${state.integrationBranch}`, `Hedef: ${state.snapshot.project.workspaceRoot} içindeki açık dal.`,
-        "Çakışma olursa birleştirme geri alınır; projeniz değişmez."].join("\n"),
-      buttons: ["Vazgeç", "Projeme uygula"], defaultId: 1, cancelId: 0 });
-    return result.response === 1 ? service.applyIntegration() : undefined;
-  });
-  handle("mesh:start", async () => {
-    if (!service.state().demo) {
-      const result = await dialog.showMessageBox(window!, { type: "question", title: "Ajanları başlat",
-        message: "Bu projedeki CLI ajanları çalıştırılsın mı?",
-        detail: "Bağlı sağlayıcı hesabınız kullanılır; kullanım maliyeti oluşabilir. Değişiklikler ayrı görev worktree’lerinde yapılır.",
-        buttons: ["Vazgeç", "Ajanları başlat"], defaultId: 0, cancelId: 0 });
-      if (result.response !== 1) return;
-    }
-    service.start();
-  });
+  handle("mesh:apply-integration", () => service.applyIntegration());
+  handle("mesh:start", () => service.start());
   handle("mesh:cancel", (taskId) => {
     if (taskId !== undefined && typeof taskId !== "string") throw new Error("Geçersiz görev kimliği");
     service.cancel(taskId as string | undefined);
@@ -448,6 +430,10 @@ app.whenReady().then(async () => {
   handle("mesh:retry", (taskId) => {
     if (typeof taskId !== "string") throw new Error("Geçersiz görev kimliği");
     service.retry(taskId);
+  });
+  handle("mesh:reassign", (taskId, agentId) => {
+    if (typeof taskId !== "string" || typeof agentId !== "string") throw new Error("Geçersiz devir isteği");
+    service.reassignTask(taskId, agentId);
   });
   handle("mesh:review", (taskId, refresh = false) => {
     if (typeof taskId !== "string" || typeof refresh !== "boolean") throw new Error("Geçersiz görev kimliği");
@@ -470,11 +456,6 @@ app.whenReady().then(async () => {
     if (typeof taskId !== "string" || typeof digest !== "string") throw new Error("Geçersiz onay");
     const review = service.review(taskId);
     if (!review.canApprove || review.inspection.digest !== digest) throw new Error("Değişiklikler yeniden incelenmeli");
-    const result = await dialog.showMessageBox(window!, { type: "question", title: "Değişiklikleri onayla",
-      message: `${review.title} değişiklikleri entegrasyon dalına alınsın mı?`,
-      detail: `${review.inspection.changedPaths.length} dosya incelendi. Kullanıcının ana dalı değişmez.\nSHA-256: ${digest}`,
-      buttons: ["Vazgeç", "Onayla ve birleştir"], defaultId: 0, cancelId: 0 });
-    if (result.response !== 1) return false;
     service.approve(taskId, digest);
     return true;
   });
@@ -526,13 +507,6 @@ app.whenReady().then(async () => {
     if ([requestId, executionId, digest].some((value) => typeof value !== "string") || !["allow_once", "deny"].includes(String(decision))) throw new Error("Geçersiz izin kararı");
     const request = service.state().permissions.find((item) => item.id === requestId && item.executionId === executionId && item.digest === digest);
     if (!request) throw new Error("İzin isteği artık geçerli değil");
-    if (decision === "allow_once") {
-      const result = await dialog.showMessageBox(window!, { type: "question", title: "Ajan izni",
-        message: `${request.taskId}: bu işleme bir kez izin verilsin mi?`,
-        detail: `${request.description}\n\nHassas değerler maskelenmiş olabilir. Kalıcı veya oturum genelinde izin verilmez.`,
-        buttons: ["Vazgeç", "Bir kez izin ver"], defaultId: 0, cancelId: 0 });
-      if (result.response !== 1) return;
-    }
     service.decidePermission(requestId as string, executionId as string, digest as string, decision as "allow_once" | "deny");
   });
   let updateTimer: ReturnType<typeof setTimeout> | undefined;

@@ -24,6 +24,8 @@ npm run desktop
 
 AgentMesh projeye ait her şeyi seçilen klasörün içindeki `.agentmesh/` altına yazar ve bu klasörü `.git/info/exclude` ile Git'ten gizler. `.gitignore` dosyana dokunmaz. Önceki sürümlerin projenin yanına açtığı `.agentmesh-worktrees` klasöründeki eski görevler çalışmaya devam eder; temiz entegrasyon alanı ilk kullanımda klasörün içine taşınır.
 
+Durdurulan ya da başarısız olan bir görevi denetçideki **Başka ajana devret** ile başka bir ajana verebilirsin (ör. Codex ile başlayıp Claude ile bitirmek). Yeni ajan aynı çalışma alanında, öncekinin bıraktığı değişikliklerden devam eder; sağlayıcı oturumu taşınmaz, yeni ajan kısa bir devir notuyla başlar.
+
 Arayüz bir IDE düzenindedir: solda görevler (her ajan renkli bir hat, her görev bir durak), ortada dosya gezgini ve kod editörü, sağda seçili görevin denetçisi, altta terminal ve ajan akışı. `Ctrl+B` görev panelini, `Ctrl+J` alt paneli açıp kapatır; alt panelin yüksekliği sürüklenerek ayarlanır.
 
 Uygulama son açtığın projeyle başlar. İlk açılışta model çağırmayan bir **demo** gösterir.

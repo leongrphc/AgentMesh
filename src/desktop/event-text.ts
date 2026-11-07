@@ -19,6 +19,7 @@ const DOMAIN_LABELS: Partial<Record<DomainEvent["type"], string>> = {
   "task.cancelled": "Görev iptal edildi",
   "task.interrupted": "Görev yarıda kesildi",
   "task.retried": "Görev yeniden kuyruğa alındı",
+  "task.reassigned": "Görev başka ajana devredildi",
   "permission.requested": "Ajan izin istiyor",
   "permission.resolved": "İzin kararı verildi",
   "context.updated": "Ortak context güncellendi",
@@ -29,6 +30,7 @@ const DOMAIN_LABELS: Partial<Record<DomainEvent["type"], string>> = {
 };
 
 export function describeEvent(event: DomainEvent): string {
+  if (event.type === "task.reassigned") return `Görev ${event.previousAgentId} ajanından ${event.agentId} ajanına devredildi`;
   const label = DOMAIN_LABELS[event.type] ?? event.type;
   const error = "error" in event && typeof event.error === "string" ? event.error : undefined;
   return error ? `${label}: ${clip(error, 300)}` : label;

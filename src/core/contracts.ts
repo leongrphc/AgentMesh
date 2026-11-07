@@ -153,6 +153,8 @@ export interface TaskRecord extends AgentTask {
   integratedCommit?: string;
   tests?: TestReport[];
   testDigest?: string;
+  /** Set when the task was handed to another agent; the new agent continues in the same worktree. */
+  handoff?: { from: string; at: string };
 }
 
 export interface ContextPackage {
@@ -179,6 +181,7 @@ export type DomainEvent =
   | { type: "task.interrupted"; projectId: string; taskId: string }
   | { type: "task.cancelled"; projectId: string; taskId: string }
   | { type: "task.retried"; projectId: string; taskId: string }
+  | { type: "task.reassigned"; projectId: string; taskId: string; agentId: string; previousAgentId: string; at: string }
   | { type: "task.session.saved"; projectId: string; taskId: string; sessionId: string }
   | { type: "task.worktree.prepared"; projectId: string; taskId: string; path: string; branch: string; baseCommit?: string }
   | { type: "task.merge.conflicted"; projectId: string; taskId: string; conflict: MergeConflict }

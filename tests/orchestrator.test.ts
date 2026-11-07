@@ -163,3 +163,43 @@ test("tek görevin manuel iptali bağımlısını bloklar ve ajanı başlatmaz",
     assert.deepEqual(result.tasks.map((task) => task.status), ["cancelled", "blocked"]);
   } finally { f.cleanup(); }
 });
+
+test("a stopped task can be handed to another agent, which starts a fresh session with a handoff note", async () => {
+  const f = fixture();
+  try {
+    const seen: Array<{ agent: string; session?: string; instruction: string }> = [];
+    f.engine.registerAgent(new MockAgent("codex", async ({ task, sessionId, onSession }) => {
+      seen.push({ agent: "codex", session: sessionId, instruction: task.instruction });
+      onSession?.("codex-thread-1");
+      throw new Error("kota doldu");
+    }));
+    f.engine.registerAgent(new MockAgent("claude", async ({ task, sessionId }) => {
+      seen.push({ agent: "claude", session: sessionId, instruction: task.instruction });
+      return { summary: "claude bitirdi" };
+    }));
+    f.engine.addTask(f.makeTask("feature", "codex"));
+    await f.engine.run("p");
+    assert.equal(f.engine.snapshot("p").tasks[0]!.status, "failed");
+    assert.equal(f.engine.snapshot("p").tasks[0]!.sessionId, "codex-thread-1");
+
+    assert.throws(() => f.engine.reassignTask("feature", "codex"), /zaten bu ajanda/);
+    assert.throws(() => f.engine.reassignTask("feature", "ghost"), /kayıtlı değil/);
+    f.engine.reassignTask("feature", "claude");
+    const handed = f.engine.snapshot("p").tasks[0]!;
+    assert.deepEqual([handed.agentId, handed.status, handed.sessionId, handed.error, handed.handoff?.from], ["claude", "pending", undefined, undefined, "codex"]);
+
+    const done = await f.engine.run("p");
+    assert.equal(done.tasks[0]!.status, "completed");
+    assert.equal(seen[1]!.agent, "claude");
+    assert.equal(seen[1]!.session, undefined, "a provider session never crosses agents");
+    assert.match(seen[1]!.instruction, /"codex" ajanı tarafından başlatılıp durduruldu/);
+    assert.match(seen[1]!.instruction, /feature$/, "the original instruction follows the note");
+    assert.throws(() => f.engine.reassignTask("feature", "codex"), /Tamamlanmış görev devredilemez/);
+
+    const replayed = new Orchestrator(new Journal(f.path));
+    replayed.registerAgent(new MockAgent("codex", async () => ({ summary: "" })));
+    replayed.registerAgent(new MockAgent("claude", async () => ({ summary: "" })));
+    const task = replayed.snapshot("p").tasks[0]!;
+    assert.deepEqual([task.agentId, task.handoff?.from, task.status], ["claude", "codex", "completed"]);
+  } finally { f.cleanup(); }
+});

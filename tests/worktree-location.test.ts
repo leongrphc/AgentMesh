@@ -7,6 +7,7 @@ import { join } from "node:path";
 import { test } from "node:test";
 import { configJournalPath } from "../src/core/journal-location.js";
 import { WorktreeManager } from "../src/core/worktrees.js";
+import type { AgentAdapter } from "../src/core/contracts.js";
 
 const git = (cwd: string, ...args: string[]) => execFileSync("git", ["-C", cwd, ...args], { encoding: "utf8" }).trim();
 const text = (path: string) => readFileSync(path, "utf8").replace(/\r\n/g, "\n");
@@ -108,5 +109,37 @@ test("config journals live inside the repository unless an earlier one exists ne
     mkdirSync(join(parent, ".agentmesh-data", key), { recursive: true });
     writeFileSync(legacy, "");
     assert.equal(configJournalPath(repo), legacy);
+  } finally { cleanup(); }
+});
+
+test("an agent taking over a task continues in the same worktree with the previous agent's partial work", async () => {
+  const { repo, cleanup } = fixture();
+  const { Orchestrator } = await import("../src/core/orchestrator.js");
+  const { Journal } = await import("../src/core/journal.js");
+  try {
+    const engine = new Orchestrator(new Journal(join(repo, ".agentmesh", "events.jsonl")), new WorktreeManager());
+    engine.createProject({ id: "p", workspaceRoot: repo });
+    const workspaces: string[] = [];
+    // CLI-like adapters: mock adapters deliberately run without a worktree.
+    const cli = (id: string, execute: AgentAdapter["execute"]): AgentAdapter => ({ id, provider: id, connection: "cli", execute });
+    engine.registerAgent(cli("codex", async ({ workspaceRoot }) => {
+      workspaces.push(workspaceRoot);
+      writeFileSync(join(workspaceRoot, "part1.txt"), "codex yazdı\n");
+      throw new Error("durduruldu");
+    }));
+    engine.registerAgent(cli("claude", async ({ workspaceRoot }) => {
+      workspaces.push(workspaceRoot);
+      assert.equal(text(join(workspaceRoot, "part1.txt")), "codex yazdı\n", "previous agent's work is still there");
+      writeFileSync(join(workspaceRoot, "part2.txt"), "claude tamamladı\n");
+      return { summary: "tamam" };
+    }));
+    engine.addTask({ id: "feature", projectId: "p", agentId: "codex", title: "f", instruction: "f", dependsOn: [], allowedPaths: ["**"] });
+    await engine.run("p");
+    engine.reassignTask("feature", "claude");
+    const result = await engine.run("p");
+    assert.equal(result.tasks[0]!.status, "pending_review");
+    assert.equal(workspaces[0], workspaces[1], "same worktree for both agents");
+    const inspection = new WorktreeManager().inspectTask(repo, result.tasks[0]!.worktree!, ["**"]);
+    assert.deepEqual(inspection.changedPaths.sort(), ["part1.txt", "part2.txt"]);
   } finally { cleanup(); }
 });

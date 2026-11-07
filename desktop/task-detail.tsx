@@ -1,3 +1,4 @@
+import { useState } from "react";
 import type { TaskRecord } from "../src/core/contracts.js";
 import type { DesktopAPI, DesktopState } from "../src/desktop/contracts.js";
 import { ContextPackages } from "./context-packages.js";
@@ -5,14 +6,35 @@ import { laneStyle } from "./lanes.js";
 import { STATUS_LABEL } from "./task-rail.js";
 import { TestReports } from "./test-reports.js";
 
+const REASSIGNABLE = ["pending", "failed", "blocked", "needs_review", "cancelled"];
+
+/** Hand a stopped task to another agent; it continues in the same worktree from where the last one stopped. */
+function Handoff({ task, state, api, pending, act }: {
+  task: TaskRecord; state: DesktopState; api: DesktopAPI; pending: boolean; act: (action: () => Promise<unknown>) => void;
+}) {
+  const others = state.agents.filter((agent) => agent.id !== task.agentId);
+  const [target, setTarget] = useState(others[0]?.id ?? "");
+  if (!REASSIGNABLE.includes(task.status) || !others.length) return null;
+  const chosen = others.some((agent) => agent.id === target) ? target : others[0]!.id;
+  return <form className="handoff" onSubmit={(event) => { event.preventDefault(); act(() => api.reassign(task.id, chosen)); }}>
+    <label>Başka ajana devret
+      <select value={chosen} disabled={state.busy || pending} onChange={(event) => setTarget(event.target.value)}>
+        {others.map((agent) => <option key={agent.id} value={agent.id} style={laneStyle(state, agent.id)}>{agent.id}</option>)}
+      </select>
+    </label>
+    <button disabled={state.busy || pending}>Devret</button>
+    <small>{task.worktree ? "Yeni ajan aynı çalışma alanında, öncekinin bıraktığı yerden devam eder." : "Görev henüz başlamadı; yalnızca ajanı değişir."}</small>
+  </form>;
+}
+
 /** What the user should do next for a task, in one sentence. */
 function nextStep(task: TaskRecord, busy: boolean): string | undefined {
   switch (task.status) {
     case "pending": return busy ? "Sırada. Önceki görevler bitince başlayacak." : "Hazır. Başlatmak için üstteki “Ajanları başlat” düğmesini kullanın.";
     case "running": return "Ajan çalışıyor. Neler yaptığını sağdaki akıştan izleyebilirsiniz.";
     case "pending_review": return "Ajan işini bitirdi. Değişiklikleri inceleyip onaylayın; bu göreve bağlı görevler onaydan sonra başlar.";
-    case "failed": case "blocked": case "needs_review": return "Görev tamamlanamadı. Aşağıdaki hatayı okuyun, gerekirse görevi yeniden sıraya alın.";
-    case "cancelled": return "Görev iptal edildi. İsterseniz yeniden sıraya alabilirsiniz.";
+    case "failed": case "blocked": case "needs_review": return "Görev tamamlanamadı. Hatayı okuyun; yeniden sıraya alabilir ya da başka bir ajana devredebilirsiniz.";
+    case "cancelled": return "Görev durduruldu. Yeniden sıraya alabilir ya da aşağıdan başka bir ajana devredebilirsiniz.";
     default: return undefined;
   }
 }
@@ -44,6 +66,8 @@ export function TaskDetail({ task, state, api, pending, act, onReview }: {
       {["running", "pending"].includes(task.status) && <button disabled={pending} onClick={() => act(() => api.cancel(task.id))}>Görevi iptal et</button>}
       {["failed", "cancelled", "blocked", "needs_review"].includes(task.status) && <button disabled={state.busy || pending} onClick={() => act(() => api.retry(task.id))}>Yeniden sıraya al</button>}
     </div>
+    <Handoff key={task.id} task={task} state={state} api={api} pending={pending} act={act} />
+    {task.handoff && <p className="handoff-note">{task.handoff.from} ajanından devralındı · {new Date(task.handoff.at).toLocaleString("tr-TR")}</p>}
 
     {task.error && <pre className="task-error">{task.error}</pre>}
     {task.summary && <div className="result"><h4>Ajanın raporu</h4><p>{task.summary}</p></div>}

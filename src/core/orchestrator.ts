@@ -32,6 +32,18 @@ import { historyPage } from "./history-page.js";
 import { eventStream } from "./journal.js";
 import { materializeHistory } from "./materialize-history.js";
 
+/**
+ * A task taken over from another agent starts a fresh provider session, so the new agent is told
+ * that partial work may already be in its worktree and should be continued rather than redone.
+ */
+function handoffTask(task: TaskRecord): TaskRecord {
+  if (!task.handoff || task.sessionId) return task;
+  const note = `Not: Bu görev daha önce "${task.handoff.from}" ajanı tarafından başlatılıp durduruldu ve sana devredildi. `
+    + "Çalışma alanında o ajanın yaptığı değişiklikler bulunabilir. Önce mevcut durumu incele (ör. git status, git diff), "
+    + "doğru olanları koru ve görevi kaldığı yerden tamamla; baştan yazma.";
+  return { ...task, instruction: `${note}\n\n${task.instruction}` };
+}
+
 export interface ProjectSnapshot {
   project: Project;
   tasks: TaskRecord[];
@@ -409,6 +421,26 @@ export class Orchestrator {
     this.emit({ type: "task.retried", projectId: task.projectId, taskId });
   }
 
+  /** Statuses in which a task may be handed to another agent: not running and not awaiting review. */
+  static readonly REASSIGNABLE: readonly string[] = ["pending", "failed", "blocked", "needs_review", "cancelled"];
+
+  /**
+   * Hands a stopped task to another agent. The worktree, and whatever the previous agent already
+   * changed there, is kept; the provider session is dropped because sessions cannot cross providers.
+   * A stopped task goes back to the queue but does not start until the user starts the agents.
+   */
+  reassignTask(taskId: string, agentId: string): void {
+    const task = this.requireTask(taskId);
+    if (!Orchestrator.REASSIGNABLE.includes(task.status)) {
+      throw new Error(task.status === "running" ? "Çalışan görev devredilemez; önce görevi durdurun."
+        : task.status === "pending_review" ? "İnceleme bekleyen görev devredilemez; önce onaylayın ya da yeniden sıraya alın."
+        : `Tamamlanmış görev devredilemez: ${task.status}`);
+    }
+    if (agentId === task.agentId) throw new Error("Görev zaten bu ajanda.");
+    if (!this.adapters.has(agentId)) throw new Error(`Ajan kayıtlı değil: ${agentId}`);
+    this.emit({ type: "task.reassigned", projectId: task.projectId, taskId, agentId, previousAgentId: task.agentId, at: new Date().toISOString() });
+  }
+
   /** Explicitly stages a fresh preview after human edits, without approving it. */
   refreshReview(taskId: string): void {
     const task = this.requireTask(taskId);
@@ -561,7 +593,7 @@ export class Orchestrator {
         delivery: { taskId: task.id, messageId: message.id, executionId, status: "sending" as const, mode: "prompt" as const } })));
       let sent = 0;
       const output = await adapter.execute({
-        task,
+        task: handoffTask(task),
         workspaceRoot,
         context: contextPackage.context,
         inbox: structuredClone(initial),
@@ -766,6 +798,19 @@ export class Orchestrator {
       case "task.session.saved":
         this.requireTask(event.taskId).sessionId = event.sessionId;
         break;
+      case "task.reassigned": {
+        const task = this.requireTask(event.taskId);
+        task.agentId = event.agentId;
+        task.sessionId = undefined;
+        task.handoff = { from: event.previousAgentId, at: event.at };
+        task.status = "pending";
+        task.error = undefined;
+        task.summary = undefined;
+        task.review = undefined;
+        task.tests = undefined;
+        task.testDigest = undefined;
+        break;
+      }
       case "task.worktree.prepared":
         this.requireTask(event.taskId).worktree = { path: event.path, branch: event.branch, baseCommit: event.baseCommit };
         break;

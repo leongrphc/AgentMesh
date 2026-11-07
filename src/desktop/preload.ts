@@ -25,6 +25,7 @@ const api: DesktopAPI = {
   start: () => ipcRenderer.invoke("mesh:start"),
   cancel: (taskId) => ipcRenderer.invoke("mesh:cancel", taskId),
   retry: (taskId) => ipcRenderer.invoke("mesh:retry", taskId),
+  reassign: (taskId, agentId) => ipcRenderer.invoke("mesh:reassign", taskId, agentId),
   review: (taskId, refresh) => ipcRenderer.invoke("mesh:review", taskId, refresh),
   prepareMergeResolution: (taskId, digest, integrationCommit) => ipcRenderer.invoke("mesh:prepare-merge", taskId, digest, integrationCommit),
   conflictFile: (taskId, path) => ipcRenderer.invoke("mesh:conflict-file", taskId, path),

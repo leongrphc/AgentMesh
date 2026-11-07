@@ -69,11 +69,12 @@ export interface DesktopAPI {
   openDemo(): Promise<DesktopState>;
   openFolder(): Promise<DesktopState>;
   openRecent(path: string): Promise<DesktopState>;
-  /** Asks for confirmation, then merges approved work into the checked-out branch. Resolves to undefined when declined. */
-  applyIntegration(): Promise<{ branch: string; commits: number; fastForward: boolean } | undefined>;
+  /** Merges approved work into the checked-out branch. */
+  applyIntegration(): Promise<{ branch: string; commits: number; fastForward: boolean }>;
   start(): Promise<void>;
   cancel(taskId?: string): Promise<void>;
   retry(taskId: string): Promise<void>;
+  reassign(taskId: string, agentId: string): Promise<void>;
   review(taskId: string, refresh?: boolean): Promise<DesktopReview>;
   prepareMergeResolution(taskId: string, digest: string, integrationCommit: string): Promise<DesktopReview>;
   conflictFile(taskId: string, path: string): Promise<ConflictFile>;

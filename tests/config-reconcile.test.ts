@@ -50,3 +50,11 @@ test("desktop rejects drift before adding tasks, preserves UI tasks and previous
     assert.equal(service.openConfig(file).snapshot.tasks.length, 3);
   } finally { await service.close(); rmSync(root, { recursive: true, force: true }); }
 });
+
+test("a task handed to another agent in the app still matches its config entry on reopen", () => {
+  const task = { id: "t", projectId: "p", title: "T", instruction: "do", agentId: "codex", dependsOn: [], allowedPaths: ["**"] };
+  const config = { projectId: "p", repoPath: ".", agents: [{ id: "codex", provider: "codex" as const }, { id: "claude", provider: "claude" as const }], tasks: [task] };
+  const handedOff = { ...task, agentId: "claude", status: "pending", handoff: { from: "codex", at: "2026-11-07T00:00:00Z" } };
+  assert.deepEqual(reconcileTasks(config, [handedOff as never]), []);
+  assert.throws(() => reconcileTasks(config, [{ ...task, agentId: "claude" }]), /agentId/, "an unexplained agent change is still rejected");
+});

@@ -249,6 +249,14 @@ export class DesktopService {
     this.engine!.retryTask(this.requireTask(taskId));
   }
 
+  /** Hands a stopped task to another agent, which continues in the same worktree. */
+  reassignTask(taskId: string, agentId: string): void {
+    this.requireClosedTerminals();
+    if (this.running) throw new Error("Görevi devretmeden önce çalışmanın bitmesini bekleyin");
+    if (!this.config?.agents.some((agent) => agent.id === agentId)) throw new Error(`Bu projede böyle bir ajan yok: ${agentId}`);
+    this.engine!.reassignTask(this.requireTask(taskId), agentId);
+  }
+
   createTask(draft: TaskDraft): void {
     if (this.running) throw new Error("Görev eklemeden önce çalışmayı durdurun");
     if (!draft || typeof draft !== "object" || Array.isArray(draft)) throw new Error("Geçersiz görev");
