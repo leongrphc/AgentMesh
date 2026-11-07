@@ -173,6 +173,24 @@ export class WorktreeManager {
     return { original, modified };
   }
 
+  /** True when `commit` is already contained in the repository's checked-out branch. */
+  isApplied(repoPath: string, commit: string): boolean {
+    try { git(exactRoot(repoPath), "merge-base", "--is-ancestor", commit, "HEAD"); return true; }
+    catch { return false; }
+  }
+
+  /**
+   * Deletes a finished task's worktree and its branch. Only ever called for tasks whose work is
+   * already in the user's branch (or that changed nothing), so no work can be lost.
+   */
+  removeTaskWorktree(repoPath: string, lease: WorktreeLease): void {
+    const root = exactRoot(repoPath);
+    const verified = this.reopen(root, lease);
+    if (verified.branch === integrationBranch(root)) throw new Error("Entegrasyon çalışma alanı silinemez");
+    git(root, "worktree", "remove", "--force", verified.path);
+    try { git(root, "branch", "-D", verified.branch); } catch { /* The branch may already be gone; the worktree is what takes space. */ }
+  }
+
   /** Number of approved commits on the integration branch that the checked-out branch does not have yet. */
   pendingIntegration(repoPath: string): number {
     const root = exactRoot(repoPath);

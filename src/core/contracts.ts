@@ -205,6 +205,7 @@ export type DomainEvent =
   | { type: "task.interrupted"; projectId: string; taskId: string }
   | { type: "task.cancelled"; projectId: string; taskId: string }
   | { type: "task.retried"; projectId: string; taskId: string }
+  | { type: "task.worktree.removed"; projectId: string; taskId: string }
   | { type: "task.usage.recorded"; projectId: string; taskId: string; durationMs: number; usage?: AgentUsage }
   | { type: "task.changes.requested"; projectId: string; taskId: string; feedback: string; at: string }
   | { type: "task.reassigned"; projectId: string; taskId: string; agentId: string; previousAgentId: string; at: string }

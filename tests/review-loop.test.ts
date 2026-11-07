@@ -108,3 +108,36 @@ test("a failing project test is reported as failed without blocking the review",
     assert.equal(readFileSync(join(task.worktree!.path, "math.ts"), "utf8").replace(/\r\n/g, "\n"), "broken\n");
   } finally { f.cleanup(); }
 });
+
+test("after applying, finished task worktrees are removed while pending work is kept", async () => {
+  const f = fixture();
+  try {
+    f.engine.registerAgent(f.cli("agent", async ({ task, workspaceRoot }) => {
+      if (task.id !== "noop") writeFileSync(join(workspaceRoot, `${task.id}.txt`), task.id);
+      return { summary: "ok" };
+    }));
+    for (const id of ["applied", "noop", "waiting"]) {
+      f.engine.addTask({ id, projectId: "p", agentId: "agent", title: id, instruction: id, dependsOn: [], allowedPaths: ["**"] });
+    }
+    await f.engine.run("p");
+    const byId = () => Object.fromEntries(f.engine.snapshot("p").tasks.map((task) => [task.id, task]));
+    assert.equal(byId().noop!.status, "completed");
+    const applied = byId().applied!;
+    const paths = { applied: applied.worktree!.path, noop: byId().noop!.worktree!.path, waiting: byId().waiting!.worktree!.path };
+
+    f.engine.approveTask("applied", applied.review!.digest);
+    assert.deepEqual(f.engine.releaseFinishedWorktrees("p"), ["noop"], "approved but not yet applied work keeps its worktree");
+
+    new WorktreeManager().applyIntegration(f.root);
+    assert.deepEqual(f.engine.releaseFinishedWorktrees("p"), ["applied"]);
+    assert.ok(!existsSync(paths.applied) && !existsSync(paths.noop));
+    assert.ok(existsSync(paths.waiting), "a task still waiting for review is untouched");
+    assert.equal(byId().applied!.worktree, undefined);
+    assert.equal(byId().waiting!.status, "pending_review");
+    assert.equal(git(f.root, "branch", "--list", "agentmesh/*-*").split("\n").filter((line) => line.trim() && !line.includes("integration")).length, 1);
+    assert.equal(readFileSync(join(f.root, "applied.txt"), "utf8"), "applied", "the applied work is in the user's folder");
+
+    const replayed = new Orchestrator(new Journal(f.journal), new WorktreeManager());
+    assert.equal(replayed.snapshot("p").tasks.find((task) => task.id === "applied")!.worktree, undefined);
+  } finally { f.cleanup(); }
+});

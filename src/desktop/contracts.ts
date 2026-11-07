@@ -74,7 +74,7 @@ export interface DesktopAPI {
   openFolder(): Promise<DesktopState>;
   openRecent(path: string): Promise<DesktopState>;
   /** Merges approved work into the checked-out branch. */
-  applyIntegration(): Promise<{ branch: string; commits: number; fastForward: boolean }>;
+  applyIntegration(): Promise<{ branch: string; commits: number; fastForward: boolean; cleaned: number }>;
   start(): Promise<void>;
   cancel(taskId?: string): Promise<void>;
   retry(taskId: string): Promise<void>;

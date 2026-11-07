@@ -463,6 +463,26 @@ export class Orchestrator {
     this.emit({ type: "task.changes.requested", projectId: task.projectId, taskId, feedback: safeLog(text, "storage"), at: new Date().toISOString() });
   }
 
+  /**
+   * Frees the disk used by finished tasks: completed tasks whose approved commit is already in the
+   * user's branch, or which completed without changing anything. Returns the ids that were cleaned;
+   * a worktree that cannot be removed (e.g. a file is open elsewhere) is skipped and kept.
+   */
+  releaseFinishedWorktrees(projectId: string): string[] {
+    const project = this.projects.get(projectId);
+    if (!project || !this.worktrees) return [];
+    const released: string[] = [];
+    for (const task of this.tasks.values()) {
+      if (task.projectId !== projectId || task.status !== "completed" || !task.worktree || this.controllers.has(task.id)) continue;
+      if (task.integratedCommit && !this.worktrees.isApplied(project.workspaceRoot, task.integratedCommit)) continue;
+      try { this.worktrees.removeTaskWorktree(project.workspaceRoot, task.worktree); }
+      catch { continue; }
+      released.push(task.id);
+    }
+    if (released.length) this.emitBatch(released.map((taskId) => ({ type: "task.worktree.removed" as const, projectId, taskId })));
+    return released;
+  }
+
   /** Statuses in which a task may be handed to another agent: not running and not awaiting review. */
   static readonly REASSIGNABLE: readonly string[] = ["pending", "failed", "blocked", "needs_review", "cancelled"];
 
@@ -862,6 +882,9 @@ export class Orchestrator {
       }
       case "task.session.saved":
         this.requireTask(event.taskId).sessionId = event.sessionId;
+        break;
+      case "task.worktree.removed":
+        this.requireTask(event.taskId).worktree = undefined;
         break;
       case "task.usage.recorded": {
         const task = this.requireTask(event.taskId);

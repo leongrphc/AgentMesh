@@ -515,13 +515,16 @@ export class DesktopService {
   }
 
   /** Merges approved work into the user's checked-out branch, so it appears in the selected folder. */
-  applyIntegration(): { branch: string; commits: number; fastForward: boolean } {
+  applyIntegration(): { branch: string; commits: number; fastForward: boolean; cleaned: number } {
     if (!this.config || !this.engine) throw new Error("Önce proje açın");
     if (this.demo) throw new Error("Demo projesinde uygulanacak gerçek değişiklik yok");
     if (this.running) throw new Error("Önce çalışan görevlerin bitmesini bekleyin");
     this.requireClosedTerminals();
-    try { return new WorktreeManager().applyIntegration(this.config.repoPath); }
-    finally {
+    try {
+      const applied = new WorktreeManager().applyIntegration(this.config.repoPath);
+      // Work that is now in the user's branch no longer needs its worktree.
+      return { ...applied, cleaned: this.engine.releaseFinishedWorktrees(this.config.projectId).length };
+    } finally {
       this.uncommitted = hasUncommittedChanges(this.config.repoPath);
       this.refreshIntegration();
       this.publish();

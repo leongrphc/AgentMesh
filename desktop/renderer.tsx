@@ -145,7 +145,7 @@ function App() {
       <p><b>{state.integrationPending} onaylı değişiklik uygulanmayı bekliyor.</b> Klasörünüzdeki dosyalar henüz değişmedi.</p>
       <button className="primary" disabled={state.busy || pending} onClick={() => void act(async () => {
         const result = await api.applyIntegration();
-        if (result) setNotice(`${result.commits} onaylı commit "${result.branch}" dalına ${result.fastForward ? "eklendi" : "birleştirildi"}. Dosyalar klasörünüzde.`);
+        if (result) setNotice(`${result.commits} onaylı commit "${result.branch}" dalına ${result.fastForward ? "eklendi" : "birleştirildi"}. Dosyalar klasörünüzde.${result.cleaned ? ` Biten ${result.cleaned} görevin çalışma alanı temizlendi.` : ""}`);
       })}>Projeme uygula</button>
     </div>}
     {state.openNotice && <div className="banner info" role="status"><p>{state.openNotice}</p></div>}

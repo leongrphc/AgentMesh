@@ -7,6 +7,7 @@ const DOMAIN_LABELS: Partial<Record<DomainEvent["type"], string>> = {
   "project.settings.updated": "Proje ayarları güncellendi",
   "task.created": "Görev eklendi",
   "task.worktree.prepared": "Ayrı çalışma alanı (worktree) hazırlandı",
+  "task.worktree.removed": "Bitmiş görevin çalışma alanı temizlendi",
   "task.started": "Ajan çalışmaya başladı",
   "task.context.prepared": "Ortak context paketi hazırlandı",
   "task.session.saved": "Ajan oturumu kaydedildi",
