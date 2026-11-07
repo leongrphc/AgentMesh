@@ -207,6 +207,8 @@ function App() {
       onDirty={setMergeDirty} pending={pending} error={error}
       onClose={() => { setMergeDirty(false); setReview(undefined); }}
       onRefresh={() => void act(async () => setReview(await api.review(review.taskId, true)))}
+      feedback={tasks.find((item) => item.id === review.taskId)?.feedback}
+      onRequestChanges={(feedback) => void act(async () => { await api.requestChanges(review.taskId, feedback); setReview(undefined); })}
       onApprove={() => void act(async () => {
         try { if (await api.approve(review.taskId, review.inspection.digest)) setReview(undefined); }
         catch (approveError) { setReview(await api.review(review.taskId)); throw approveError; }

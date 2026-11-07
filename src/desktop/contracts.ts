@@ -77,6 +77,8 @@ export interface DesktopAPI {
   cancel(taskId?: string): Promise<void>;
   retry(taskId: string): Promise<void>;
   reassign(taskId: string, agentId: string): Promise<void>;
+  requestChanges(taskId: string, feedback: string): Promise<void>;
+  updateSettings(settings: import("../core/contracts.js").ProjectSettings): Promise<void>;
   review(taskId: string, refresh?: boolean): Promise<DesktopReview>;
   prepareMergeResolution(taskId: string, digest: string, integrationCommit: string): Promise<DesktopReview>;
   conflictFile(taskId: string, path: string): Promise<ConflictFile>;

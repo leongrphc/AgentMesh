@@ -5,9 +5,9 @@ export function diagnosticReport(events: Iterable<StoredEvent>) {
   const counts: Record<string, number> = {};
   let eventCount = 0;
   const known = new Set([
-    "project.created", "project.parallelism.updated", "project.agents.configured", "task.created", "task.started", "task.completed", "task.failed",
+    "project.created", "project.parallelism.updated", "project.settings.updated", "project.agents.configured", "task.created", "task.started", "task.completed", "task.failed",
     "permission.requested", "permission.resolved",
-    "task.blocked", "task.interrupted", "task.cancelled", "task.retried", "task.reassigned", "task.session.saved",
+    "task.blocked", "task.interrupted", "task.cancelled", "task.retried", "task.reassigned", "task.changes.requested", "task.session.saved",
     "task.worktree.prepared", "task.review.requested", "task.review.approved", "context.updated", "message.sent",
     "task.merge.conflicted", "task.merge.prepared",
     "message.delivery",

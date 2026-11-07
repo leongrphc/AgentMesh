@@ -16,7 +16,7 @@ function text(value: unknown, max: number): string | undefined {
  * anything that is not an explicit "passed" or "failed" becomes "not_run" (never upgraded to passed),
  * oversized text is truncated, and non-object entries are dropped.
  */
-export function normalizeTestReports(value: unknown): TestReport[] | undefined {
+export function normalizeTestReports(value: unknown, trusted = false): TestReport[] | undefined {
   if (value === undefined || value === null || !Array.isArray(value)) return undefined;
   const reports: TestReport[] = [];
   for (const entry of value.slice(0, MAX_REPORTS)) {
@@ -29,7 +29,9 @@ export function normalizeTestReports(value: unknown): TestReport[] | undefined {
     const reported = text(report.details, 8192);
     const details = known ? reported
       : [`Ajan tanınmayan bir durum bildirdi (${safeLog(String(JSON.stringify(report.status) ?? "yok").slice(0, 60))}); çalıştırılmadı sayıldı.`, reported].filter(Boolean).join(" ");
-    reports.push({ name: safeLog(name, "storage"), status,
+    // Only AgentMesh's own runs may carry the verified marker; an agent cannot claim it.
+    const verified = trusted && report.source === "agentmesh";
+    reports.push({ name: safeLog(name, "storage"), status, ...(verified ? { source: "agentmesh" as const } : {}),
       ...(command ? { command: safeLog(command, "storage") } : {}),
       ...(details ? { details: safeLog(details, "storage") } : {}) });
   }

@@ -253,6 +253,34 @@ export class DesktopService {
     this.engine!.retryTask(this.requireTask(taskId));
   }
 
+  updateSettings(settings: import("../core/contracts.js").ProjectSettings): void {
+    if (!this.config || !this.engine) throw new Error("Önce proje açın");
+    if (this.running) throw new Error("Ayarları değiştirmeden önce çalışmanın bitmesini bekleyin");
+    this.engine.updateSettings(this.config.projectId, settings);
+  }
+
+  /**
+   * With the project's auto-continue setting on, starts the agents as soon as a task is ready to run
+   * (queued, every dependency completed, no open context decision), so approvals flow straight on.
+   */
+  private autoContinue(): void {
+    if (!this.engine || !this.config || this.running || this.terminals.active || this.messageAbort) return;
+    const snapshot = this.engine.snapshot(this.config.projectId, false);
+    if (!snapshot.project.settings?.autoContinue) return;
+    if (snapshot.contextConflicts.some((conflict) => conflict.status === "pending")) return;
+    const done = new Set(snapshot.tasks.filter((task) => task.status === "completed").map((task) => task.id));
+    if (!snapshot.tasks.some((task) => task.status === "pending" && task.dependsOn.every((id) => done.has(id)))) return;
+    this.start();
+  }
+
+  /** Returns a reviewed task to its agent with feedback; it revises the work in the same worktree and session. */
+  requestChanges(taskId: string, feedback: string): void {
+    this.requireClosedTerminals();
+    if (this.running) throw new Error("Değişiklik istemeden önce çalışmanın bitmesini bekleyin");
+    this.engine!.requestChanges(this.requireTask(taskId), feedback);
+    this.autoContinue();
+  }
+
   /** Hands a stopped task to another agent, which continues in the same worktree. */
   reassignTask(taskId: string, agentId: string): void {
     this.requireClosedTerminals();
@@ -418,6 +446,7 @@ export class DesktopService {
     this.engine!.approveTask(taskId, digest);
     this.refreshIntegration();
     this.publish();
+    this.autoContinue();
   }
 
   /** Approved commits waiting on the integration branch; kept as a cached count for the UI. */

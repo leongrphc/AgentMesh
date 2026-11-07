@@ -569,6 +569,17 @@ h2 span { margin-left: 6px; color: var(--muted); font: 400 12px var(--sans); }
 .diff-hunk { color: var(--focus); }
 .diff-file { color: var(--muted); }
 .review-actions { justify-content: flex-end; border-top: 1px solid var(--line); }
+.review-actions-spacer { flex: 1; }
+.request-changes { display: grid; gap: 6px; padding: 12px 20px 0; border-top: 1px solid var(--line); }
+.request-changes label { font-size: 12px; color: var(--text-2); }
+.request-changes textarea { width: 100%; }
+.previous-feedback { font-size: 12px; color: var(--text-2); padding: 8px 10px; background: var(--raised); border-radius: var(--r-sm); white-space: pre-wrap; }
+.feedback-note { white-space: pre-wrap; padding: 8px 10px; border-left: 3px solid var(--warn); background: var(--raised); border-radius: var(--r-sm); }
+.test-reports li.verified { border-left: 3px solid var(--ok); padding-left: 10px; }
+.verified-label { color: var(--ok) !important; font-weight: 600; }
+.project-settings form { display: grid; gap: 4px; }
+.check-row { flex-direction: row !important; align-items: flex-start; gap: 8px !important; }
+.check-row input { width: auto !important; margin-top: 3px; }
 
 .task-form { max-width: 660px; }
 .task-form label { display: flex; flex-direction: column; gap: 5px; font-size: 12px; color: var(--text-2); margin-bottom: 14px; }

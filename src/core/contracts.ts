@@ -124,6 +124,8 @@ export interface TestReport {
   status: "passed" | "failed" | "not_run";
   command?: string;
   details?: string;
+  /** "agentmesh" when AgentMesh ran the command itself; absent for the agent's own claims. */
+  source?: "agentmesh";
 }
 
 export interface AgentAdapter {
@@ -135,10 +137,18 @@ export interface AgentAdapter {
   execute(input: AgentExecution): Promise<AgentResult>;
 }
 
+export interface ProjectSettings {
+  /** Shell command AgentMesh runs in a task's worktree after the agent finishes, e.g. "npm ci && npm test". */
+  testCommand?: string;
+  /** Start newly unblocked tasks automatically after an approval or a change request. */
+  autoContinue?: boolean;
+}
+
 export interface Project {
   id: string;
   workspaceRoot: string;
   maxParallel?: number;
+  settings?: ProjectSettings;
 }
 
 export interface TaskRecord extends AgentTask {
@@ -155,6 +165,8 @@ export interface TaskRecord extends AgentTask {
   testDigest?: string;
   /** Set when the task was handed to another agent; the new agent continues in the same worktree. */
   handoff?: { from: string; at: string };
+  /** Latest reviewer feedback; addressed once the agent has produced a new review. */
+  feedback?: { text: string; at: string; round: number; addressed: boolean };
 }
 
 export interface ContextPackage {
@@ -170,6 +182,7 @@ export type DomainEvent =
   | { type: "project.agents.configured"; projectId: string; agents: AgentConfig[]; sourceAgents: AgentConfig[] }
   | { type: "message.delivery"; projectId: string; delivery: MessageDelivery }
   | { type: "project.parallelism.updated"; projectId: string; maxParallel: number }
+  | { type: "project.settings.updated"; projectId: string; settings: ProjectSettings }
   | { type: "permission.requested"; projectId: string; taskId: string; executionId: string; requestId: string; provider: string; kind: "command" | "file"; digest: string; expiresAt: string }
   | { type: "permission.resolved"; projectId: string; taskId: string; executionId: string; requestId: string; decision: PermissionDecision; source: PermissionSource }
   | { type: "task.created"; task: AgentTask }
@@ -181,6 +194,7 @@ export type DomainEvent =
   | { type: "task.interrupted"; projectId: string; taskId: string }
   | { type: "task.cancelled"; projectId: string; taskId: string }
   | { type: "task.retried"; projectId: string; taskId: string }
+  | { type: "task.changes.requested"; projectId: string; taskId: string; feedback: string; at: string }
   | { type: "task.reassigned"; projectId: string; taskId: string; agentId: string; previousAgentId: string; at: string }
   | { type: "task.session.saved"; projectId: string; taskId: string; sessionId: string }
   | { type: "task.worktree.prepared"; projectId: string; taskId: string; path: string; branch: string; baseCommit?: string }

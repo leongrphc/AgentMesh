@@ -10,6 +10,7 @@ import type {
   DomainEvent,
   Fact,
   Project,
+  ProjectSettings,
   StoredEvent,
   TaskRecord,
   MessageDraft,
@@ -24,6 +25,7 @@ import type { AgentConfig } from "./config.js";
 import { validate } from "./config.js";
 import { validateAgentEdit } from "./agent-settings.js";
 import { normalizeTestReports } from "./test-reports.js";
+import { runTestCommand } from "./test-runner.js";
 import { ExecutionInbox, validateMessageDraft } from "./inbox.js";
 import { normalizeContextFacts } from "./context.js";
 import { validateContextKeys } from "./context.js";
@@ -37,11 +39,18 @@ import { materializeHistory } from "./materialize-history.js";
  * that partial work may already be in its worktree and should be continued rather than redone.
  */
 function handoffTask(task: TaskRecord): TaskRecord {
-  if (!task.handoff || task.sessionId) return task;
-  const note = `Not: Bu görev daha önce "${task.handoff.from}" ajanı tarafından başlatılıp durduruldu ve sana devredildi. `
-    + "Çalışma alanında o ajanın yaptığı değişiklikler bulunabilir. Önce mevcut durumu incele (ör. git status, git diff), "
-    + "doğru olanları koru ve görevi kaldığı yerden tamamla; baştan yazma.";
-  return { ...task, instruction: `${note}\n\n${task.instruction}` };
+  const notes: string[] = [];
+  if (task.handoff && !task.sessionId) {
+    notes.push(`Not: Bu görev daha önce "${task.handoff.from}" ajanı tarafından başlatılıp durduruldu ve sana devredildi. `
+      + "Çalışma alanında o ajanın yaptığı değişiklikler bulunabilir. Önce mevcut durumu incele (ör. git status, git diff), "
+      + "doğru olanları koru ve görevi kaldığı yerden tamamla; baştan yazma.");
+  }
+  if (task.feedback && !task.feedback.addressed) {
+    notes.push(`İnceleme geri bildirimi (${task.feedback.round}. tur): Önceki değişikliklerin incelendi ve onaylanmadı. `
+      + "Çalışma alanındaki mevcut değişikliklerini aşağıdaki geri bildirime göre düzelt; onaylanabilir kısımları koru.\n"
+      + task.feedback.text);
+  }
+  return notes.length ? { ...task, instruction: `${notes.join("\n\n")}\n\nAsıl görev:\n${task.instruction}` } : task;
 }
 
 export interface ProjectSnapshot {
@@ -247,6 +256,17 @@ export class Orchestrator {
     this.emit({ type: "project.parallelism.updated", projectId, maxParallel });
   }
 
+  updateSettings(projectId: string, settings: ProjectSettings): void {
+    if (!this.projects.has(projectId)) throw new Error("Proje bulunamadı");
+    if (!settings || typeof settings !== "object" || Array.isArray(settings)) throw new Error("Geçersiz proje ayarları");
+    const testCommand = typeof settings.testCommand === "string" ? settings.testCommand.trim() : undefined;
+    if (settings.testCommand !== undefined && typeof settings.testCommand !== "string") throw new Error("Test komutu metin olmalı");
+    if (testCommand && (testCommand.length > 1000 || /[\0\r\n]/.test(testCommand))) throw new Error("Test komutu tek satır ve en fazla 1000 karakter olmalı");
+    if (settings.autoContinue !== undefined && typeof settings.autoContinue !== "boolean") throw new Error("Otomatik devam açık/kapalı olmalı");
+    this.emit({ type: "project.settings.updated", projectId, settings: {
+      ...(testCommand ? { testCommand } : {}), ...(settings.autoContinue ? { autoContinue: true } : {}) } });
+  }
+
   addTask(task: AgentTask): void {
     validateContextKeys(task.contextKeys);
     if (!this.projects.has(task.projectId)) throw new Error(`Proje bulunamadı: ${task.projectId}`);
@@ -419,6 +439,19 @@ export class Orchestrator {
       throw new Error(`Görev tekrar çalıştırılamaz: ${task.status}`);
     }
     this.emit({ type: "task.retried", projectId: task.projectId, taskId });
+  }
+
+  /**
+   * Sends a reviewed task back to the same agent with written feedback. The worktree and the
+   * provider session are kept, so the agent revises its own work instead of starting over.
+   */
+  requestChanges(taskId: string, feedback: string): void {
+    const task = this.requireTask(taskId);
+    if (task.status !== "pending_review") throw new Error("Yalnızca inceleme bekleyen bir görev için değişiklik istenebilir.");
+    const text = typeof feedback === "string" ? feedback.trim() : "";
+    if (!text) throw new Error("Ajanın neyi değiştirmesi gerektiğini yazın.");
+    if (text.length > 8000) throw new Error("Geri bildirim en fazla 8000 karakter olabilir.");
+    this.emit({ type: "task.changes.requested", projectId: task.projectId, taskId, feedback: safeLog(text, "storage"), at: new Date().toISOString() });
   }
 
   /** Statuses in which a task may be handed to another agent: not running and not awaiting review. */
@@ -643,10 +676,23 @@ export class Orchestrator {
           throw new Error(`İzin verilmeyen dosya değişikliği: ${inspection.violations.join(", ")}`);
         }
         if (inspection.changedPaths.length > 0) {
+          let reviewed = inspection;
+          const testCommand = this.projects.get(task.projectId)?.settings?.testCommand;
+          if (testCommand) {
+            const say = (text: string) => this.notify({ kind: "output", projectId: task.projectId, taskId: task.id, output: { channel: "stdout", data: { text } } });
+            say(`Proje testleri çalışıyor: ${safeLog(testCommand)}`);
+            const run = await runTestCommand(testCommand, workspaceRoot, controller.signal);
+            if (controller.signal.aborted || this.requireTask(task.id).status === "cancelled") return;
+            const discarded = this.worktrees!.discardTestArtifacts(workspaceRoot, inspection.changedPaths);
+            reviewed = this.worktrees!.inspectTask(snapshot.project.workspaceRoot, this.requireTask(task.id).worktree!, task.allowedPaths);
+            if (reviewed.violations.length > 0) throw new Error(`İzin verilmeyen dosya değişikliği: ${reviewed.violations.join(", ")}`);
+            output.tests = [run.report, ...(output.tests ?? [])];
+            say(`Proje testleri ${run.report.status === "passed" ? "geçti" : "başarısız"} (${(run.durationMs / 1000).toFixed(1)} sn)${discarded.length ? `; testlerin ürettiği ${discarded.length} dosya temizlendi` : ""}`);
+          }
           this.emit({
             type: "task.review.requested", projectId: task.projectId, taskId: task.id,
-            digest: inspection.digest, result: output,
-            testDigest: output.tests?.length ? inspection.digest : undefined,
+            digest: reviewed.digest, result: output,
+            testDigest: output.tests?.length ? reviewed.digest : undefined,
           });
           return;
         }
@@ -705,7 +751,7 @@ export class Orchestrator {
         },
       });
       events.push({ type: "task.completed", projectId: task.projectId, taskId: task.id, summary: output.summary,
-        tests: normalizeTestReports(output.tests) });
+        tests: normalizeTestReports(output.tests, true) });
       return events;
   }
 
@@ -738,6 +784,9 @@ export class Orchestrator {
         break;
       case "project.agents.configured":
         this.agentSettings.set(event.projectId, structuredClone(event.agents));
+        break;
+      case "project.settings.updated":
+        this.projects.get(event.projectId)!.settings = { ...event.settings };
         break;
       case "project.parallelism.updated":
         this.projects.get(event.projectId)!.maxParallel = event.maxParallel;
@@ -798,6 +847,17 @@ export class Orchestrator {
       case "task.session.saved":
         this.requireTask(event.taskId).sessionId = event.sessionId;
         break;
+      case "task.changes.requested": {
+        const task = this.requireTask(event.taskId);
+        task.status = "pending";
+        task.feedback = { text: event.feedback, at: event.at, round: (task.feedback?.round ?? 0) + 1, addressed: false };
+        task.review = undefined;
+        task.summary = undefined;
+        task.tests = undefined;
+        task.testDigest = undefined;
+        task.error = undefined;
+        break;
+      }
       case "task.reassigned": {
         const task = this.requireTask(event.taskId);
         task.agentId = event.agentId;
@@ -823,6 +883,7 @@ export class Orchestrator {
       case "task.review.requested": {
         const task = this.requireTask(event.taskId);
         task.status = "pending_review";
+        if (task.feedback) task.feedback = { ...task.feedback, addressed: true };
         task.summary = event.result.summary;
         task.review = { digest: event.digest, result: event.result };
         task.tests = structuredClone(event.result.tests);

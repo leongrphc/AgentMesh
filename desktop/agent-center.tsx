@@ -3,6 +3,7 @@ import type { DesktopAPI, DesktopState } from "../src/desktop/contracts.js";
 import type { ProviderMessageInput, ProviderMessageResult } from "../src/adapters/provider-message.js";
 import type { TerminalInfo } from "../src/desktop/terminals.js";
 import { AgentSettings } from "./agent-settings.js";
+import { ProjectSettings } from "./project-settings.js";
 const NativeTerminal = lazy(() => import("./terminal.js").then((module) => ({ default: module.TerminalView })));
 
 export function AgentCenter({ state, api, onClose }: { state: DesktopState; api: DesktopAPI; onClose: () => void }) {
@@ -27,6 +28,7 @@ export function AgentCenter({ state, api, onClose }: { state: DesktopState; api:
   return <dialog ref={dialog} className={`review-dialog agent-center${native ? " native-mode" : ""}`} aria-labelledby="agent-center-title" onCancel={close}>
     <div className="review-header"><div><div className="eyebrow">BAĞLANTILAR</div><h2 id="agent-center-title">Ajan merkezi</h2></div><button aria-label="Ajan merkezini kapat" onClick={close}>×</button></div>
     <div className="review-content"><p className="agent-center-intro">Bağlantı kontrolü model çağırmaz; hesap kaydının bulunması model erişimi veya kota garantisi vermez.</p>
+      {!state.demo && <ProjectSettings key={state.snapshot.project.id} state={state} api={api} />}
       {error && <p className="file-error" role="alert">{error}</p>}
       {state.agents.map((agent) => { const health = state.health[agent.id]; return <article className="agent-card" key={agent.id}>
         <div className="agent-card-header"><h3>{agent.id}</h3><span className={`health-status ${health?.status ?? "unchecked"}`}>{health ? labels[health.status] : "Kontrol edilmedi"}</span></div>

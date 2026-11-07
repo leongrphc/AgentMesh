@@ -67,6 +67,7 @@ export function TaskDetail({ task, state, api, pending, act, onReview }: {
       {["failed", "cancelled", "blocked", "needs_review"].includes(task.status) && <button disabled={state.busy || pending} onClick={() => act(() => api.retry(task.id))}>Yeniden sıraya al</button>}
     </div>
     <Handoff key={task.id} task={task} state={state} api={api} pending={pending} act={act} />
+    {task.feedback && !task.feedback.addressed && <p className="handoff-note feedback-note"><b>Geri bildiriminiz ({task.feedback.round}. tur):</b> {task.feedback.text}</p>}
     {task.handoff && <p className="handoff-note">{task.handoff.from} ajanından devralındı · {new Date(task.handoff.at).toLocaleString("tr-TR")}</p>}
 
     {task.error && <pre className="task-error">{task.error}</pre>}

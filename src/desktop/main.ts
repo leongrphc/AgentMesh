@@ -431,6 +431,11 @@ app.whenReady().then(async () => {
     if (typeof taskId !== "string") throw new Error("Geçersiz görev kimliği");
     service.retry(taskId);
   });
+  handle("mesh:settings", (settings) => service.updateSettings(settings as import("../core/contracts.js").ProjectSettings));
+  handle("mesh:request-changes", (taskId, feedback) => {
+    if (typeof taskId !== "string" || typeof feedback !== "string") throw new Error("Geçersiz değişiklik isteği");
+    service.requestChanges(taskId, feedback);
+  });
   handle("mesh:reassign", (taskId, agentId) => {
     if (typeof taskId !== "string" || typeof agentId !== "string") throw new Error("Geçersiz devir isteği");
     service.reassignTask(taskId, agentId);

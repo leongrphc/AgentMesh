@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
-import { appendFileSync, existsSync, lstatSync, mkdirSync, readFileSync, realpathSync } from "node:fs";
+import { appendFileSync, existsSync, lstatSync, mkdirSync, readFileSync, realpathSync, rmSync } from "node:fs";
 import { dirname, isAbsolute, join, matchesGlob, resolve, sep } from "node:path";
 
 export interface WorktreeLease {
@@ -122,6 +122,26 @@ export class WorktreeManager {
     if (branchExists) git(root, "worktree", "add", path, branch);
     else git(root, "worktree", "add", "-b", branch, path, "HEAD");
     return { path, branch };
+  }
+
+  /**
+   * Undoes what a test run wrote into a task worktree (coverage, snapshots, build output) without
+   * touching the agent's own changes, listed in `keep`. Ignored files (installed dependencies) stay.
+   */
+  discardTestArtifacts(worktreePath: string, keep: readonly string[]): string[] {
+    const keepSet = new Set(keep.map((path) => path.replace(/\\/g, "/")));
+    const entries = git(worktreePath, "status", "--porcelain", "-z", "--untracked-files=all").split("\0").filter(Boolean);
+    const discarded: string[] = [];
+    for (let i = 0; i < entries.length; i++) {
+      const code = entries[i]!.slice(0, 2);
+      const path = entries[i]!.slice(3);
+      if (code[0] === "R" || code[0] === "C") i++; // Rename/copy records carry the old path next.
+      if (keepSet.has(path)) continue;
+      if (code === "??") rmSync(join(worktreePath, path), { force: true, recursive: true });
+      else git(worktreePath, "checkout", "HEAD", "--", path);
+      discarded.push(path);
+    }
+    return discarded;
   }
 
   /** Number of approved commits on the integration branch that the checked-out branch does not have yet. */

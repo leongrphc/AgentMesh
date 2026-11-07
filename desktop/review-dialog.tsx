@@ -3,7 +3,7 @@ import type { DesktopAPI, DesktopReview } from "../src/desktop/contracts.js";
 import { MergeResolution } from "./merge-resolution.js";
 import { TestReports } from "./test-reports.js";
 
-export function ReviewDialog({ review, api, integrationBranch, onReview, onDirty, onClose, onRefresh, onApprove, pending, error }: {
+export function ReviewDialog({ review, api, integrationBranch, onReview, onDirty, onClose, onRefresh, onApprove, onRequestChanges, feedback, pending, error }: {
   review: DesktopReview;
   api: DesktopAPI;
   integrationBranch?: string;
@@ -12,11 +12,16 @@ export function ReviewDialog({ review, api, integrationBranch, onReview, onDirty
   onClose: () => void;
   onRefresh: () => void;
   onApprove: () => void;
+  /** Sends the task back to its agent with written feedback. */
+  onRequestChanges: (feedback: string) => void;
+  /** The previous round's feedback, if this review answers one. */
+  feedback?: { text: string; round: number };
   pending: boolean;
   error: string;
 }) {
   const dialog = useRef<HTMLDialogElement>(null);
   const [dirty, setDirty] = useState(false);
+  const [comment, setComment] = useState("");
   const close = () => { if (!dirty || window.confirm("Kaydedilmemiş çakışma çözümü silinsin mi?")) onClose(); };
   useEffect(() => { dialog.current?.showModal(); }, []);
   const { inspection } = review;
@@ -65,7 +70,16 @@ export function ReviewDialog({ review, api, integrationBranch, onReview, onDirty
       </p>
     </div>
 
+    <div className="request-changes">
+      {feedback && <p className="previous-feedback"><b>{feedback.round}. turdaki geri bildiriminiz:</b> {feedback.text}</p>}
+      <label htmlFor="review-feedback">Değişiklik istemek için ajana ne yapması gerektiğini yazın</label>
+      <textarea id="review-feedback" rows={3} maxLength={8000} value={comment} disabled={pending}
+        placeholder="ör. Hata durumunu da ele al; fonksiyon negatif sayıda istisna fırlatsın." onChange={(event) => setComment(event.target.value)} />
+    </div>
     <footer className="review-actions">
+      <button disabled={pending || dirty || !comment.trim() || !!review.merge} onClick={() => onRequestChanges(comment.trim())}
+        title="Görev aynı ajana, aynı çalışma alanında geri döner">Değişiklik iste</button>
+      <span className="review-actions-spacer" />
       <button disabled={pending || dirty} onClick={onRefresh}>İncelemeyi yenile</button>
       <button className="primary" disabled={pending || dirty || !review.canApprove} onClick={onApprove}>Onayla ve birleştir</button>
     </footer>
