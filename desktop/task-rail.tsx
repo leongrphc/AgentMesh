@@ -12,13 +12,14 @@ export const STATUS_LABEL: Record<TaskStatus, string> = {
  * The stop's shape carries the status (see .stop in style.css); the list ends at the
  * integration terminus where approved work waits to be applied to the project.
  */
-export function TaskRail({ state, api, selected, pending, onSelect, onCreate, act }: {
+export function TaskRail({ state, api, selected, pending, onSelect, onCreate, onPlan, act }: {
   state: DesktopState;
   api: DesktopAPI;
   selected?: TaskRecord;
   pending: boolean;
   onSelect: (id: string) => void;
   onCreate: () => void;
+  onPlan: () => void;
   act: (action: () => Promise<unknown>) => void;
 }) {
   const { tasks } = state.snapshot;
@@ -30,7 +31,10 @@ export function TaskRail({ state, api, selected, pending, onSelect, onCreate, ac
         <h2>Görevler</h2>
         <small>{tasks.length ? `${done} / ${tasks.length} tamamlandı` : "Henüz görev yok"}</small>
       </div>
-      <button className="primary small" data-testid="create-task" disabled={state.busy || pending} onClick={onCreate}>Yeni görev</button>
+      <div className="rail-actions">
+        <button className="small" data-testid="plan-tasks" disabled={state.busy || pending} onClick={onPlan} title="Bir hedefi ajan görevlere bölsün">Planla</button>
+        <button className="primary small" data-testid="create-task" disabled={state.busy || pending} onClick={onCreate}>Yeni görev</button>
+      </div>
     </header>
 
     {!!tasks.length && <div className="rail-meter" aria-hidden>

@@ -20,6 +20,9 @@ import { sendProviderMessage, validateProviderMessage, type ProviderMessageInput
 import type { MessageDraft } from "../core/contracts.js";
 import { maintainJournal } from "../core/journal-maintenance.js";
 import { listCodexProfiles } from "../adapters/codex-profiles.js";
+import { CodexAppServerAdapter } from "../adapters/codex-app-server.js";
+import { HeadlessCliAdapter } from "../adapters/headless-cli.js";
+import { buildPlanPrompt, parsePlan, projectOverview } from "./planner.js";
 import { describeEvent, describeOutput, eventTaskId } from "./event-text.js";
 import { DEFAULT_ALLOWED_PATHS, folderConfig, hasUncommittedChanges, readRecent, rememberRecent, prepareRepository, repositoryKey } from "./folder-project.js";
 
@@ -87,7 +90,7 @@ export class DesktopService {
     if (!this.engine || !this.config) throw new Error("Önce proje açın");
     const snapshot = this.engine.snapshot(this.config.projectId, false);
     return structuredClone({ snapshot, historyCounts: this.engine.historyCounts(this.config.projectId), busy: !!this.running,
-      demo: this.demo, source: this.source, recent: readRecent(this.dataRoot), uncommittedChanges: this.uncommitted, integrationBranch: this.integration, integrationPending: this.integrationPending, openNotice: this.openNotice, codexProfiles: this.codexProfiles,
+      demo: this.demo, source: this.source, recent: readRecent(this.dataRoot), uncommittedChanges: this.uncommitted, integrationBranch: this.integration, integrationPending: this.integrationPending, openNotice: this.openNotice, codexProfiles: this.codexProfiles, planning: !!this.planAbort,
       defaultAllowedPaths: this.source === "folder" ? DEFAULT_ALLOWED_PATHS : ["src/**"], agents: this.config.agents.map((agent) => ({ ...agent,
         liveMessages: this.demo || (agent.provider === "codex" && agent.transport === "app-server"),
         interactivePermissions: this.demo || (agent.provider === "codex" && agent.transport === "app-server") || (agent.provider === "opencode" && agent.transport === "server") })),
@@ -252,6 +255,50 @@ export class DesktopService {
     if (this.running) throw new Error("Yeniden denemeden önce çalışmanın bitmesini bekleyin");
     this.engine!.retryTask(this.requireTask(taskId));
   }
+
+  private planAbort?: AbortController;
+
+  /**
+   * Asks one agent to break a goal into tasks. Nothing is created: the drafts go back to the user,
+   * who edits and confirms them. The agent runs read-only and sees the file list and README.
+   */
+  async planTasks(goal: string, agentId: string): Promise<TaskDraft[]> {
+    if (!this.config || !this.engine) throw new Error("Önce proje açın");
+    if (this.running || this.planAbort) throw new Error("Önce aktif işlemin bitmesini bekleyin");
+    const text = typeof goal === "string" ? goal.trim() : "";
+    if (!text || text.length > 4000) throw new Error("Hedefi 1–4000 karakter arasında yazın.");
+    const snapshot = this.engine.snapshot(this.config.projectId, false);
+    if (this.demo) {
+      // The demo never calls a model; a fixed two-step plan shows how the dialog works.
+      return parsePlan(JSON.stringify({ tasks: [
+        { id: "plan-tasarim", title: `Tasarla: ${text.slice(0, 60)}`, instruction: `Şunu tasarla: ${text}`, agentId: this.config.agents[0]!.id },
+        { id: "plan-uygula", title: `Uygula: ${text.slice(0, 60)}`, instruction: `Tasarıma göre uygula: ${text}`, agentId: this.config.agents[1]?.id ?? this.config.agents[0]!.id, dependsOn: ["plan-tasarim"] },
+      ] }), this.config.agents, snapshot.tasks);
+    }
+    const agent = this.config.agents.find((item) => item.id === agentId);
+    if (!agent) throw new Error(`Bu projede böyle bir ajan yok: ${agentId}`);
+    const adapter = agent.provider === "codex"
+      ? new CodexAppServerAdapter(agent.id, { model: agent.model, codexHome: agent.codexHome, conversationOnly: true })
+      : agent.provider === "claude" || agent.provider === "antigravity"
+        ? new HeadlessCliAdapter(agent.id, agent.provider, { model: agent.model, conversationOnly: true, readOnlyTools: true })
+        : undefined;
+    if (!adapter) throw new Error("Planlama şimdilik Claude, Codex ve Antigravity ajanlarıyla yapılabilir.");
+    const abort = new AbortController();
+    this.planAbort = abort;
+    this.publish();
+    try {
+      const prompt = buildPlanPrompt(text, this.config.agents, projectOverview(this.config.repoPath), snapshot.tasks);
+      const result = await adapter.execute({ workspaceRoot: this.config.repoPath, context: {}, inbox: [],
+        signal: AbortSignal.any([abort.signal, AbortSignal.timeout(4 * 60 * 1000)]),
+        task: { id: "plan", projectId: this.config.projectId, agentId: agent.id, title: "Plan", instruction: prompt, dependsOn: [], allowedPaths: [] } });
+      return parsePlan(result.summary, this.config.agents, this.engine.snapshot(this.config.projectId, false).tasks);
+    } catch (error) {
+      if (abort.signal.aborted) throw new Error("Planlama iptal edildi");
+      throw error;
+    } finally { this.planAbort = undefined; this.publish(); }
+  }
+
+  cancelPlan(): void { this.planAbort?.abort(); }
 
   updateSettings(settings: import("../core/contracts.js").ProjectSettings): void {
     if (!this.config || !this.engine) throw new Error("Önce proje açın");

@@ -6,6 +6,7 @@ import { Activity } from "./activity.js";
 import { ActivityBar, StatusBar } from "./ide-chrome.js";
 import { AgentCenter } from "./agent-center.js";
 import { PermissionPanel } from "./permission-panel.js";
+import { PlanDialog } from "./plan-dialog.js";
 import { ReviewDialog } from "./review-dialog.js";
 import { TaskForm, TaskGraph } from "./task-board.js";
 import { TaskDetail } from "./task-detail.js";
@@ -62,6 +63,7 @@ function App() {
   const [mergeDirty, setMergeDirty] = useState(false);
   const [creating, setCreating] = useState(false);
   const [agentCenter, setAgentCenter] = useState(false);
+  const [planning, setPlanning] = useState(false);
   const [sidebar, setSidebar] = useState(() => readLayout("sidebar", true));
   const [panel, setPanel] = useState(() => readLayout("panel", true));
   const [panelHeight, setPanelHeight] = useState(() => readLayout("panelHeight", 280));
@@ -159,7 +161,7 @@ function App() {
       <ActivityBar sidebar={sidebar} panel={panel} onSidebar={() => setSidebar((value) => !value)} onPanel={() => setPanel((value) => !value)}
         onAgents={() => setAgentCenter(true)} agentsNeedAttention={!state.demo && state.agents.some((agent) => !state.health[agent.id])} />
       <TaskRail state={state} api={api} selected={task} pending={pending} onSelect={select}
-        onCreate={() => setCreating(true)} act={(action) => void act(action)} />
+        onCreate={() => setCreating(true)} onPlan={() => setPlanning(true)} act={(action) => void act(action)} />
 
       <div className={`main-area ${panel ? "" : "panel-closed"}`}>
         <div className="work-row">
@@ -215,6 +217,8 @@ function App() {
       })} />}
     {creating && <TaskForm state={state} onClose={() => setCreating(false)}
       onCreate={async (draft) => { await api.createTask(draft); setState(await api.state()); setSelected(draft.id); }} />}
+    {planning && <PlanDialog state={state} api={api} onClose={() => setPlanning(false)}
+      onCreated={async (id) => { setPlanning(false); setState(await api.state()); setSelected(id); }} />}
     {agentCenter && <AgentCenter state={state} api={api} onClose={() => setAgentCenter(false)} />}
   </div>;
 }

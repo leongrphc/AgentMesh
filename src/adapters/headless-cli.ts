@@ -22,7 +22,9 @@ export class HeadlessCliAdapter implements AgentAdapter {
   readonly connection = "cli" as const;
   readonly interactivePermissions = false;
   constructor(readonly id: string, readonly provider: HeadlessProvider,
-    private readonly options: { model?: string; executable?: string; runner?: ProcessRunner; conversationOnly?: boolean } = {}) {}
+    private readonly options: { model?: string; executable?: string; runner?: ProcessRunner; conversationOnly?: boolean;
+      /** With conversationOnly: allow reading the workspace (Read, Glob, Grep) but never writing. Used by the planner. */
+      readOnlyTools?: boolean } = {}) {}
 
   async execute(input: AgentExecution): Promise<AgentResult> {
     if (input.sessionId && !validSession(input.sessionId)) throw new Error("Geçersiz native oturum kimliği");
@@ -32,7 +34,9 @@ export class HeadlessCliAdapter implements AgentAdapter {
       // Claude Code authenticates itself (ANTHROPIC_API_KEY or its own login). User-level settings,
       // hooks and MCP servers are skipped so a personal setup cannot change task behaviour.
       : ["--print", "--verbose", "--setting-sources", "project", "--strict-mcp-config", "--input-format", "stream-json", "--output-format", "stream-json",
-        "--permission-mode", this.options.conversationOnly ? "plan" : "acceptEdits", "--tools", this.options.conversationOnly ? "" : "Read,Edit,Write,Glob,Grep,Bash"];
+        "--permission-mode", this.options.conversationOnly ? "plan" : "acceptEdits",
+        // Without any tool a model that wants to look at files prints imitation tool calls instead of answering.
+        "--tools", this.options.conversationOnly ? this.options.readOnlyTools ? "Read,Glob,Grep" : "" : "Read,Edit,Write,Glob,Grep,Bash"];
     if (agy && this.options.conversationOnly) args.push("--mode", "plan");
     if (this.options.model) args.push("--model", this.options.model);
     if (input.sessionId) args.push(agy ? "--conversation" : "--resume", input.sessionId);

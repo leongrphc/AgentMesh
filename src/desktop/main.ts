@@ -432,6 +432,11 @@ app.whenReady().then(async () => {
     service.retry(taskId);
   });
   handle("mesh:settings", (settings) => service.updateSettings(settings as import("../core/contracts.js").ProjectSettings));
+  handle("mesh:plan", (goal, agentId) => {
+    if (typeof goal !== "string" || typeof agentId !== "string") throw new Error("Geçersiz plan isteği");
+    return service.planTasks(goal, agentId);
+  });
+  handle("mesh:cancel-plan", () => service.cancelPlan());
   handle("mesh:request-changes", (taskId, feedback) => {
     if (typeof taskId !== "string" || typeof feedback !== "string") throw new Error("Geçersiz değişiklik isteği");
     service.requestChanges(taskId, feedback);

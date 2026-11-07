@@ -32,6 +32,8 @@ export interface DesktopState {
   recent: RecentProject[];
   /** Uncommitted changes in the repository are invisible to agents, which start from HEAD. */
   uncommittedChanges: boolean;
+  /** A planner agent is currently drafting tasks. */
+  planning: boolean;
   /** Codex accounts found under ~/.codex-profiles, selectable per Codex agent. */
   codexProfiles: Array<{ name: string; path: string }>;
   /** Approved commits on the integration branch that the user's checked-out branch does not have yet. */
@@ -78,6 +80,8 @@ export interface DesktopAPI {
   retry(taskId: string): Promise<void>;
   reassign(taskId: string, agentId: string): Promise<void>;
   requestChanges(taskId: string, feedback: string): Promise<void>;
+  planTasks(goal: string, agentId: string): Promise<TaskDraft[]>;
+  cancelPlan(): Promise<void>;
   updateSettings(settings: import("../core/contracts.js").ProjectSettings): Promise<void>;
   review(taskId: string, refresh?: boolean): Promise<DesktopReview>;
   prepareMergeResolution(taskId: string, digest: string, integrationCommit: string): Promise<DesktopReview>;
