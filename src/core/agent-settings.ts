@@ -4,7 +4,8 @@ import type { DomainEvent, StoredEvent, TaskRecord } from "./contracts.js";
 
 export function cleanAgent(agent: AgentConfig): AgentConfig {
   return { id: agent.id, provider: agent.provider, transport: agent.transport ?? "exec",
-    ...(agent.model !== undefined ? { model: agent.model } : {}), ...(agent.role !== undefined ? { role: agent.role } : {}) };
+    ...(agent.model !== undefined ? { model: agent.model } : {}), ...(agent.role !== undefined ? { role: agent.role } : {}),
+    ...(agent.codexHome !== undefined ? { codexHome: agent.codexHome } : {}) };
 }
 
 function signature(agents: readonly AgentConfig[]) {

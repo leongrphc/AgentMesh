@@ -32,6 +32,9 @@ test("folder config is stable per repository and starts with Claude and Codex ag
   assert.equal(a.projectId, folderConfig("C:\\work\\Shop App").projectId);
   assert.match(a.projectId, /^shop-app-[0-9a-f]{6}$/);
   assert.notEqual(a.projectId, folderConfig("C:\\other\\Shop App").projectId);
+  const withProfiles = folderConfig("C:\\work\\Shop App", [{ name: "codex1", path: "C:\\p\\codex1" }, { name: "codex2", path: "C:\\p\\codex2" }]);
+  assert.equal(withProfiles.agents.find((agent) => agent.provider === "codex")?.codexHome, "C:\\p\\codex1");
+  assert.equal(withProfiles.agents.find((agent) => agent.provider === "claude")?.codexHome, undefined);
   assert.deepEqual(a.agents.map((agent) => [agent.id, agent.provider, agent.transport]), [["claude", "claude", undefined], ["codex", "codex", "app-server"]]);
   assert.deepEqual(a.tasks, []);
 });

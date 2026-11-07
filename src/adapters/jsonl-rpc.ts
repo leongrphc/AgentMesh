@@ -10,6 +10,7 @@ export interface RpcOptions {
   executable: string;
   args: string[];
   cwd: string;
+  env?: NodeJS.ProcessEnv;
   signal?: AbortSignal;
   timeoutMs?: number;
   requestTimeoutMs?: number;
@@ -34,7 +35,7 @@ export class JsonlRpcClient {
 
   constructor(private readonly options: RpcOptions) {
     if (options.signal?.aborted) throw new Error("RPC işlemi iptal edildi");
-    this.child = spawn(options.executable, options.args, { cwd: options.cwd, stdio: ["pipe", "pipe", "pipe"], shell: false, windowsHide: true });
+    this.child = spawn(options.executable, options.args, { cwd: options.cwd, env: options.env, stdio: ["pipe", "pipe", "pipe"], shell: false, windowsHide: true });
     this.closed = new Promise((resolve) => this.child.once("close", () => resolve()));
     let buffer = "", stderr = "", bytes = 0;
     const count = (text: string) => {

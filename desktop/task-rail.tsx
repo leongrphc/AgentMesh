@@ -61,7 +61,7 @@ export function TaskRail({ state, api, selected, pending, onSelect, onCreate, ac
           return <li className="agent" key={agent.id}>
             <span className={`agent-dot ${working ? "active" : ""}`} />
             <strong>{agent.id}</strong>
-            <small>{state.demo ? "demo" : `${agent.provider}${agent.model ? ` · ${agent.model}` : ""}`}</small>
+            <small>{state.demo ? "demo" : [agent.provider, agent.codexHome && state.codexProfiles.find((profile) => profile.path === agent.codexHome)?.name, agent.model].filter(Boolean).join(" · ")}</small>
           </li>;
         })}
       </ul>

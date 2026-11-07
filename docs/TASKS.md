@@ -33,7 +33,8 @@
   - Sağlayıcı çıktısı `{ text: "<json>" }` olarak sarılı geldiği için etkinlik paneli ham JSON gösteriyordu. Codex RPC, Claude stream-json ve exec JSONL olayları artık okunur satırlara çevriliyor.
   - Codex: `~/.codex/config.toml` içindeki `openai_base_url` çalışmayan bir yerel köprüyü gösterince her görev `os error 10061` ile düşüyordu. Bağlantı kontrolü artık bunu önceden söylüyor. Köprü açıkken bu kez modelin kendisi "at capacity" hatası verdi; bu sağlayıcı tarafında.
 - [ ] **E2E-2:** Gerçek, küçük bir projede masaüstü uygulamasıyla 5–10 görev yap. Her sürtünmeyi buraya not et; sonraki işler bu listeden seçilir.
-- [ ] **E2E-3:** `npm run e2e:codex` Codex modeli müsaitken geçsin.
+- [x] **E2E-3 (7 Kasım):** Codex de geçti. Kök neden: kullanıcı Codex'i `codex1` kabuk fonksiyonuyla açıyor (`CODEX_HOME=~/.codex-profiles/codex1`), AgentMesh ise varsayılan `~/.codex` ile çalışıyordu (free plan + `chatgpt-web` köprüsü, "at capacity"). Codex ajanlarına `codexHome` alanı eklendi; profiller otomatik bulunuyor, arayüzde seçiliyor, yeni projede ilk profil varsayılan. `npm run e2e:codex -- codex1`: 34 sn.
+- [x] **E2E-4 (7 Kasım):** Karışık sağlayıcılı ekip: `npm run e2e:team -- claude codex:codex1`. Claude ve Codex paralel çalıştı, Claude bağımlı görevde ikisinin kodunu kullandı; 65 sn.
 - [ ] **UX-1:** Entegrasyon dalını kullanıcının dalına uygulama içinden alma (açık onaylı `git merge` düğmesi).
 - [ ] **UX-2:** Commit edilmemiş değişiklik uyarısında "şimdi commit et" yardımı.
 - [ ] **UX-3:** Başarısız görevde sağlayıcı hatasını (giriş yok, kota, ağ) ayırt edip ne yapılacağını söylemek. Kısmen yapıldı: bağlantı reddi ve ölü Codex köprüsü yakalanıyor.

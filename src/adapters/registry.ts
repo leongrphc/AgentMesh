@@ -9,7 +9,7 @@ import { HeadlessCliAdapter } from "./headless-cli.js";
 export function configuredAdapter(agent: Config["agents"][number]): AgentAdapter {
   if (agent.provider === "antigravity" || agent.provider === "claude") return new HeadlessCliAdapter(agent.id, agent.provider, { model: agent.model });
   if (agent.provider === "codex") return agent.transport === "app-server"
-    ? new CodexAppServerAdapter(agent.id, { model: agent.model })
-    : new CodexCliAdapter(agent.id, { model: agent.model });
+    ? new CodexAppServerAdapter(agent.id, { model: agent.model, codexHome: agent.codexHome })
+    : new CodexCliAdapter(agent.id, { model: agent.model, codexHome: agent.codexHome });
   return agent.transport === "server" ? new OpenCodeServerAdapter(agent.id, { model: agent.model }) : new OpenCodeCliAdapter(agent.id, { model: agent.model });
 }

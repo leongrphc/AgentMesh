@@ -1,4 +1,5 @@
 import type { AgentTask } from "./contracts.js";
+import { validCodexHome } from "../adapters/codex-profiles.js";
 import { validateContextKeys } from "./context.js";
 import { validateJournalMaintenance, type JournalMaintenancePolicy } from "./journal-maintenance.js";
 
@@ -17,6 +18,8 @@ export interface AgentConfig {
   model?: string;
   role?: string;
   transport?: "exec" | "app-server" | "server";
+  /** Codex only: CODEX_HOME folder of the account/profile this agent runs as. */
+  codexHome?: string;
 }
 
 export function validate(config: Config): void {
@@ -34,6 +37,7 @@ export function validate(config: Config): void {
       || (agent.role !== undefined && (typeof agent.role !== "string" || !agent.role.trim() || agent.role.length > 2000))
       || (agent.transport !== undefined && !["exec", "app-server", "server"].includes(agent.transport))
       || (agent.transport === "app-server" && agent.provider !== "codex")
+      || (agent.codexHome !== undefined && (agent.provider !== "codex" || !validCodexHome(agent.codexHome)))
       || (agent.transport === "server" && (agent.provider !== "opencode" || (agent.model !== undefined && !/^[^/\s]+\/[^\s]+$/.test(agent.model))))) {
       throw new Error(`Geçersiz veya tekrarlı ajan: ${agent?.id}`);
     }

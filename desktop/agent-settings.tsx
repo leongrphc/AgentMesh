@@ -18,7 +18,7 @@ export function AgentSettings({ state, api }: { state: DesktopState; api: Deskto
       const id = event.target.value;
       setSelected(id); setError(""); setSaved("");
       const agent = state.agents.find((item) => item.id === id);
-      setDraft(agent ? { id: agent.id, provider: agent.provider, transport: agent.transport ?? "exec", model: agent.model, role: agent.role }
+      setDraft(agent ? { id: agent.id, provider: agent.provider, transport: agent.transport ?? "exec", model: agent.model, role: agent.role, codexHome: agent.codexHome }
         : { id: "", provider: "codex", transport: "app-server" });
     }}><option value="">Yeni ajan ekle</option>{state.agents.map((agent) => <option key={agent.id} value={agent.id}>{agent.id}</option>)}</select></label>
     {locked && <p role="status">Bu ajanın çalışma geçmişi var. Farklı ayarlar için “Yeni ajan ekle” seçeneğini kullanın.</p>}
@@ -30,7 +30,8 @@ export function AgentSettings({ state, api }: { state: DesktopState; api: Deskto
       }
       setSaving(true);
       try {
-        const value = { ...draft, id: draft.id.trim(), model: draft.model?.trim() || undefined, role: draft.role?.trim() || undefined };
+        const value = { ...draft, id: draft.id.trim(), model: draft.model?.trim() || undefined, role: draft.role?.trim() || undefined,
+          codexHome: draft.provider === "codex" ? draft.codexHome || undefined : undefined };
         await api.saveAgent(value);
         setSelected(value.id); setDraft(value); setSaved(`${value.id} kaydedildi.`);
       } catch (error) { setError(String(error)); }
@@ -42,7 +43,7 @@ export function AgentSettings({ state, api }: { state: DesktopState; api: Deskto
             onChange={(event) => setDraft({ ...draft, id: event.target.value })} /></label>
           <label>Sağlayıcı<select name="agentProvider" value={draft.provider} onChange={(event) => setDraft({
             ...draft, provider: event.target.value as AgentConfig["provider"], transport: "exec", model: undefined,
-          })}><option value="codex">Codex</option><option value="opencode">OpenCode</option><option value="antigravity">Antigravity</option><option value="claude">Claude · API anahtarı</option></select></label>
+          })}><option value="codex">Codex</option><option value="opencode">OpenCode</option><option value="antigravity">Antigravity</option><option value="claude">Claude Code</option></select></label>
         </div>
         <div className="provider-test-fields">
           <label>Bağlantı<select name="agentTransport" value={draft.transport ?? "exec"} onChange={(event) => setDraft({ ...draft, transport: event.target.value as AgentConfig["transport"] })}>
@@ -52,6 +53,14 @@ export function AgentSettings({ state, api }: { state: DesktopState; api: Deskto
           <label>Model (isteğe bağlı)<input name="agentModel" maxLength={200} placeholder={draft.provider === "opencode" ? "provider/model" : "Sağlayıcı varsayılanı"}
             value={draft.model ?? ""} onChange={(event) => setDraft({ ...draft, model: event.target.value })} /></label>
         </div>
+        {draft.provider === "codex" && <label>Codex hesabı / profili
+          <select name="agentCodexHome" value={draft.codexHome ?? ""} onChange={(event) => setDraft({ ...draft, codexHome: event.target.value || undefined })}>
+            <option value="">Varsayılan (~/.codex)</option>
+            {state.codexProfiles.map((profile) => <option key={profile.path} value={profile.path}>{profile.name}</option>)}
+            {draft.codexHome && !state.codexProfiles.some((profile) => profile.path === draft.codexHome) && <option value={draft.codexHome}>{draft.codexHome}</option>}
+          </select>
+          <span className="form-help">Her profil ayrı bir Codex hesabıdır (CODEX_HOME). ~/.codex-profiles altındaki klasörler otomatik listelenir.</span>
+        </label>}
         <label>Rol talimatı (isteğe bağlı)<textarea name="agentRole" rows={3} maxLength={2000} placeholder="Örneğin: Test kapsamını ve hata durumlarını incele."
           value={draft.role ?? ""} onChange={(event) => setDraft({ ...draft, role: event.target.value })} /></label>
         <button type="submit" className="primary">{saving ? "Kaydediliyor…" : selected ? "Ajanı güncelle" : "Ajan ekle"}</button>

@@ -1,3 +1,4 @@
+import { codexEnv } from "./codex-profiles.js";
 import { isAbsolute, matchesGlob, relative, resolve, sep } from "node:path";
 import type { AgentAdapter, AgentExecution, AgentResult } from "../core/contracts.js";
 import { buildPrompt } from "./cli-process.js";
@@ -12,7 +13,7 @@ export class CodexAppServerAdapter implements AgentAdapter {
   readonly connection = "cli" as const;
   readonly interactivePermissions = true;
   readonly liveMessages = true;
-  constructor(readonly id: string, private readonly options: { executable?: string; model?: string; clientFactory?: ClientFactory; conversationOnly?: boolean } = {}) {}
+  constructor(readonly id: string, private readonly options: { executable?: string; model?: string; codexHome?: string; clientFactory?: ClientFactory; conversationOnly?: boolean } = {}) {}
 
   async execute(input: AgentExecution): Promise<AgentResult> {
     let threadId = input.sessionId, turnId: string | undefined, summary = "";
@@ -35,7 +36,7 @@ export class CodexAppServerAdapter implements AgentAdapter {
       const delta = relative(resolve(input.workspaceRoot), resolve(input.workspaceRoot, path));
       return delta !== ".." && !delta.startsWith(`..${sep}`) && !isAbsolute(delta);
     };
-    const factory: ClientFactory = this.options.clientFactory ?? ((options) => new JsonlRpcClient({ ...options,
+    const factory: ClientFactory = this.options.clientFactory ?? ((options) => new JsonlRpcClient({ ...options, env: codexEnv(this.options.codexHome),
       executable: this.options.executable ?? (process.platform === "win32" ? "codex.exe" : "codex"), args: ["app-server"] }));
     const client = factory({ cwd: input.workspaceRoot, signal: input.signal, onOutput: input.onOutput,
       onExit: fail,

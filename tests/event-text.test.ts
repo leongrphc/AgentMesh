@@ -26,6 +26,13 @@ test("provider protocol noise is dropped while agent text, files, warnings and e
     assert.equal(out({ type: "item.completed", item: { type: "agent_message", text: "Tamam" } }), "Ajan: Tamam");
     assert.equal(out({ type: "thread.started", thread_id: "t" }), undefined);
   }
+  const codexText = (text: string) => wrapped({ method: "item/completed", params: { item: { type: "agentMessage", text } } });
+  assert.equal(codexText('{"agentmeshVersion":1,"summary":"bitti"}'), undefined);
+  assert.equal(codexText('```json\n{"agentmeshVersion":1,"summary":"bitti"}\n```'), undefined);
+  assert.equal(wrapped({ type: "assistant", message: { content: [{ type: "tool_use", name: "Bash", input: { command: "git status --short" } }] } }), "Komut: git status --short");
+  assert.equal(codexText('{"agentmeshMessageVersion":1,"key":"k","to":"*","kind":"progress","body":"math.ts kontrol ediliyor"}'), "Ajan mesajı: math.ts kontrol ediliyor");
+  assert.equal(codexText('{"agentmeshMessageVersion":1,"key":"k","to":"claude","kind":"question","body":"API?"}'), "Ajan mesajı → claude: API?");
+  assert.equal(wrapped({ method: "item/completed", params: { item: { type: "fileChange", changes: [{ path: "C:\\tmp\\.agentmesh-worktrees\\abc\\def\\src\\math.ts" }] } } }), "Dosya değişti: src/math.ts");
   const claude = (content: unknown[]) => wrapped({ type: "assistant", message: { content } });
   assert.equal(claude([{ type: "tool_use", name: "Edit", input: { file_path: "C:\\work\\repo\\src\\math.ts" } }]), "Düzenliyor: src/math.ts");
   assert.equal(claude([{ type: "text", text: "Ekledim." }, { type: "tool_use", name: "Glob", input: { pattern: "**/*.ts" } }]), "Ajan: Ekledim. · Dosya arıyor: **/*.ts");

@@ -10,9 +10,13 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DesktopService } from "../src/desktop/service.js";
+import { listCodexProfiles } from "../src/adapters/codex-profiles.js";
 
 const agentId = process.argv[2] ?? "claude";
-if (!["claude", "codex"].includes(agentId)) throw new Error("Kullanım: tsx scripts/e2e.ts <claude|codex>");
+const profileName = process.argv[3];
+if (!["claude", "codex"].includes(agentId) || (profileName && agentId !== "codex")) throw new Error("Kullanım: tsx scripts/e2e.ts <claude | codex [profil]>");
+const profile = profileName ? listCodexProfiles().find((item) => item.name === profileName) : undefined;
+if (profileName && !profile) throw new Error(`Codex profili bulunamadı: ${profileName} (bulunanlar: ${listCodexProfiles().map((item) => item.name).join(", ") || "yok"})`);
 const root = mkdtempSync(join(tmpdir(), "agentmesh-e2e-"));
 const repo = join(root, "repo");
 const git = (...args: string[]) => execFileSync("git", ["-C", repo, ...args], { encoding: "utf8" }).trim();
@@ -25,8 +29,12 @@ const service = new DesktopService(join(root, "data"));
 const started = Date.now();
 let failed = false;
 try {
-  const state = service.openFolder(repo);
-  console.log(`Proje: ${state.snapshot.project.id} · ajan: ${state.agents.map((agent) => `${agent.id} (${agent.provider}/${agent.transport})`).join(", ")}`);
+  let state = service.openFolder(repo);
+  if (profile) {
+    service.saveAgent({ id: "codex", provider: "codex", transport: "app-server", codexHome: profile.path });
+    state = service.state();
+  }
+  console.log(`Proje: ${state.snapshot.project.id} · ajan: ${state.agents.map((agent) => `${agent.id} (${agent.provider}/${agent.transport ?? "exec"}${agent.codexHome ? ` · ${agent.codexHome}` : ""})`).join(", ")}`);
   service.createTask({
     id: "multiply", title: "multiply fonksiyonu ekle", agentId, dependsOn: [], allowedPaths: state.defaultAllowedPaths,
     instruction: "math.ts dosyasına iki sayıyı çarpan `export function multiply(a: number, b: number)` fonksiyonunu ekle. Başka dosya değiştirme.",

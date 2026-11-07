@@ -32,6 +32,8 @@ export interface DesktopState {
   recent: RecentProject[];
   /** Uncommitted changes in the repository are invisible to agents, which start from HEAD. */
   uncommittedChanges: boolean;
+  /** Codex accounts found under ~/.codex-profiles, selectable per Codex agent. */
+  codexProfiles: Array<{ name: string; path: string }>;
   /** Branch that receives approved changes (absent for the demo). */
   integrationBranch?: string;
   /** File scope suggested for new tasks. */

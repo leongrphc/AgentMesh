@@ -95,14 +95,35 @@ function describeRpc(method: string, params: Record<string, unknown>): string | 
   }
 }
 
+/** Last two path segments: enough to recognise a file without the long worktree prefix. */
+function shortPath(path: string): string {
+  return path.split(/[\\/]/).filter(Boolean).slice(-2).join("/");
+}
+
+/**
+ * Agent text may be one of AgentMesh's own JSON envelopes: the final result (shown as the task
+ * result instead, so skipped here) or a live message to other agents (shown by its body).
+ */
+function describeAgentText(text: string): string | undefined {
+  // Models sometimes wrap the envelope in a ```json fence.
+  const envelope = parseLine(text.trim().replace(/^```(?:json)?\s*([\s\S]*?)\s*```$/, "$1"));
+  if (envelope && "agentmeshVersion" in envelope) return undefined;
+  if (envelope && "agentmeshMessageVersion" in envelope && typeof envelope.body === "string") {
+    const to = typeof envelope.to === "string" && envelope.to !== "*" ? ` → ${envelope.to}` : "";
+    return `Ajan mesajı${to}: ${clip(envelope.body, 300)}`;
+  }
+  return `Ajan: ${clip(text)}`;
+}
+
 function describeItem(item: Record<string, unknown> | undefined): string | undefined {
   if (!item) return undefined;
   const text = typeof item.text === "string" ? item.text : undefined;
-  if ((item.type === "agentMessage" || item.type === "agent_message") && text) return `Ajan: ${clip(text)}`;
+  if ((item.type === "agentMessage" || item.type === "agent_message") && text) return describeAgentText(text);
   const command = typeof item.command === "string" ? item.command : undefined;
   if ((item.type === "commandExecution" || item.type === "command_execution") && command) return `Komut çalıştı: ${clip(command, 200)}`;
   if (item.type === "fileChange" || item.type === "file_change") {
-    const changes = Array.isArray(item.changes) ? item.changes.map((change) => record(change)?.path).filter((path): path is string => typeof path === "string") : [];
+    const changes = Array.isArray(item.changes) ? item.changes.map((change) => record(change)?.path)
+      .filter((path): path is string => typeof path === "string").map(shortPath) : [];
     return changes.length ? `Dosya değişti: ${clip(changes.join(", "), 240)}` : "Dosya değişikliği yapıldı";
   }
   return undefined;
@@ -117,12 +138,14 @@ function describeClaudeTurn(data: Record<string, unknown>): string | undefined {
   const lines: string[] = [];
   for (const block of content.map(record)) {
     if (block?.type === "text" && typeof block.text === "string" && block.text.trim()) {
-      // The final structured envelope is shown as the task result; skip it here.
-      if (!block.text.includes('"agentmeshVersion"')) lines.push(`Ajan: ${clip(block.text, 300)}`);
+      const line = describeAgentText(block.text);
+      if (line) lines.push(line);
     } else if (block?.type === "tool_use" && typeof block.name === "string") {
       const input = record(block.input) ?? {};
-      const target = [input.file_path, input.pattern, input.command, input.path].find((value): value is string => typeof value === "string");
-      const shortTarget = target?.split(/[\\/]/).slice(-2).join("/");
+      // File targets are shortened to their last segments; commands are shown as written.
+      const file = [input.file_path, input.path].find((value): value is string => typeof value === "string");
+      const other = [input.pattern, input.command].find((value): value is string => typeof value === "string");
+      const shortTarget = file ? shortPath(file) : other;
       lines.push(`${TOOL_LABEL[block.name] ?? block.name}${shortTarget ? `: ${clip(shortTarget, 160)}` : ""}`);
     }
   }

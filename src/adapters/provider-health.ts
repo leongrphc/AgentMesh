@@ -1,7 +1,6 @@
 import { execFile } from "node:child_process";
 import { readFile } from "node:fs/promises";
 import { connect } from "node:net";
-import { homedir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { JsonlRpcClient, record, type RpcOptions } from "./jsonl-rpc.js";
@@ -9,6 +8,7 @@ import { defaultOpenCodeCommand } from "./opencode-cli.js";
 import { safeLog } from "../core/safe-log.js";
 import { OpenCodeServerClient, type OpenCodeServerOptions } from "./opencode-server-client.js";
 import { headlessCommand, type HeadlessProvider } from "./headless-cli.js";
+import { codexEnv, defaultCodexHome } from "./codex-profiles.js";
 
 export interface ProviderHealth {
   status: "configured" | "needs_login" | "needs_setup" | "installed" | "unavailable";
@@ -41,8 +41,8 @@ type ClientFactory = (options: Omit<RpcOptions, "executable" | "args">) => Jsonl
  * loopback address that refuses connections, every task fails with "os error 10061" after several
  * reconnect attempts; detect it up front instead. Returns a user-facing problem or undefined.
  */
-export async function codexEndpointProblem(): Promise<string | undefined> {
-  const home = process.env.CODEX_HOME?.trim() || join(homedir(), ".codex");
+export async function codexEndpointProblem(codexHome?: string): Promise<string | undefined> {
+  const home = codexHome ?? defaultCodexHome();
   let text: string;
   try { text = await readFile(join(home, "config.toml"), "utf8"); } catch { return undefined; }
   const topLevel = text.split(/^\s*\[/m)[0] ?? "";
@@ -66,20 +66,20 @@ export async function codexEndpointProblem(): Promise<string | undefined> {
 
 /** No thread/turn, model request, token refresh, or identity text is exported. */
 export async function probeCodex(cwd: string, signal?: AbortSignal, factory?: ClientFactory,
-  endpointCheck: () => Promise<string | undefined> = factory ? async () => undefined : codexEndpointProblem): Promise<ProviderHealth> {
+  endpointCheck: (codexHome?: string) => Promise<string | undefined> = factory ? async () => undefined : codexEndpointProblem, codexHome?: string): Promise<ProviderHealth> {
   const checkedAt = new Date().toISOString();
   let client: JsonlRpcClient | undefined;
   try {
     const options: Omit<RpcOptions, "executable" | "args"> = { cwd, signal, timeoutMs: 10000, requestTimeoutMs: 5000,
       maxOutputBytes: 1024 * 1024, onNotification() {}, async onRequest() { throw new Error("Probe cannot grant permissions"); }, onExit() {} };
     client = factory ? factory(options) : new JsonlRpcClient({ ...options,
-      executable: process.platform === "win32" ? "codex.exe" : "codex", args: ["app-server"] });
+      executable: process.platform === "win32" ? "codex.exe" : "codex", args: ["app-server"], env: codexEnv(codexHome) });
     await client.request("initialize", { clientInfo: { name: "agentmesh", title: "AgentMesh IDE", version: "0.1.0" } });
     client.notify("initialized");
     const result = await client.request("account/read", { refreshToken: false });
     const account = record(result.account);
     if (["apiKey", "chatgpt", "amazonBedrock"].includes(String(account.type))) {
-      const problem = await endpointCheck();
+      const problem = await endpointCheck(codexHome);
       if (problem) return { status: "needs_setup", checkedAt, detail: problem };
       return { status: "configured", checkedAt, detail: "Hesap kaydı bulundu; model erişimi ve kota sınanmadı." };
     }

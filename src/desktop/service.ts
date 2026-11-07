@@ -19,6 +19,7 @@ import { Terminals } from "./terminals.js";
 import { sendProviderMessage, validateProviderMessage, type ProviderMessageInput, type ProviderMessageResult } from "../adapters/provider-message.js";
 import type { MessageDraft } from "../core/contracts.js";
 import { maintainJournal } from "../core/journal-maintenance.js";
+import { listCodexProfiles } from "../adapters/codex-profiles.js";
 import { describeEvent, describeOutput, eventTaskId } from "./event-text.js";
 import { DEFAULT_ALLOWED_PATHS, folderConfig, hasUncommittedChanges, readRecent, rememberRecent, repositoryKey, resolveRepository } from "./folder-project.js";
 
@@ -61,6 +62,7 @@ export class DesktopService {
   private source: DesktopState["source"] = "demo";
   private uncommitted = false;
   private integration?: string;
+  private codexProfiles = listCodexProfiles();
   private running?: Promise<void>;
   private abort?: AbortController;
   private events: DesktopState["events"] = [];
@@ -82,7 +84,7 @@ export class DesktopService {
     if (!this.engine || !this.config) throw new Error("Önce proje açın");
     const snapshot = this.engine.snapshot(this.config.projectId, false);
     return structuredClone({ snapshot, historyCounts: this.engine.historyCounts(this.config.projectId), busy: !!this.running,
-      demo: this.demo, source: this.source, recent: readRecent(this.dataRoot), uncommittedChanges: this.uncommitted, integrationBranch: this.integration,
+      demo: this.demo, source: this.source, recent: readRecent(this.dataRoot), uncommittedChanges: this.uncommitted, integrationBranch: this.integration, codexProfiles: this.codexProfiles,
       defaultAllowedPaths: this.source === "folder" ? DEFAULT_ALLOWED_PATHS : ["src/**"], agents: this.config.agents.map((agent) => ({ ...agent,
         liveMessages: this.demo || (agent.provider === "codex" && agent.transport === "app-server"),
         interactivePermissions: this.demo || (agent.provider === "codex" && agent.transport === "app-server") || (agent.provider === "opencode" && agent.transport === "server") })),
@@ -139,7 +141,7 @@ export class DesktopService {
   /** Opens any Git repository as a project without a hand-written config file. */
   openFolder(folder: string): DesktopState {
     const root = resolveRepository(folder);
-    this.open(folderConfig(root), join(this.dataRoot, "repos", repositoryKey(root), "events.sqlite"), false, "folder");
+    this.open(folderConfig(root, listCodexProfiles()), join(this.dataRoot, "repos", repositoryKey(root), "events.sqlite"), false, "folder");
     rememberRecent(this.dataRoot, root);
     return this.state();
   }
@@ -201,6 +203,7 @@ export class DesktopService {
       // Informational only: a config may point at a folder that becomes a repository later.
       try { this.integration = demo ? undefined : integrationBranch(config.repoPath); }
       catch { this.integration = undefined; }
+      this.codexProfiles = listCodexProfiles();
       this.events = journal.recent(config.projectId).map((event) => ({ at: event.at, text: describeEvent(event.payload),
           taskId: eventTaskId(event.payload) }));
       engine.subscribe((notice) => {
@@ -320,14 +323,15 @@ export class DesktopService {
 
   async checkAgents(): Promise<void> {
     if (this.running || this.healthAbort || this.messageAbort) throw new Error("Bağlantı kontrolünden önce aktif işlemi bitirin");
+    this.codexProfiles = listCodexProfiles();
     const state = this.state();
     const abort = new AbortController(); this.healthAbort = abort; this.publish();
     try {
       const probes = new Map<string, Promise<ProviderHealth>>();
-      const key = (agent: DesktopState["agents"][number]) => JSON.stringify([agent.provider, agent.transport ?? "exec", agent.model ?? ""]);
+      const key = (agent: DesktopState["agents"][number]) => JSON.stringify([agent.provider, agent.transport ?? "exec", agent.model ?? "", agent.codexHome ?? ""]);
       for (const agent of state.agents) if (!probes.has(key(agent))) probes.set(key(agent),
         state.demo ? Promise.resolve({ status: "configured", checkedAt: new Date().toISOString(), detail: "Yerel mock ajan; model veya CLI çağrısı yapılmaz." })
-          : agent.provider === "codex" ? probeCodex(state.snapshot.project.workspaceRoot, abort.signal)
+          : agent.provider === "codex" ? probeCodex(state.snapshot.project.workspaceRoot, abort.signal, undefined, undefined, agent.codexHome)
           : agent.provider === "antigravity" || agent.provider === "claude" ? probeHeadlessProvider(agent.provider, state.snapshot.project.workspaceRoot, abort.signal)
           : agent.transport === "server" ? probeOpenCodeServer(state.snapshot.project.workspaceRoot, agent.model, abort.signal)
           : probeOpenCode(state.snapshot.project.workspaceRoot, abort.signal));

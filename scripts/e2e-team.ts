@@ -6,15 +6,26 @@
  * The first two run in parallel in separate worktrees; the third starts only after both are
  * approved and must see their merged code. Every approval goes through the normal review digest.
  *
- * Uses your provider account. Run: npm run e2e:team   (agent defaults to claude)
+ * Uses your provider accounts. Run: npm run e2e:team                       (all tasks on Claude)
+ *                                   npm run e2e:team -- claude codex:codex1   (Claude + Codex profile codex1)
+ * The first agent gets multiply and readme, the second (if given) gets shout.
  */
 import { execFileSync } from "node:child_process";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DesktopService } from "../src/desktop/service.js";
+import { listCodexProfiles } from "../src/adapters/codex-profiles.js";
 
-const agentId = process.argv[2] ?? "claude";
+const specs = process.argv.slice(2).length ? process.argv.slice(2) : ["claude"];
+const agents = specs.map((spec) => {
+  const [provider, profileName] = spec.split(":");
+  if (provider !== "claude" && provider !== "codex") throw new Error(`Bilinmeyen ajan: ${spec} (claude | codex | codex:<profil>)`);
+  if (provider === "claude" || !profileName) return { id: provider, provider };
+  const profile = listCodexProfiles().find((item) => item.name === profileName);
+  if (!profile) throw new Error(`Codex profili bulunamadı: ${profileName}`);
+  return { id: `codex-${profileName}`, provider, codexHome: profile.path };
+});
 const root = mkdtempSync(join(tmpdir(), "agentmesh-team-"));
 const repo = join(root, "repo");
 const git = (...args: string[]) => execFileSync("git", ["-C", repo, ...args], { encoding: "utf8" }).trim();
@@ -31,11 +42,14 @@ let failed = false;
 let peakParallel = 0;
 try {
   service.openFolder(repo);
+  for (const agent of agents) if (agent.codexHome) service.saveAgent({ id: agent.id, provider: "codex", transport: "app-server", codexHome: agent.codexHome });
   service.setParallelism(2);
-  const task = (id: string, title: string, instruction: string, allowedPaths: string[], dependsOn: string[] = []) =>
+  const [lead, second = lead] = agents.map((agent) => agent.id);
+  console.log(`Ajanlar: multiply + readme → ${lead}, shout → ${second}`);
+  const task = (id: string, title: string, instruction: string, allowedPaths: string[], dependsOn: string[] = [], agentId = lead!) =>
     service.createTask({ id, title, instruction, agentId, dependsOn, allowedPaths });
   task("multiply", "multiply ekle", "math.ts dosyasına `export function multiply(a: number, b: number)` ekle. Başka dosyaya dokunma.", ["math.ts"]);
-  task("shout", "shout ekle", "strings.ts dosyasına metni büyük harfe çevirip sonuna ! ekleyen `export function shout(value: string)` ekle. Başka dosyaya dokunma.", ["strings.ts"]);
+  task("shout", "shout ekle", "strings.ts dosyasına metni büyük harfe çevirip sonuna ! ekleyen `export function shout(value: string)` ekle. Başka dosyaya dokunma.", ["strings.ts"], [], second);
   task("readme", "README yaz", "Depodaki math.ts ve strings.ts dosyalarını oku. README.md oluştur ve dışa aktarılan her fonksiyonu bir satırla açıkla. Yalnızca README.md'yi değiştir.",
     ["README.md"], ["multiply", "shout"]);
 

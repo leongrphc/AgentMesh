@@ -3,6 +3,7 @@ import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, realpathSync, renameSync, writeFileSync } from "node:fs";
 import { basename, join } from "node:path";
 import type { AgentConfig, Config } from "../core/config.js";
+import type { CodexProfile } from "../adapters/codex-profiles.js";
 
 /**
  * Agents a freshly opened folder starts with; users can add more from the agent center.
@@ -60,13 +61,18 @@ export function repositoryKey(root: string): string {
   return createHash("sha256").update(process.platform === "win32" ? root.toLowerCase() : root).digest("hex").slice(0, 16);
 }
 
-export function folderConfig(root: string): Config {
+/**
+ * New folder project config. When separate Codex accounts exist (~/.codex-profiles), the Codex
+ * agent starts on the first one instead of the default ~/.codex home; it can be changed later.
+ */
+export function folderConfig(root: string, codexProfiles: readonly CodexProfile[] = []): Config {
   const slug = basename(root).toLowerCase().normalize("NFKD").replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 40) || "proje";
   return {
     projectId: `${slug}-${repositoryKey(root).slice(0, 6)}`,
     repoPath: root,
     maxParallel: 2,
-    agents: structuredClone(DEFAULT_FOLDER_AGENTS),
+    agents: DEFAULT_FOLDER_AGENTS.map((agent) => agent.provider === "codex" && codexProfiles[0]
+      ? { ...agent, codexHome: codexProfiles[0].path } : { ...agent }),
     tasks: [],
   };
 }

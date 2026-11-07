@@ -2,14 +2,14 @@
 
 Birden fazla kodlama ajanını (Codex, OpenCode, Claude, Antigravity) **aynı Git projesinde, ayrı dallarda ve paralel** çalıştıran yerel masaüstü IDE'si. Her görev kendi Git worktree'sinde yürür. Ajanın değişikliği, siz diff'i inceleyip onaylamadan hiçbir yere birleşmez.
 
-> **Durum: çalışan prototip.** 7 Kasım'da gerçek Claude Code ile doğrulandı: tek görev uçtan uca (16 sn) ve üç görevli ekip senaryosu. Ekip senaryosunda iki ajan paralel çalıştı, üçüncü ajan onların onaylanmış kodunu görerek devam etti (41 sn). Komutlar: `npm run e2e:claude`, `npm run e2e:team`.
+> **Durum: çalışan prototip.** 7 Kasım'da gerçek modellerle doğrulandı: Claude Code ve Codex ayrı ayrı uçtan uca çalıştı. Karışık ekip senaryosunda Claude ile Codex aynı anda paralel çalıştı, ardından Claude ikisinin onaylanmış kodunu görerek devam etti (65 sn). Komutlar: `npm run e2e:claude`, `npm run e2e:codex -- codex1`, `npm run e2e:team -- claude codex:codex1`.
 
 ## 5 dakikada başla
 
 Gereksinimler: Windows, Node.js 22.12+, Git ve şu ajanlardan en az biri:
 
 - **Claude Code** (varsayılan, önerilen): kurulu ve giriş yapılmış olmalı (`claude auth login`; ya da `ANTHROPIC_API_KEY`). Görevler hesabının kullanım limitinden düşer.
-- **Codex CLI**: `codex login`. Codex'i `openai_base_url` ile bir yerel köprüye/proxy'ye yönlendirdiysen o uygulama çalışıyor olmalı; Ajanlar penceresindeki bağlantı kontrolü bunu denetler.
+- **Codex CLI**: `codex login`. Birden fazla Codex hesabını ayrı `CODEX_HOME` klasörlerinde tutuyorsan (`~/.codex-profiles/codex1` gibi), AgentMesh bunları bulur. Yeni projede Codex ajanı ilk profili kullanır; her Codex ajanının hesabı **Ajanlar** penceresinden seçilir. Codex'i `openai_base_url` ile yerel bir köprüye yönlendirdiysen o uygulama çalışıyor olmalı; bağlantı kontrolü bunu denetler.
 
 ```powershell
 npm install
@@ -54,8 +54,8 @@ Ek ajanlar (OpenCode, Claude, Antigravity) üst bardaki **Ajanlar** penceresinde
 | `npm run typecheck` | TypeScript kontrolü |
 | `npm run desktop:smoke` | Gerçek Electron penceresinde uçtan uca arayüz testi (model çağırmaz) |
 | `npm run e2e:claude` | **Gerçek Claude Code** ile geçici depoda görev → inceleme → onay → merge (≈ 0,05 $ kullanım) |
-| `npm run e2e:team` | Üç görevli gerçek ekip senaryosu: iki paralel ajan + onların koduna bağlı üçüncü görev |
-| `npm run e2e:codex` | Aynı tek görev testi, Codex ile |
+| `npm run e2e:codex -- codex1` | Aynı tek görev testi, Codex ile (profil adı isteğe bağlı) |
+| `npm run e2e:team -- claude codex:codex1` | Üç görevli gerçek ekip senaryosu: iki paralel ajan + onların koduna bağlı üçüncü görev. Argümansız çalıştırılırsa hepsi Claude ile |
 | `npm run desktop:package` | Taşınabilir Windows klasörü üretir (`dist/releases`) |
 | `npm run live -- --config <dosya>` | Masaüstü olmadan CLI ile config tabanlı çalıştırma ([ayrıntı](docs/reference.md#gerçek-codexopencode-cli-çalıştırma)) |
 
