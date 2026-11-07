@@ -11,6 +11,13 @@ function signature(agents: readonly AgentConfig[]) {
   return JSON.stringify(agents.map(cleanAgent).sort((a, b) => a.id.localeCompare(b.id)));
 }
 
+/** Source agent list recorded the last time this project was opened, if any. */
+export function savedSourceAgents(projectId: string, events: Iterable<StoredEvent>): AgentConfig[] | undefined {
+  let saved: AgentConfig[] | undefined;
+  for (const { payload } of events) if (payload.type === "project.agents.configured" && payload.projectId === projectId) saved = payload.sourceAgents;
+  return saved && structuredClone(saved);
+}
+
 /** Desktop edits are project-local overrides; the source file remains untouched. */
 export function resolveAgentSettings(config: Config, events: Iterable<StoredEvent>): Config {
   let saved: Extract<DomainEvent, { type: "project.agents.configured" }> | undefined;

@@ -100,6 +100,11 @@ function App() {
           <p>{contextPending} ortak karar çakışıyor. Yeni görevler karar bekliyor.</p>
           <button onClick={() => setTab("context")}>Kararları incele</button>
         </div>}
+        {!state.busy && tasks.some((item) => item.status === "completed") && tasks.some((item) => item.status === "pending"
+          && item.dependsOn.every((id) => tasks.find((other) => other.id === id)?.status === "completed")) && <div className="banner info" role="status">
+          <p><b>Sıradaki görevler hazır.</b> Onayladığınız işlere bağlı görevler artık başlayabilir.</p>
+          <button className="primary" disabled={pending || !!contextPending} onClick={start}>▶ Devam et</button>
+        </div>}
         <PermissionPanel state={state} api={api} pending={pending} act={(action) => void act(action)} />
 
         {!task ? <Onboarding state={state} disabled={state.busy || pending} onCreate={() => setCreating(true)}

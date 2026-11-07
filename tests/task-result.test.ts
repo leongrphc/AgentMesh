@@ -25,10 +25,17 @@ test("structured test evidence validates statuses and bounds and redacts diagnos
   assert.equal(output.tests?.[0]?.status, "passed");
   assert.equal(output.tests?.[1]?.status, "not_run");
   assert.ok(!output.tests?.[0]?.details?.includes("user@example.com"));
-  for (const invalid of [null, {}, new Array(33).fill(tests[0]), [{ name: "x", status: "unknown" }],
-    [{ name: "x", status: ["passed"] }], [{ name: "", status: "passed" }],
-    [{ name: "x", status: "passed", command: "x".repeat(2001) }],
-    [{ name: "x", status: "passed", details: "x".repeat(8193) }]]) {
-    assert.throws(() => normalizeTaskResult({ summary: JSON.stringify({ ...envelope(), tests: invalid }) }), /Test|test/);
+  // Reports are optional agent claims: malformed ones are repaired, never allowed to fail the task.
+  const repaired = (tests: unknown) => normalizeTaskResult({ summary: JSON.stringify({ ...envelope(), tests }) }, ["reviewer"]).tests;
+  for (const absent of [null, {}, "npm test", [], [null, 3, "x"]]) assert.equal(repaired(absent), undefined);
+  assert.equal(repaired(new Array(33).fill(tests[0]))?.length, 32);
+  for (const status of ["unknown", ["passed"], "PASSED", undefined]) {
+    const [report] = repaired([{ name: "x", status }])!;
+    assert.equal(report?.status, "not_run", `status ${JSON.stringify(status)} must never count as passed`);
+    assert.match(report?.details ?? "", /tanınmayan/);
   }
+  assert.equal(repaired([{ name: "", status: "passed" }])?.[0]?.name, "Test");
+  assert.equal(repaired([{ name: "x", status: "passed", command: "", details: null }])?.[0]?.command, undefined);
+  assert.equal(repaired([{ name: "x", status: "passed", command: "x".repeat(2001) }])?.[0]?.command?.length, 2000);
+  assert.ok((repaired([{ name: "x", status: "failed", details: "x".repeat(8193) }])?.[0]?.details?.length ?? 0) <= 8192);
 });

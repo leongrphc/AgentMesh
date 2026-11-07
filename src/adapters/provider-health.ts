@@ -1,4 +1,8 @@
 import { execFile } from "node:child_process";
+import { readFile } from "node:fs/promises";
+import { connect } from "node:net";
+import { homedir } from "node:os";
+import { join } from "node:path";
 import { promisify } from "node:util";
 import { JsonlRpcClient, record, type RpcOptions } from "./jsonl-rpc.js";
 import { defaultOpenCodeCommand } from "./opencode-cli.js";
@@ -18,15 +22,51 @@ export async function probeHeadlessProvider(provider: HeadlessProvider, cwd: str
     const result = await promisify(execFile)(headlessCommand(provider), ["--version"], { cwd, signal, timeout: 7000, maxBuffer: 8192, windowsHide: true, shell: false });
     const version = result.stdout.match(/\b\d+\.\d+\.\d+\b/)?.[0];
     if (!version) throw new Error("No version");
-    if (provider === "claude" && !process.env.ANTHROPIC_API_KEY?.trim()) return { status: "needs_setup", checkedAt,
-      detail: `Claude CLI ${version} bulundu. Ürün entegrasyonu için ANTHROPIC_API_KEY gerekli; abonelik OAuth girişi kullanılmaz.` };
+    if (provider === "claude") {
+      if (process.env.ANTHROPIC_API_KEY?.trim()) return { status: "configured", checkedAt, detail: `Claude Code ${version} · ANTHROPIC_API_KEY ile bağlanır.` };
+      // Only the logged-in flag and method are read; email, organisation and tokens never leave this function.
+      const auth = await promisify(execFile)(headlessCommand(provider), ["auth", "status"], { cwd, signal, timeout: 10000, maxBuffer: 64 * 1024, windowsHide: true, shell: false })
+        .then((out) => record(JSON.parse(out.stdout)), () => ({} as Record<string, unknown>));
+      if (auth.loggedIn === true) return { status: "configured", checkedAt,
+        detail: `Claude Code ${version} · ${auth.authMethod === "claude.ai" ? "claude.ai hesabıyla" : "kayıtlı girişle"} bağlı. Kullanım hesabınızın limitlerinden düşer.` };
+      return { status: "needs_login", checkedAt, detail: `Claude Code ${version} bulundu ama giriş yapılmamış. Terminalde: claude auth login` };
+    }
     return { status: "installed", checkedAt, detail: `${provider === "antigravity" ? "Antigravity" : "Claude Code"} ${version} bulundu; giriş, model erişimi ve kota sınanmadı. Native headless politikaları geçerlidir; etkileşimli izin köprüsü yok.` };
   } catch { return { status: "unavailable", checkedAt, detail: signal?.aborted ? "Kontrol iptal edildi." : `${provider} CLI açılamadı; kurulumu ve PATH ayarını kontrol edin.` }; }
 }
 type ClientFactory = (options: Omit<RpcOptions, "executable" | "args">) => JsonlRpcClient;
 
+/**
+ * Codex can be pointed at a local bridge or proxy through openai_base_url. When that endpoint is a
+ * loopback address that refuses connections, every task fails with "os error 10061" after several
+ * reconnect attempts; detect it up front instead. Returns a user-facing problem or undefined.
+ */
+export async function codexEndpointProblem(): Promise<string | undefined> {
+  const home = process.env.CODEX_HOME?.trim() || join(homedir(), ".codex");
+  let text: string;
+  try { text = await readFile(join(home, "config.toml"), "utf8"); } catch { return undefined; }
+  const topLevel = text.split(/^\s*\[/m)[0] ?? "";
+  const configured = topLevel.match(/^\s*openai_base_url\s*=\s*["']([^"']+)["']/m)?.[1];
+  if (!configured) return undefined;
+  let url: URL;
+  try { url = new URL(configured); } catch { return `Codex ayarındaki openai_base_url geçersiz: ${safeLog(configured)}`; }
+  if (!["localhost", "127.0.0.1", "[::1]"].includes(url.hostname)) return undefined;
+  const port = Number(url.port || (url.protocol === "https:" ? 443 : 80));
+  const reachable = await new Promise<boolean>((resolve) => {
+    const socket = connect({ host: url.hostname.replace(/^\[|\]$/g, ""), port });
+    const done = (value: boolean) => { socket.destroy(); resolve(value); };
+    socket.setTimeout(2000, () => done(false));
+    socket.once("connect", () => done(true));
+    socket.once("error", () => done(false));
+  });
+  return reachable ? undefined
+    : `Codex model isteklerini ${url.host} adresindeki yerel köprüye/proxy'ye yolluyor ama orada çalışan bir şey yok. `
+      + `O uygulamayı başlatın ya da ${join(home, "config.toml")} içindeki openai_base_url satırını kaldırın.`;
+}
+
 /** No thread/turn, model request, token refresh, or identity text is exported. */
-export async function probeCodex(cwd: string, signal?: AbortSignal, factory?: ClientFactory): Promise<ProviderHealth> {
+export async function probeCodex(cwd: string, signal?: AbortSignal, factory?: ClientFactory,
+  endpointCheck: () => Promise<string | undefined> = factory ? async () => undefined : codexEndpointProblem): Promise<ProviderHealth> {
   const checkedAt = new Date().toISOString();
   let client: JsonlRpcClient | undefined;
   try {
@@ -38,8 +78,11 @@ export async function probeCodex(cwd: string, signal?: AbortSignal, factory?: Cl
     client.notify("initialized");
     const result = await client.request("account/read", { refreshToken: false });
     const account = record(result.account);
-    if (["apiKey", "chatgpt", "amazonBedrock"].includes(String(account.type))) return { status: "configured", checkedAt,
-      detail: "Hesap kaydı bulundu; model erişimi ve kota sınanmadı." };
+    if (["apiKey", "chatgpt", "amazonBedrock"].includes(String(account.type))) {
+      const problem = await endpointCheck();
+      if (problem) return { status: "needs_setup", checkedAt, detail: problem };
+      return { status: "configured", checkedAt, detail: "Hesap kaydı bulundu; model erişimi ve kota sınanmadı." };
+    }
     if (result.account === null && result.requiresOpenaiAuth === true) return { status: "needs_login", checkedAt,
       detail: "Codex CLI hesabına giriş gerekli." };
     return { status: "installed", checkedAt, detail: "App Server erişilebilir; bu sağlayıcının giriş durumu doğrulanamadı." };

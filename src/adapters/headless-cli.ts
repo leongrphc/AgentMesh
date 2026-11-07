@@ -27,10 +27,11 @@ export class HeadlessCliAdapter implements AgentAdapter {
   async execute(input: AgentExecution): Promise<AgentResult> {
     if (input.sessionId && !validSession(input.sessionId)) throw new Error("Geçersiz native oturum kimliği");
     const agy = this.provider === "antigravity";
-    if (!agy && !this.options.runner && !process.env.ANTHROPIC_API_KEY?.trim()) throw new Error("Claude entegrasyonu için ANTHROPIC_API_KEY gerekli; bu bağlantı claude.ai abonelik girişini kullanmaz");
     const args = agy
       ? ["--input-format", "stream-json", "--output-format", "stream-json", "--disable-slash-commands", "--sandbox", "--print-timeout", "8m"]
-      : ["--bare", "--print", "--verbose", "--input-format", "stream-json", "--output-format", "stream-json",
+      // Claude Code authenticates itself (ANTHROPIC_API_KEY or its own login). User-level settings,
+      // hooks and MCP servers are skipped so a personal setup cannot change task behaviour.
+      : ["--print", "--verbose", "--setting-sources", "project", "--strict-mcp-config", "--input-format", "stream-json", "--output-format", "stream-json",
         "--permission-mode", this.options.conversationOnly ? "plan" : "acceptEdits", "--tools", this.options.conversationOnly ? "" : "Read,Edit,Write,Glob,Grep,Bash"];
     if (agy && this.options.conversationOnly) args.push("--mode", "plan");
     if (this.options.model) args.push("--model", this.options.model);

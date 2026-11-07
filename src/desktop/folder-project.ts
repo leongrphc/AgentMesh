@@ -5,11 +5,12 @@ import { basename, join } from "node:path";
 import type { AgentConfig, Config } from "../core/config.js";
 
 /**
- * Agents a freshly opened folder starts with. Users can add more from the agent center.
- * The journal stores this list as the project's source agents, so changing it makes existing
- * folder projects fail to reopen; treat it as a stable default.
+ * Agents a freshly opened folder starts with; users can add more from the agent center.
+ * Folder projects that were opened before keep the agent list stored in their journal
+ * (see DesktopService.openFolder), so this default only affects new projects.
  */
 export const DEFAULT_FOLDER_AGENTS: AgentConfig[] = [
+  { id: "claude", provider: "claude" },
   { id: "codex", provider: "codex", transport: "app-server" },
 ];
 

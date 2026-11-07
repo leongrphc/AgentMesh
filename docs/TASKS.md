@@ -4,7 +4,7 @@
 
 **Çalışma alanı:** `D:\WebGpt`  
 **Karar:** C — Hibrit (CLI/SDK + doğrudan API)  
-**Durum:** Kullanılabilir masaüstü prototipi. Klasör aç → görev yaz → ajan worktree'de çalışır → incele/onayla akışı arayüzde var. Gerçek modelle uçtan uca doğrulama **sıradaki iş**.
+**Durum:** Çalışan masaüstü prototipi. Klasör aç → görev yaz → ajan worktree'de çalışır → incele/onayla akışı gerçek Claude Code ile uçtan uca doğrulandı; paralel ve bağımlı çok ajanlı senaryo da dahil.
 
 ## Yön değişikliği — 7 Kasım
 
@@ -21,15 +21,23 @@
 - [x] **Görev formu sadeleşti:** Başlık + talimat + ajan yeterli. Kimlik başlıktan üretilir; kapsam ve context ayarları "Gelişmiş" altında.
 - [x] **Okunur etkinlik akışı:** Ham JSON-RPC gürültüsü (MCP durumu, hook, delta) gizlenir; olaylar Türkçe etiketlenir, hatalar nedeniyle birlikte gösterilir.
 - [x] **Entegrasyon dalı görünür:** Onaylanan kodun gittiği `agentmesh/integration-…` dalı ve `git merge` komutu inceleme ekranında gösterilir.
-- [x] **`npm run e2e:codex`:** Gerçek Codex ile geçici depoda görev → inceleme → onay → entegrasyon dalında doğrulama.
+- [x] **Gerçek kabul testleri:** `npm run e2e:claude`, `npm run e2e:codex`, `npm run e2e:team`.
+- [x] Klasör projelerinde varsayılan ajanlar Claude + Codex. Daha önce açılmış projeler kendi ajan listesini korur.
+- [x] Onaydan sonra hazır olan bağımlı görevler için "Devam et" uyarısı; Ajanlar penceresinde durum kartları en üstte.
 
 ### Sıradaki işler (öncelik sırasıyla)
 
-- [ ] **E2E-1:** `npm run e2e:codex` gerçek hesapla geçsin. Bu oturumdaki deneme, çalışma ortamının ağ kısıtı yüzünden modele ulaşamadı (`os error 10061`); ürün tarafı hatası gözlenmedi. Kullanıcı makinesinde çalıştırılmalı.
-- [ ] **E2E-2:** Gerçek, küçük bir projede 5–10 görev yap. Her sürtünmeyi buraya not et; sonraki işler bu listeden seçilir.
+- [x] **E2E-1 (7 Kasım):** Gerçek uçtan uca doğrulama **Claude Code** ile geçti. `npm run e2e:claude` tek görevi 16 sn'de tamamladı. `npm run e2e:team` üç görevi 41 sn'de tamamladı: iki ajan paralel çalıştı, bağımlı görev onaylanan kodu gördü. Bulunan ve düzeltilen hatalar:
+  - Claude adaptörü yalnızca `ANTHROPIC_API_KEY` kabul ediyordu (`--bare`). Artık Claude Code'un kendi girişini kullanıyor; kullanıcı hook/ayar/MCP'leri yüklenmiyor (`--setting-sources project --strict-mcp-config`).
+  - Ajanın isteğe bağlı test raporundaki tek bir kusurlu alan, bitmiş görevi "başarısız" yapıyordu. Raporlar artık güvenli tarafta onarılıyor (bilinmeyen durum → çalıştırılmadı).
+  - Sağlayıcı çıktısı `{ text: "<json>" }` olarak sarılı geldiği için etkinlik paneli ham JSON gösteriyordu. Codex RPC, Claude stream-json ve exec JSONL olayları artık okunur satırlara çevriliyor.
+  - Codex: `~/.codex/config.toml` içindeki `openai_base_url` çalışmayan bir yerel köprüyü gösterince her görev `os error 10061` ile düşüyordu. Bağlantı kontrolü artık bunu önceden söylüyor. Köprü açıkken bu kez modelin kendisi "at capacity" hatası verdi; bu sağlayıcı tarafında.
+- [ ] **E2E-2:** Gerçek, küçük bir projede masaüstü uygulamasıyla 5–10 görev yap. Her sürtünmeyi buraya not et; sonraki işler bu listeden seçilir.
+- [ ] **E2E-3:** `npm run e2e:codex` Codex modeli müsaitken geçsin.
 - [ ] **UX-1:** Entegrasyon dalını kullanıcının dalına uygulama içinden alma (açık onaylı `git merge` düğmesi).
 - [ ] **UX-2:** Commit edilmemiş değişiklik uyarısında "şimdi commit et" yardımı.
-- [ ] **UX-3:** Başarısız görevde sağlayıcı hatasını (giriş yok, kota, ağ) ayırt edip ne yapılacağını söylemek.
+- [ ] **UX-3:** Başarısız görevde sağlayıcı hatasını (giriş yok, kota, ağ) ayırt edip ne yapılacağını söylemek. Kısmen yapıldı: bağlantı reddi ve ölü Codex köprüsü yakalanıyor.
+- [ ] **UX-4:** Her proje açılışında journal'a yeni bir "Ajan ayarları kaydedildi" olayı yazılıyor; değişiklik yoksa yazılmasın.
 - [ ] **PROV-1:** OpenCode ve Claude için `e2e:codex` eşdeğeri kabul testi.
 - [ ] CORE-008, CORE-009, CORE-010 ve aşağıdaki diğer açık işler bu adımlardan sonra yeniden önceliklendirilecek.
 

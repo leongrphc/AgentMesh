@@ -108,9 +108,31 @@ function describeItem(item: Record<string, unknown> | undefined): string | undef
   return undefined;
 }
 
-/** Headless CLI JSONL events (codex exec, opencode run and similar). */
+const TOOL_LABEL: Record<string, string> = { Read: "Okuyor", Edit: "Düzenliyor", Write: "Yazıyor", Glob: "Dosya arıyor", Grep: "İçerik arıyor", Bash: "Komut" };
+
+/** Claude Code stream-json assistant turn: tool calls and final text. */
+function describeClaudeTurn(data: Record<string, unknown>): string | undefined {
+  const content = record(data.message)?.content;
+  if (!Array.isArray(content)) return undefined;
+  const lines: string[] = [];
+  for (const block of content.map(record)) {
+    if (block?.type === "text" && typeof block.text === "string" && block.text.trim()) {
+      // The final structured envelope is shown as the task result; skip it here.
+      if (!block.text.includes('"agentmeshVersion"')) lines.push(`Ajan: ${clip(block.text, 300)}`);
+    } else if (block?.type === "tool_use" && typeof block.name === "string") {
+      const input = record(block.input) ?? {};
+      const target = [input.file_path, input.pattern, input.command, input.path].find((value): value is string => typeof value === "string");
+      const shortTarget = target?.split(/[\\/]/).slice(-2).join("/");
+      lines.push(`${TOOL_LABEL[block.name] ?? block.name}${shortTarget ? `: ${clip(shortTarget, 160)}` : ""}`);
+    }
+  }
+  return lines.length ? lines.join(" · ") : undefined;
+}
+
+/** Headless CLI JSONL events (codex exec, opencode run, claude stream-json and similar). */
 function describeJsonl(data: Record<string, unknown>): string | undefined {
   switch (data.type) {
+    case "assistant": return describeClaudeTurn(data);
     case "item.completed": return describeItem(record(data.item));
     case "turn.failed": case "error": {
       const error = record(data.error);

@@ -27,12 +27,12 @@ test("folder opening explains missing repositories and missing commits", () => {
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
 
-test("folder config is stable per repository and starts with one Codex agent and no tasks", () => {
+test("folder config is stable per repository and starts with Claude and Codex agents and no tasks", () => {
   const a = folderConfig("C:\\work\\Shop App");
   assert.equal(a.projectId, folderConfig("C:\\work\\Shop App").projectId);
   assert.match(a.projectId, /^shop-app-[0-9a-f]{6}$/);
   assert.notEqual(a.projectId, folderConfig("C:\\other\\Shop App").projectId);
-  assert.deepEqual(a.agents.map((agent) => [agent.id, agent.provider, agent.transport]), [["codex", "codex", "app-server"]]);
+  assert.deepEqual(a.agents.map((agent) => [agent.id, agent.provider, agent.transport]), [["claude", "claude", undefined], ["codex", "codex", "app-server"]]);
   assert.deepEqual(a.tasks, []);
 });
 
@@ -72,6 +72,31 @@ test("desktop opens a plain Git folder, persists UI tasks and reopens it as the 
     assert.equal(service.openLastProject(), true);
     assert.deepEqual(service.state().snapshot.tasks.map((task) => [task.id, task.status]), [["first", "pending"]]);
     assert.equal(service.state().uncommittedChanges, true);
+  } finally { await service.close(); rmSync(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }); }
+});
+
+test("projects opened with an older default agent list keep their agents", async () => {
+  const root = mkdtempSync(join(tmpdir(), "mesh-old-agents-"));
+  const repo = join(root, "repo");
+  git(root, "init", "-q", repo);
+  writeFileSync(join(repo, "a.txt"), "a");
+  git(repo, "add", "-A"); commit(repo);
+  const { SqliteJournal } = await import("../src/core/sqlite-journal.js");
+  const { repositoryKey } = await import("../src/desktop/folder-project.js");
+  const { Orchestrator } = await import("../src/core/orchestrator.js");
+  const { WorktreeManager } = await import("../src/core/worktrees.js");
+  const resolved = resolveRepository(repo);
+  const config = folderConfig(resolved);
+  const legacy = [{ id: "codex", provider: "codex" as const, transport: "app-server" as const }];
+  mkdirSync(join(root, "data", "repos", repositoryKey(resolved)), { recursive: true });
+  const journal = new SqliteJournal(join(root, "data", "repos", repositoryKey(resolved), "events.sqlite"));
+  const engine = new Orchestrator(journal, new WorktreeManager());
+  engine.createProject({ id: config.projectId, workspaceRoot: resolved });
+  engine.configureAgents(config.projectId, legacy, legacy);
+  journal.close();
+  const service = new DesktopService(join(root, "data"));
+  try {
+    assert.deepEqual(service.openFolder(repo).agents.map((agent) => agent.id), ["codex"]);
   } finally { await service.close(); rmSync(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }); }
 });
 

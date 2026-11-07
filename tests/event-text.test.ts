@@ -26,6 +26,12 @@ test("provider protocol noise is dropped while agent text, files, warnings and e
     assert.equal(out({ type: "item.completed", item: { type: "agent_message", text: "Tamam" } }), "Ajan: Tamam");
     assert.equal(out({ type: "thread.started", thread_id: "t" }), undefined);
   }
+  const claude = (content: unknown[]) => wrapped({ type: "assistant", message: { content } });
+  assert.equal(claude([{ type: "tool_use", name: "Edit", input: { file_path: "C:\\work\\repo\\src\\math.ts" } }]), "Düzenliyor: src/math.ts");
+  assert.equal(claude([{ type: "text", text: "Ekledim." }, { type: "tool_use", name: "Glob", input: { pattern: "**/*.ts" } }]), "Ajan: Ekledim. · Dosya arıyor: **/*.ts");
+  assert.equal(claude([{ type: "text", text: '{"agentmeshVersion":1,"summary":"x"}' }]), undefined);
+  assert.equal(wrapped({ type: "user", message: { content: [{ type: "tool_result" }] } }), undefined);
+  assert.equal(wrapped({ type: "rate_limit_event" }), undefined);
   assert.equal(direct({ text: "demo başladı" }), "demo başladı");
   assert.equal(direct({ text: "{not json" }), "{not json");
   assert.equal(direct({ text: "x".repeat(1000) })!.length, 400);

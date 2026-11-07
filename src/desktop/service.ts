@@ -7,7 +7,7 @@ import { SqliteJournal } from "../core/sqlite-journal.js";
 import { Orchestrator } from "../core/orchestrator.js";
 import { WorktreeManager, integrationBranch } from "../core/worktrees.js";
 import { validate, reconcileTasks, type Config, type AgentConfig } from "../core/config.js";
-import { cleanAgent, resolveAgentSettings, validateAgentEdit } from "../core/agent-settings.js";
+import { cleanAgent, resolveAgentSettings, savedSourceAgents, validateAgentEdit } from "../core/agent-settings.js";
 import { MockAgent } from "../adapters/mock.js";
 import { configuredAdapter } from "../adapters/registry.js";
 import type { PermissionDecision } from "../core/permissions.js";
@@ -169,6 +169,10 @@ export class DesktopService {
     const reused = this.journalPath === normalized && this.journal;
     const journal = reused || new SqliteJournal(path);
     try {
+      // Folder projects have no source file: keep the agent list they were created with so a newer
+      // default agent list never blocks reopening an existing project.
+      const adopted = source === "folder" ? savedSourceAgents(config.projectId, journal.latestAgentSettings(config.projectId)) : undefined;
+      if (adopted) config = { ...config, agents: adopted };
       const sourceAgents = structuredClone(config.agents);
       config = resolveAgentSettings(config, journal.latestAgentSettings(config.projectId));
       const engine = new Orchestrator(journal, new WorktreeManager());

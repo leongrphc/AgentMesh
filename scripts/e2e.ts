@@ -1,9 +1,9 @@
 /**
- * Real end-to-end acceptance test: one Codex task in a throwaway Git repository.
- * Opens the repo as a folder project, runs a tiny coding task, inspects the diff,
+ * Real end-to-end acceptance test: one coding task in a throwaway Git repository.
+ * Opens the repo as a folder project, runs a tiny task with the chosen agent, inspects the diff,
  * approves it and checks that the change reached the integration branch.
  *
- * Uses your Codex account and quota. Run: npm run e2e:codex
+ * Uses your provider account and quota. Run: npm run e2e:claude  or  npm run e2e:codex
  */
 import { execFileSync } from "node:child_process";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
@@ -11,6 +11,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DesktopService } from "../src/desktop/service.js";
 
+const agentId = process.argv[2] ?? "claude";
+if (!["claude", "codex"].includes(agentId)) throw new Error("Kullanım: tsx scripts/e2e.ts <claude|codex>");
 const root = mkdtempSync(join(tmpdir(), "agentmesh-e2e-"));
 const repo = join(root, "repo");
 const git = (...args: string[]) => execFileSync("git", ["-C", repo, ...args], { encoding: "utf8" }).trim();
@@ -26,7 +28,7 @@ try {
   const state = service.openFolder(repo);
   console.log(`Proje: ${state.snapshot.project.id} · ajan: ${state.agents.map((agent) => `${agent.id} (${agent.provider}/${agent.transport})`).join(", ")}`);
   service.createTask({
-    id: "multiply", title: "multiply fonksiyonu ekle", agentId: "codex", dependsOn: [], allowedPaths: state.defaultAllowedPaths,
+    id: "multiply", title: "multiply fonksiyonu ekle", agentId, dependsOn: [], allowedPaths: state.defaultAllowedPaths,
     instruction: "math.ts dosyasına iki sayıyı çarpan `export function multiply(a: number, b: number)` fonksiyonunu ekle. Başka dosya değiştirme.",
   });
   let printed = 0;

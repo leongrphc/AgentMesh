@@ -28,6 +28,12 @@ export function AgentCenter({ state, api, onClose }: { state: DesktopState; api:
     <div className="review-header"><div><div className="eyebrow">BAĞLANTILAR</div><h2 id="agent-center-title">Ajan merkezi</h2></div><button aria-label="Ajan merkezini kapat" onClick={close}>×</button></div>
     <div className="review-content"><p className="agent-center-intro">Bağlantı kontrolü model çağırmaz; hesap kaydının bulunması model erişimi veya kota garantisi vermez.</p>
       {error && <p className="file-error" role="alert">{error}</p>}
+      {state.agents.map((agent) => { const health = state.health[agent.id]; return <article className="agent-card" key={agent.id}>
+        <div className="agent-card-header"><h3>{agent.id}</h3><span className={`health-status ${health?.status ?? "unchecked"}`}>{health ? labels[health.status] : "Kontrol edilmedi"}</span></div>
+        <dl><dt>Sağlayıcı</dt><dd>{state.demo ? "Mock" : agent.provider}</dd><dt>Bağlantı</dt><dd>{state.demo ? "Yerel demo" : agent.transport === "app-server" ? "CLI / App Server" : agent.transport === "server" ? "CLI / HTTP Server" : "CLI / exec"}</dd><dt>Model</dt><dd>{agent.model ?? (state.demo ? "Kullanılmaz" : "Sağlayıcı varsayılanı")}</dd><dt>Görev rolü</dt><dd>{agent.role ?? agent.id}</dd><dt>Araç izinleri</dt><dd>{agent.interactivePermissions ? "Kullanıcı kararı · tek istek" : "Etkileşimli izin desteklenmiyor"}</dd></dl>
+        {health && <><p>{health.detail}</p><small>Son kontrol: {new Date(health.checkedAt).toLocaleString("tr-TR")}</small></>}
+        <p>Proje mesajları: {agent.liveMessages ? "Aktif göreve canlı teslim desteklenir" : "Sonraki görev veya yeniden denemede teslim edilir"}.</p>
+      </article>; })}
       <AgentSettings state={state} api={api} />
       <section className="provider-test" aria-labelledby="provider-test-title">
         <h3 id="provider-test-title">Gerçek mesaj testi</h3>
@@ -56,12 +62,6 @@ export function AgentCenter({ state, api, onClose }: { state: DesktopState; api:
         }}>OpenCode oturumunu kapat</button><Suspense fallback={<p>Terminal yükleniyor…</p>}><NativeTerminal info={native} api={api} visible autoFocus /></Suspense></div>}
         {result && <div className="provider-test-result" role="status"><small>{result.provider}{result.transport ? ` / ${result.transport}` : ""} · {result.model ?? "Varsayılan model"} · {(result.elapsedMs / 1000).toFixed(1)} sn · Yanıt alındı</small><p><b>Sen:</b> {sentMessage}</p><pre>{result.response}</pre></div>}
       </section>
-      {state.agents.map((agent) => { const health = state.health[agent.id]; return <article className="agent-card" key={agent.id}>
-        <div className="agent-card-header"><h3>{agent.id}</h3><span className={`health-status ${health?.status ?? "unchecked"}`}>{health ? labels[health.status] : "Kontrol edilmedi"}</span></div>
-        <dl><dt>Sağlayıcı</dt><dd>{state.demo ? "Mock" : agent.provider}</dd><dt>Bağlantı</dt><dd>{state.demo ? "Yerel demo" : agent.transport === "app-server" ? "CLI / App Server" : agent.transport === "server" ? "CLI / HTTP Server" : "CLI / exec"}</dd><dt>Model</dt><dd>{agent.model ?? (state.demo ? "Kullanılmaz" : "Sağlayıcı varsayılanı")}</dd><dt>Görev rolü</dt><dd>{agent.role ?? agent.id}</dd><dt>Araç izinleri</dt><dd>{agent.interactivePermissions ? "Kullanıcı kararı · tek istek" : "Etkileşimli izin desteklenmiyor"}</dd></dl>
-        {health && <><p>{health.detail}</p><small>Son kontrol: {new Date(health.checkedAt).toLocaleString("tr-TR")}</small></>}
-        <p>Proje mesajları: {agent.liveMessages ? "Aktif göreve canlı teslim desteklenir" : "Sonraki görev veya yeniden denemede teslim edilir"}.</p>
-      </article>; })}
     </div><div className="review-actions"><button data-testid="check-agents" className="primary" disabled={state.busy || state.checkingAgents} onClick={async () => { setError(""); try { await api.checkAgents(); } catch (e) { setError(String(e)); } }}>{state.checkingAgents ? "Kontrol ediliyor…" : "Bağlantıları kontrol et"}</button></div>
   </dialog>;
 }

@@ -1,20 +1,37 @@
 import type { TestReport } from "./contracts.js";
 import { safeLog } from "./safe-log.js";
 
+const MAX_REPORTS = 32;
+const STATUSES = new Set<TestReport["status"]>(["passed", "failed", "not_run"]);
+
+function text(value: unknown, max: number): string | undefined {
+  if (typeof value !== "string" || !value.trim()) return undefined;
+  const trimmed = value.trim();
+  return trimmed.length > max ? `${trimmed.slice(0, max - 1)}…` : trimmed;
+}
+
+/**
+ * Test reports are the agent's own claim, not evidence, and they are optional. A malformed report
+ * must never discard finished work, so entries are repaired conservatively instead of rejected:
+ * anything that is not an explicit "passed" or "failed" becomes "not_run" (never upgraded to passed),
+ * oversized text is truncated, and non-object entries are dropped.
+ */
 export function normalizeTestReports(value: unknown): TestReport[] | undefined {
-  if (value === undefined) return undefined;
-  if (!Array.isArray(value) || value.length > 32) throw new Error("Test raporları en fazla 32 kayıt içermeli");
-  return value.map((entry: unknown) => {
-    if (!entry || typeof entry !== "object" || Array.isArray(entry)) throw new Error("Geçersiz test raporu");
+  if (value === undefined || value === null || !Array.isArray(value)) return undefined;
+  const reports: TestReport[] = [];
+  for (const entry of value.slice(0, MAX_REPORTS)) {
+    if (!entry || typeof entry !== "object" || Array.isArray(entry)) continue;
     const report = entry as Record<string, unknown>;
-    if (typeof report.name !== "string" || !report.name.trim() || report.name.length > 200
-      || typeof report.status !== "string" || !["passed", "failed", "not_run"].includes(report.status)
-      || (report.command !== undefined && (typeof report.command !== "string" || !report.command.trim() || report.command.length > 2000))
-      || (report.details !== undefined && (typeof report.details !== "string" || report.details.length > 8192))) {
-      throw new Error("Geçersiz test adı, durumu veya açıklaması");
-    }
-    return { name: safeLog(report.name.trim(), "storage"), status: report.status as TestReport["status"],
-      ...(typeof report.command === "string" ? { command: safeLog(report.command, "storage") } : {}),
-      ...(typeof report.details === "string" ? { details: safeLog(report.details, "storage") } : {}) };
-  });
+    const known = typeof report.status === "string" && STATUSES.has(report.status as TestReport["status"]);
+    const status = known ? report.status as TestReport["status"] : "not_run";
+    const name = text(report.name, 200) ?? "Test";
+    const command = text(report.command, 2000);
+    const reported = text(report.details, 8192);
+    const details = known ? reported
+      : [`Ajan tanınmayan bir durum bildirdi (${safeLog(String(JSON.stringify(report.status) ?? "yok").slice(0, 60))}); çalıştırılmadı sayıldı.`, reported].filter(Boolean).join(" ");
+    reports.push({ name: safeLog(name, "storage"), status,
+      ...(command ? { command: safeLog(command, "storage") } : {}),
+      ...(details ? { details: safeLog(details, "storage") } : {}) });
+  }
+  return reports.length ? reports : undefined;
 }

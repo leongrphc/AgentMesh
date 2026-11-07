@@ -22,7 +22,13 @@ test("Antigravity and Claude build native headless requests with context, exact 
     const adapter = new HeadlessCliAdapter("a", provider, { model: "test-model", runner: async (spec) => {
       assert.equal(spec.cwd, execution.workspaceRoot);
       assert.ok(!spec.args.some((arg) => arg.includes("skip-permissions")));
-      if (provider === "claude") assert.ok(spec.args.includes("--bare"));
+      if (provider === "claude") {
+        // Uses Claude Code's own authentication, but never the user's hooks, settings or MCP servers.
+        assert.ok(!spec.args.includes("--bare"));
+        assert.equal(spec.args[spec.args.indexOf("--setting-sources") + 1], "project");
+        assert.ok(spec.args.includes("--strict-mcp-config"));
+        assert.ok(!spec.args.includes("--dangerously-skip-permissions"));
+      }
       assert.equal(spec.args[spec.args.indexOf(provider === "antigravity" ? "--conversation" : "--resume") + 1], "session-1");
       const message = JSON.parse(spec.stdin!);
       const prompt = provider === "antigravity" ? message.message.content : message.message.content;
