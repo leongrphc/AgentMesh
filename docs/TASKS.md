@@ -1,13 +1,37 @@
 # AgentMesh IDE — görev listesi ve devam notları
 
-**Son güncelleme:** 21 Ekim 2026
+**Son güncelleme:** 7 Kasım 2026
 
 **Çalışma alanı:** `D:\WebGpt`  
-**Dal:** `main`  
 **Karar:** C — Hibrit (CLI/SDK + doğrudan API)  
-**Durum:** Yerel orkestrasyon MVP'si ve çalışan Electron/React masaüstü kabuğu; görev yönetimi, ajan durumları, context/mesajlar ve canlı olaylar mevcut.
+**Durum:** Kullanılabilir masaüstü prototipi. Klasör aç → görev yaz → ajan worktree'de çalışır → incele/onayla akışı arayüzde var. Gerçek modelle uçtan uca doğrulama **sıradaki iş**.
 
-Bu dosya, yarın kaldığımız yerden devam etmek için tek kontrol listesidir. Mimari detaylar `docs/architecture.md`, protokol `docs/agent-protocol.md`, ilk kapsam `docs/mvp.md` içinde.
+## Yön değişikliği — 7 Kasım
+
+18–21 Ekim arasında emeğin çoğu altyapıya gitti: journal arşivleme/sıkıştırma, checkpoint, SQLite sayfalama ve akış. Oysa ürünün ana iddiası, yani bir ajanın gerçek kodu yazıp onayla birleştirilmesi, hiç uçtan uca denenmemişti. Ayrıca gerçek bir proje açmak elle JSON yazmayı gerektiriyordu. Bu nedenle:
+
+1. **Altyapı donduruldu.** Journal, arşiv, checkpoint, SQLite performansı ve sayfalama alanlarına, gerçek kullanımda ölçülmüş bir sorun çıkmadıkça yeni iş eklenmez.
+2. **Kural:** Gerçek bir görev uçtan uca yapılamıyorsa yeni altyapı yazılmaz. Her yeni özellik önce `npm run e2e:codex` veya gerçek bir denemede görülen bir sürtünmeden doğmalı.
+3. **Tek sağlayıcı önce.** Codex (`app-server`) birincil yol. OpenCode/Claude/Antigravity, Codex akışı sorunsuz olduktan sonra aynı kabul testinden geçirilecek.
+
+### Bu turda yapılanlar (7 Kasım)
+
+- [x] **Klasör aç:** Herhangi bir Git deposu config dosyası olmadan proje olarak açılır. Varsayılan ajan Codex app-server, varsayılan dosya kapsamı `**`. Son projeler listesi tutulur ve uygulama son projeyle açılır. Git deposu değilse, commit yoksa veya commit edilmemiş değişiklik varsa açık mesaj gösterilir.
+- [x] **Arayüz yeniden tasarlandı:** Üç sütunlu IDE düzeni (görevler · çalışma alanı · etkinlik), proje menüsü, ilk kullanım rehberi, sonraki adım ipuçları, renkli diff, açık/koyu tema. Tek dosyalık `renderer.tsx` bileşenlere bölündü.
+- [x] **Görev formu sadeleşti:** Başlık + talimat + ajan yeterli. Kimlik başlıktan üretilir; kapsam ve context ayarları "Gelişmiş" altında.
+- [x] **Okunur etkinlik akışı:** Ham JSON-RPC gürültüsü (MCP durumu, hook, delta) gizlenir; olaylar Türkçe etiketlenir, hatalar nedeniyle birlikte gösterilir.
+- [x] **Entegrasyon dalı görünür:** Onaylanan kodun gittiği `agentmesh/integration-…` dalı ve `git merge` komutu inceleme ekranında gösterilir.
+- [x] **`npm run e2e:codex`:** Gerçek Codex ile geçici depoda görev → inceleme → onay → entegrasyon dalında doğrulama.
+
+### Sıradaki işler (öncelik sırasıyla)
+
+- [ ] **E2E-1:** `npm run e2e:codex` gerçek hesapla geçsin. Bu oturumdaki deneme, çalışma ortamının ağ kısıtı yüzünden modele ulaşamadı (`os error 10061`); ürün tarafı hatası gözlenmedi. Kullanıcı makinesinde çalıştırılmalı.
+- [ ] **E2E-2:** Gerçek, küçük bir projede 5–10 görev yap. Her sürtünmeyi buraya not et; sonraki işler bu listeden seçilir.
+- [ ] **UX-1:** Entegrasyon dalını kullanıcının dalına uygulama içinden alma (açık onaylı `git merge` düğmesi).
+- [ ] **UX-2:** Commit edilmemiş değişiklik uyarısında "şimdi commit et" yardımı.
+- [ ] **UX-3:** Başarısız görevde sağlayıcı hatasını (giriş yok, kota, ağ) ayırt edip ne yapılacağını söylemek.
+- [ ] **PROV-1:** OpenCode ve Claude için `e2e:codex` eşdeğeri kabul testi.
+- [ ] CORE-008, CORE-009, CORE-010 ve aşağıdaki diğer açık işler bu adımlardan sonra yeniden önceliklendirilecek.
 
 ## Deneme kontrol noktası — 21 Ekim
 

@@ -1,0 +1,67 @@
+# AgentMesh
+
+Birden fazla kodlama ajanını (Codex, OpenCode, Claude, Antigravity) **aynı Git projesinde, ayrı dallarda ve paralel** çalıştıran yerel masaüstü IDE'si. Her görev kendi Git worktree'sinde yürür. Ajanın değişikliği, siz diff'i inceleyip onaylamadan hiçbir yere birleşmez.
+
+> **Durum: erken prototip.** Masaüstü uygulaması, orkestratör, worktree izolasyonu, inceleme/onay akışı ve 136 otomatik test çalışıyor. Gerçek bir model ile uçtan uca kod görevi henüz yeterince denenmedi. İlk iş: `npm run e2e:codex` (aşağıda).
+
+## 5 dakikada başla
+
+Gereksinimler: Windows, Node.js 22.12+, Git ve giriş yapılmış bir [Codex CLI](https://github.com/openai/codex) (`codex login`).
+
+```powershell
+npm install
+npm run desktop
+```
+
+1. Sol üstteki proje menüsünden **Klasör aç…** ile herhangi bir Git deposunu seç. Depoda en az bir commit olmalı ve commit edilmemiş değişiklik bulunmamalı.
+2. **＋ Yeni görev** ile ajana ne yapacağını yaz. Başlık ve talimat yeterli; gerisi varsayılan.
+3. **▶ Ajanları başlat**. Ajan görevi `agentmesh/…` adlı ayrı bir worktree'de yapar. İlerleme sağdaki **Etkinlik** panelinde akar.
+4. Görev *İnceleme bekliyor* olunca **Değişiklikleri incele** → diff'e bak → **Onayla ve birleştir**.
+5. Onaylanan değişiklikler `agentmesh/integration-…` dalında birikir. Hazır olduğunda kendi dalına al:
+   ```powershell
+   git merge agentmesh/integration-xxxxxxxx
+   ```
+
+Uygulama son açtığın projeyle başlar. İlk açılışta model çağırmayan bir **demo** gösterir.
+
+## Nasıl çalışır
+
+```
+ görev ──► orkestratör ──► ajan (Codex / OpenCode / Claude …)
+              │                 │  kendi worktree'sinde, kendi dalında
+              │                 ▼
+              │           diff + SHA-256 özet
+              ▼                 │
+   bağımlı görevler ◄── siz onaylarsınız ──► entegrasyon dalı
+```
+
+- **Görevler ve bağımlılıklar.** "B, A bitince başlasın" diyebilirsin. Bağımsız görevler 1–8 paralel ajanla aynı anda çalışır.
+- **Ortak context.** Ajanların sonuçları, kararları ve birbirine mesajları sonraki görevlere aktarılır. Çelişen kararları siz çözersiniz.
+- **İzinler.** Codex (`app-server`) ve OpenCode (`server`) bağlantılarında ajan komut çalıştırmak isterse uygulama size tek seferlik izin sorar.
+- **Kalıcılık.** Her şey yerel bir SQLite günlüğünde tutulur; uygulamayı kapatıp açınca kaldığın yerden devam edersin.
+
+Ek ajanlar (OpenCode, Claude, Antigravity) üst bardaki **Ajanlar** penceresinden eklenir.
+
+## Komutlar
+
+| Komut | Ne yapar |
+|---|---|
+| `npm run desktop` | Masaüstü uygulamasını derleyip açar |
+| `npm test` | Tüm otomatik testler (model çağırmaz) |
+| `npm run typecheck` | TypeScript kontrolü |
+| `npm run desktop:smoke` | Gerçek Electron penceresinde uçtan uca arayüz testi (model çağırmaz) |
+| `npm run e2e:codex` | **Gerçek Codex** ile geçici bir depoda görev → inceleme → onay → merge. Hesabından kota harcar |
+| `npm run desktop:package` | Taşınabilir Windows klasörü üretir (`dist/releases`) |
+| `npm run live -- --config <dosya>` | Masaüstü olmadan CLI ile config tabanlı çalıştırma ([ayrıntı](docs/reference.md#gerçek-codexopencode-cli-çalıştırma)) |
+
+## Bilinen sınırlar
+
+- Dosya kapsamı (`allowedPaths`) **çalıştırma sonrasında** denetlenir. Ajan süreci işletim sistemi sandbox'ında değildir (CORE-010).
+- Onay ana dalını değiştirmez. Entegrasyon dalını sizin birleştirmeniz gerekir.
+- Kurulum sihirbazı, imzalı sürüm ve otomatik güncelleme yok.
+
+## Belgeler
+
+- [Ayrıntılı başvuru](docs/reference.md): tüm özellikler, CLI ve config biçimi
+- [Görev listesi ve yol haritası](docs/TASKS.md)
+- [Mimari](docs/architecture.md) · [Ajan protokolü](docs/agent-protocol.md) · [İzinler](docs/permissions.md) · [Sağlayıcılar](docs/providers.md)

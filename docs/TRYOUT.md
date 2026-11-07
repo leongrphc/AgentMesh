@@ -1,5 +1,7 @@
 # Yerel deneme sürümü — 21 Ekim 2026
 
+> **7 Kasım güncellemesi:** Gerçek proje artık config dosyası olmadan açılıyor: proje menüsü → **Klasör aç…**. Güncel adımlar [README](../README.md#5-dakikada-başla) içinde. Aşağıdaki notlar 21 Ekim kontrol noktasının kaydıdır.
+
 Bu kontrol noktası masaüstü MVP'sini denemek içindir. Taşınabilir Windows klasörü üretilebilir; kurulum sihirbazı ve otomatik güncelleme henüz yok. Mevcut çalışma alanından açmak için:
 
 ```powershell
