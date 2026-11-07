@@ -27,6 +27,7 @@ const api: DesktopAPI = {
   retry: (taskId) => ipcRenderer.invoke("mesh:retry", taskId),
   reassign: (taskId, agentId) => ipcRenderer.invoke("mesh:reassign", taskId, agentId),
   requestChanges: (taskId, feedback) => ipcRenderer.invoke("mesh:request-changes", taskId, feedback),
+  reviewFile: (taskId, path) => ipcRenderer.invoke("mesh:review-file", taskId, path),
   planTasks: (goal, agentId) => ipcRenderer.invoke("mesh:plan", goal, agentId),
   cancelPlan: () => ipcRenderer.invoke("mesh:cancel-plan"),
   updateSettings: (settings) => ipcRenderer.invoke("mesh:settings", settings),

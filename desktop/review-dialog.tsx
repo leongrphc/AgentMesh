@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import type { DesktopAPI, DesktopReview } from "../src/desktop/contracts.js";
+import { DiffViewer } from "./diff-viewer.js";
 import { MergeResolution } from "./merge-resolution.js";
 import { TestReports } from "./test-reports.js";
 
@@ -51,12 +52,11 @@ export function ReviewDialog({ review, api, integrationBranch, onReview, onDirty
       <MergeResolution review={review} api={api} disabled={pending} onReview={onReview}
         onDirty={(value) => { setDirty(value); onDirty(value); }} />
 
-      <h3>Değişen dosyalar · {inspection.changedPaths.length}</h3>
-      <ul className="changed-files">{inspection.changedPaths.map((path) => <li key={path}><code>{path}</code></li>)}</ul>
-      {inspection.trackedDiff && <>
-        <h3>Takip edilen dosyalar</h3>
+      <DiffViewer api={api} taskId={review.taskId} paths={inspection.changedPaths} digest={inspection.digest} />
+      {inspection.trackedDiff && <details className="raw-diff">
+        <summary>Tüm değişiklikler (ham diff)</summary>
         <pre className="diff">{inspection.trackedDiff.split("\n").map((line, index) => <span key={index} className={diffClass(line)}>{line}{"\n"}</span>)}</pre>
-      </>}
+      </details>}
       {inspection.untrackedPreviews.map((file) => <section key={file.path}>
         <h3>Yeni dosya: {file.path}</h3>
         {file.truncated && <p className="review-warning">Önizleme kısaltıldı. Dosyanın tamamını çalışma alanında inceleyin.</p>}

@@ -437,6 +437,10 @@ app.whenReady().then(async () => {
     return service.planTasks(goal, agentId);
   });
   handle("mesh:cancel-plan", () => service.cancelPlan());
+  handle("mesh:review-file", (taskId, path) => {
+    if (typeof taskId !== "string" || typeof path !== "string") throw new Error("Geçersiz dosya isteği");
+    return service.reviewFile(taskId, path);
+  });
   handle("mesh:request-changes", (taskId, feedback) => {
     if (typeof taskId !== "string" || typeof feedback !== "string") throw new Error("Geçersiz değişiklik isteği");
     service.requestChanges(taskId, feedback);

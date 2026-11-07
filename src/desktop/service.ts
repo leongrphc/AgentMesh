@@ -328,6 +328,17 @@ export class DesktopService {
     this.autoContinue();
   }
 
+  /** Old and new text of one changed file, for the side-by-side diff in the review dialog. */
+  reviewFile(taskId: string, path: string) {
+    const task = this.state().snapshot.tasks.find((item) => item.id === this.requireTask(taskId))!;
+    if (!task.worktree) throw new Error("Görevin çalışma alanı yok");
+    if (typeof path !== "string" || !path) throw new Error("Geçersiz dosya yolu");
+    const manager = new WorktreeManager();
+    const lease = manager.reopen(this.config!.repoPath, task.worktree);
+    if (!manager.inspectTask(this.config!.repoPath, lease, task.allowedPaths).changedPaths.includes(path)) throw new Error("Bu dosya görevde değişmedi");
+    return { path, ...manager.fileVersions(this.config!.repoPath, lease, path) };
+  }
+
   /** Hands a stopped task to another agent, which continues in the same worktree. */
   reassignTask(taskId: string, agentId: string): void {
     this.requireClosedTerminals();

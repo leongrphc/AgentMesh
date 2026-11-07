@@ -144,6 +144,35 @@ export class WorktreeManager {
     return discarded;
   }
 
+  /**
+   * Both sides of one changed file for a side-by-side review: the version at the task's review base
+   * and the one in its worktree. A side is null when the file did not exist there. Files that are
+   * binary or larger than 1 MiB are reported as such instead of being returned.
+   */
+  fileVersions(repoPath: string, lease: WorktreeLease, path: string): { original: string | null; modified: string | null; skipped?: "binary" | "large" } {
+    const verified = this.reopen(repoPath, lease);
+    const normalized = path.replace(/\\/g, "/");
+    const full = resolve(verified.path, normalized);
+    if (isAbsolute(normalized) || normalized.split("/").includes("..") || !full.toLowerCase().startsWith((resolve(verified.path) + sep).toLowerCase())) {
+      throw new Error("Geçersiz dosya yolu");
+    }
+    const limit = 1024 * 1024;
+    const base = this.reviewBase(repoPath, verified);
+    let original: string | null = null;
+    try {
+      const size = Number(git(verified.path, "cat-file", "-s", `${base}:${normalized}`).trim());
+      if (size > limit) return { original: null, modified: null, skipped: "large" };
+      original = git(verified.path, "show", `${base}:${normalized}`);
+    } catch { original = null; }
+    let modified: string | null = null;
+    if (existsSync(full) && !lstatSync(full).isSymbolicLink() && lstatSync(full).isFile()) {
+      if (lstatSync(full).size > limit) return { original: null, modified: null, skipped: "large" };
+      modified = readFileSync(full, "utf8");
+    }
+    if ([original, modified].some((text) => text !== null && text.includes("\0"))) return { original: null, modified: null, skipped: "binary" };
+    return { original, modified };
+  }
+
   /** Number of approved commits on the integration branch that the checked-out branch does not have yet. */
   pendingIntegration(repoPath: string): number {
     const root = exactRoot(repoPath);

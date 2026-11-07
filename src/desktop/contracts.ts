@@ -80,6 +80,7 @@ export interface DesktopAPI {
   retry(taskId: string): Promise<void>;
   reassign(taskId: string, agentId: string): Promise<void>;
   requestChanges(taskId: string, feedback: string): Promise<void>;
+  reviewFile(taskId: string, path: string): Promise<{ path: string; original: string | null; modified: string | null; skipped?: "binary" | "large" }>;
   planTasks(goal: string, agentId: string): Promise<TaskDraft[]>;
   cancelPlan(): Promise<void>;
   updateSettings(settings: import("../core/contracts.js").ProjectSettings): Promise<void>;

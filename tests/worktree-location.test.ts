@@ -143,3 +143,24 @@ test("an agent taking over a task continues in the same worktree with the previo
     assert.deepEqual(inspection.changedPaths.sort(), ["part1.txt", "part2.txt"]);
   } finally { cleanup(); }
 });
+
+test("review diffs return both sides of a changed file and refuse paths outside the worktree", () => {
+  const { repo, cleanup } = fixture();
+  try {
+    writeFileSync(join(repo, "gone.txt"), "eski\n");
+    commitAll(repo, "more");
+    const manager = new WorktreeManager();
+    const lease = manager.prepare(repo, "diff-task");
+    writeFileSync(join(lease.path, "a.txt"), "b\n");
+    writeFileSync(join(lease.path, "new.ts"), "export {};\n");
+    writeFileSync(join(lease.path, "image.bin"), Buffer.from([0, 1, 2, 3]));
+    rmSync(join(lease.path, "gone.txt"));
+    const changed = manager.fileVersions(repo, lease, "a.txt");
+    assert.deepEqual([changed.original?.replace(/\r\n/g, "\n"), changed.modified], ["a\n", "b\n"]);
+    assert.deepEqual(manager.fileVersions(repo, lease, "new.ts"), { original: null, modified: "export {};\n" });
+    assert.deepEqual(manager.fileVersions(repo, lease, "gone.txt").modified, null);
+    assert.equal(manager.fileVersions(repo, lease, "image.bin").skipped, "binary");
+    assert.throws(() => manager.fileVersions(repo, lease, "../outside.txt"), /Geçersiz dosya yolu/);
+    assert.throws(() => manager.fileVersions(repo, lease, "C:/Windows/win.ini"), /Geçersiz dosya yolu/);
+  } finally { cleanup(); }
+});
