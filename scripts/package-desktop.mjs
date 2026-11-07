@@ -14,6 +14,13 @@ await mkdir(releases, { recursive: true });
 const output = await mkdtemp(join(releases, `AgentMesh-${manifest.version}-win-${process.arch}-`));
 await cp(join(dirname(require.resolve("electron/package.json")), "dist"), output, { recursive: true });
 await rename(join(output, "electron.exe"), join(output, "AgentMesh.exe"));
+// The executable carries the AgentMesh icon and name instead of Electron's (taskbar, Start menu, Explorer).
+const rcedit = require("rcedit");
+await rcedit(join(output, "AgentMesh.exe"), {
+  icon: join(root, "build", "icon.ico"),
+  "file-version": manifest.version, "product-version": manifest.version,
+  "version-string": { ProductName: "AgentMesh", FileDescription: "AgentMesh", CompanyName: "AgentMesh", OriginalFilename: "AgentMesh.exe", InternalName: "AgentMesh" },
+});
 const app = join(output, "resources", "app");
 await mkdir(app, { recursive: true });
 await writeFile(join(app, "package.json"), JSON.stringify({ name: manifest.name, version: manifest.version, main: "dist/desktop/main.cjs" }, null, 2));

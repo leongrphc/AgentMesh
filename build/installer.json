@@ -1,0 +1,25 @@
+{
+  "appId": "dev.agentmesh.desktop",
+  "productName": "AgentMesh",
+  "copyright": "AgentMesh",
+  "directories": { "output": "dist/installers" },
+  "win": {
+    "target": [{ "target": "nsis", "arch": ["x64"] }],
+    "icon": "build/icon.ico",
+    "executableName": "AgentMesh"
+  },
+  "nsis": {
+    "oneClick": false,
+    "perMachine": false,
+    "allowElevation": false,
+    "allowToChangeInstallationDirectory": true,
+    "createDesktopShortcut": true,
+    "createStartMenuShortcut": true,
+    "shortcutName": "AgentMesh",
+    "installerIcon": "build/icon.ico",
+    "uninstallerIcon": "build/icon.ico",
+    "uninstallDisplayName": "AgentMesh",
+    "deleteAppDataOnUninstall": false,
+    "artifactName": "AgentMesh-Setup-${version}.${ext}"
+  }
+}

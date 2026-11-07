@@ -60,13 +60,14 @@ Ek ajanlar (OpenCode, Claude, Antigravity) üst bardaki **Ajanlar** penceresinde
 | `npm run e2e:codex -- codex1` | Aynı tek görev testi, Codex ile (profil adı isteğe bağlı) |
 | `npm run e2e:team -- claude codex:codex1` | Üç görevli gerçek ekip senaryosu: iki paralel ajan + onların koduna bağlı üçüncü görev. Argümansız çalıştırılırsa hepsi Claude ile |
 | `npm run desktop:package` | Taşınabilir Windows klasörü üretir (`dist/releases`) |
+| `npm run desktop:installer` | Windows kurulum dosyası üretir: `dist/installers/AgentMesh-Setup-<sürüm>.exe` (yönetici izni istemez, kısayol oluşturur, kaldırıcı içerir) |
 | `npm run live -- --config <dosya>` | Masaüstü olmadan CLI ile config tabanlı çalıştırma ([ayrıntı](docs/reference.md#gerçek-codexopencode-cli-çalıştırma)) |
 
 ## Bilinen sınırlar
 
 - Dosya kapsamı (`allowedPaths`) **Claude** görevlerinde çalışmadan önce uygulanır: kapsam dışına yazma isteği daha baştan reddedilir, kabukta yalnızca okuma komutlarına izin verilir. **Codex** işletim sistemi sandbox'ında yalnızca kendi çalışma alanına yazabilir; alan içindeki kapsam, Codex'in dosya izin istekleri ve iş sonrası denetimle sağlanır. Tüm ajanlar için iş bittikten sonra da ayrıca denetlenir.
 - Claude bağlantısında izinler arayüzden sorulmaz; kurallar önceden verilir (kapsam içi dosya düzenleme, okuma komutları). Test çalıştırmak gibi işler için proje ayarlarındaki **test komutunu** kullanın; AgentMesh onu kendisi çalıştırır. Arayüzden tek tek izin verme Codex (`app-server`) ve OpenCode (`server`) bağlantılarında var.
-- Kurulum sihirbazı, imzalı sürüm ve otomatik güncelleme yok.
+- Kurulum dosyası imzasızdır; Windows SmartScreen ilk açılışta uyarı gösterebilir. Otomatik güncelleme yok: bunun için sürümlerin yayımlanacağı bir sunucu (ör. GitHub Releases) gerekir.
 
 ## Belgeler
 
