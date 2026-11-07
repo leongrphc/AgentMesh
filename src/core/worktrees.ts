@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
-import { existsSync, lstatSync, readFileSync, realpathSync } from "node:fs";
+import { appendFileSync, existsSync, lstatSync, mkdirSync, readFileSync, realpathSync } from "node:fs";
 import { dirname, isAbsolute, join, matchesGlob, resolve, sep } from "node:path";
 
 export interface WorktreeLease {
@@ -47,6 +47,48 @@ function shortHash(value: string): string {
   return createHash("sha256").update(value).digest("hex").slice(0, 16);
 }
 
+/** Folder inside the repository that holds everything AgentMesh writes for it. */
+export const AGENTMESH_DIR = ".agentmesh";
+
+/** Task and integration worktrees live inside the repository, under .agentmesh/worktrees. */
+export function worktreesRoot(root: string): string {
+  return join(root, AGENTMESH_DIR, "worktrees");
+}
+
+/** Worktrees created by versions that wrote next to the repository; still honoured when reopening. */
+function legacyWorktreesRoot(root: string): string {
+  return join(dirname(root), ".agentmesh-worktrees", shortHash(root.toLowerCase()));
+}
+
+/**
+ * Hides .agentmesh/ from Git through the repository-local exclude file, so it never shows up as an
+ * untracked change and never blocks the clean-repository check. The user's .gitignore is untouched.
+ */
+export function excludeAgentmeshDir(repoPath: string): void {
+  const exclude = git(repoPath, "rev-parse", "--path-format=absolute", "--git-path", "info/exclude").trim();
+  const entry = `/${AGENTMESH_DIR}/`;
+  const current = existsSync(exclude) ? readFileSync(exclude, "utf8") : "";
+  if (current.split(/\r?\n/).some((line) => line.trim() === entry)) return;
+  mkdirSync(dirname(exclude), { recursive: true });
+  const separator = current && !current.endsWith("\n") ? "\n" : "";
+  appendFileSync(exclude, `${separator}# AgentMesh görev çalışma alanları\n${entry}\n`);
+}
+
+function mergeInProgress(worktree: string): boolean {
+  try { git(worktree, "rev-parse", "-q", "--verify", "MERGE_HEAD"); return true; }
+  catch { return false; }
+}
+
+/** Path of an existing worktree that has `branch` checked out, if any. */
+function checkedOutAt(root: string, branch: string): string | undefined {
+  let path: string | undefined;
+  for (const line of git(root, "worktree", "list", "--porcelain").split(/\r?\n/)) {
+    if (line.startsWith("worktree ")) path = line.slice("worktree ".length);
+    else if (line === `branch refs/heads/${branch}` && path && existsSync(path)) return path;
+  }
+  return undefined;
+}
+
 /** Branch where approved task changes accumulate; the user's own branches are never modified. */
 export function integrationBranch(repoPath: string): string {
   return `agentmesh/integration-${shortHash(exactRoot(repoPath).toLowerCase()).slice(0, 8)}`;
@@ -56,9 +98,20 @@ export function integrationBranch(repoPath: string): string {
 export class WorktreeManager {
   integration(repoPath: string): WorktreeLease {
     const root = exactRoot(repoPath);
-    const repoId = shortHash(root.toLowerCase());
     const branch = integrationBranch(root);
-    const path = join(dirname(root), ".agentmesh-worktrees", repoId, "integration");
+    excludeAgentmeshDir(root);
+    const path = join(worktreesRoot(root), "integration");
+    const existing = checkedOutAt(root, branch);
+    if (existing && resolve(existing).toLowerCase() !== resolve(path).toLowerCase()) {
+      // Earlier versions kept it next to the repository. Move it inside when it is clean; an
+      // in-progress merge resolution stays where it is so nothing half-done is disturbed.
+      const clean = !git(existing, "status", "--porcelain", "--untracked-files=normal").trim() && !mergeInProgress(existing);
+      if (!clean || existsSync(path)) return this.reopen(root, { path: existing, branch });
+      mkdirSync(dirname(path), { recursive: true });
+      git(root, "worktree", "move", existing, path);
+      return this.reopen(root, { path, branch });
+    }
+    if (existing) return this.reopen(root, { path: existing, branch });
     if (existsSync(path)) return this.reopen(root, { path, branch });
     if (git(root, "status", "--porcelain", "--untracked-files=normal").trim()) {
       throw new Error("Entegrasyon alanını başlatmak için ana depo temiz olmalı");
@@ -71,6 +124,45 @@ export class WorktreeManager {
     return { path, branch };
   }
 
+  /** Number of approved commits on the integration branch that the checked-out branch does not have yet. */
+  pendingIntegration(repoPath: string): number {
+    const root = exactRoot(repoPath);
+    const branch = integrationBranch(root);
+    if (!git(root, "branch", "--list", branch).trim()) return 0;
+    return Number(git(root, "rev-list", "--count", `HEAD..${branch}`).trim()) || 0;
+  }
+
+  /**
+   * Brings approved work into the user's checked-out branch, i.e. into the selected folder itself.
+   * Requires a clean working tree on a named branch; prefers a fast-forward, otherwise creates a
+   * merge commit, and aborts the merge on conflicts so the repository is never left half-merged.
+   */
+  applyIntegration(repoPath: string): { branch: string; commits: number; fastForward: boolean } {
+    const root = exactRoot(repoPath);
+    const integration = integrationBranch(root);
+    const commits = this.pendingIntegration(root);
+    if (!commits) throw new Error("Projenize uygulanacak yeni onaylı değişiklik yok.");
+    const branch = git(root, "branch", "--show-current").trim();
+    if (!branch) throw new Error("Depo bir dalda değil (ayrık HEAD). Önce kendi dalınıza geçin.");
+    if (git(root, "status", "--porcelain", "--untracked-files=normal").trim()) {
+      throw new Error("Projede commit edilmemiş değişiklik var. Önce commit edin veya geri alın; değişikliklerinizin üzerine yazılmaz.");
+    }
+    try {
+      git(root, "merge", "--ff-only", integration);
+      return { branch, commits, fastForward: true };
+    } catch { /* Branch moved on since the tasks started: fall back to a real merge. */ }
+    try {
+      git(root, "merge", "--no-edit", "-m", `AgentMesh: onaylı görevleri birleştir (${integration})`, integration);
+      return { branch, commits, fastForward: false };
+    } catch (error) {
+      try { git(root, "merge", "--abort"); } catch { /* Nothing to abort when the merge never started. */ }
+      const conflicted = String((error as { stdout?: string }).stdout ?? "").includes("CONFLICT");
+      throw new Error(conflicted
+        ? `Kendi dalınızla çakışma çıktı; birleştirme geri alındı, projeniz değişmedi. Elle birleştirmek için: git merge ${integration}`
+        : `Birleştirme yapılamadı; projeniz değişmedi. Ayrıntı için: git merge ${integration}`);
+    }
+  }
+
   prepare(repoPath: string, taskId: string): WorktreeLease {
     if (!taskId.trim()) throw new Error("Boş task ID");
     const root = exactRoot(repoPath);
@@ -79,7 +171,7 @@ export class WorktreeManager {
     const repoId = shortHash(root.toLowerCase());
     const taskHash = shortHash(taskId);
     const branch = `agentmesh/${repoId.slice(0, 8)}-${taskHash}`;
-    const path = join(dirname(root), ".agentmesh-worktrees", repoId, taskHash);
+    const path = join(worktreesRoot(root), taskHash);
     if (existsSync(path)) throw new Error(`Worktree zaten var: ${path}`);
     git(root, "worktree", "add", "-b", branch, path, integration.branch);
     return { path, branch, baseCommit: git(path, "rev-parse", "HEAD").trim() };
@@ -88,9 +180,9 @@ export class WorktreeManager {
   reopen(repoPath: string, lease: WorktreeLease): WorktreeLease {
     const root = exactRoot(repoPath);
     if (!isAbsolute(lease.path) || !existsSync(lease.path)) throw new Error(`Worktree bulunamadı: ${lease.path}`);
-    const expectedRoot = join(dirname(root), ".agentmesh-worktrees", shortHash(root.toLowerCase()));
     const actual = realpathSync(lease.path);
-    if (!actual.toLowerCase().startsWith((realpathSafe(expectedRoot) + sep).toLowerCase())) {
+    const inside = (base: string) => actual.toLowerCase().startsWith((realpathSafe(base) + sep).toLowerCase());
+    if (!inside(worktreesRoot(root)) && !inside(legacyWorktreesRoot(root))) {
       throw new Error(`Beklenmeyen worktree konumu: ${lease.path}`);
     }
     const actualBranch = git(actual, "branch", "--show-current").trim();

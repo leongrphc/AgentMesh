@@ -409,6 +409,16 @@ app.whenReady().then(async () => {
     if (!service.state().recent.some((item) => item.path === path)) throw new Error("Proje son açılanlar listesinde yok");
     return service.openFolder(path);
   });
+  handle("mesh:apply-integration", async () => {
+    const state = service.state();
+    if (!state.integrationPending || !state.integrationBranch) throw new Error("Projenize uygulanacak yeni onaylı değişiklik yok.");
+    const result = await dialog.showMessageBox(window!, { type: "question", title: "Projeme uygula",
+      message: `${state.integrationPending} onaylı commit projenizin açık dalına birleştirilsin mi?`,
+      detail: [`Kaynak: ${state.integrationBranch}`, `Hedef: ${state.snapshot.project.workspaceRoot} içindeki açık dal.`,
+        "Çakışma olursa birleştirme geri alınır; projeniz değişmez."].join("\n"),
+      buttons: ["Vazgeç", "Projeme uygula"], defaultId: 1, cancelId: 0 });
+    return result.response === 1 ? service.applyIntegration() : undefined;
+  });
   handle("mesh:start", async () => {
     if (!service.state().demo) {
       const result = await dialog.showMessageBox(window!, { type: "question", title: "Ajanları başlat",

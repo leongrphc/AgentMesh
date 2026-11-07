@@ -238,8 +238,8 @@ test("desktop close applies configured maintenance and reopening retains message
     service.openConfig(config);
     for (let i = 0; i < 100; i++) service.sendMessage({ to: "*", kind: "progress", body: String(i), idempotencyKey: String(i) });
     await service.close();
-    const key = createHash("sha256").update(process.platform === "win32" ? repo.toLowerCase() : repo).digest("hex").slice(0, 16);
-    const data = join(root, ".agentmesh-data", key);
+    // New config projects keep their journal inside the repository.
+    const data = join(repo, ".agentmesh", "data");
     assert.equal(readdirSync(join(data, "archives")).filter(name => name.endsWith(".sqlite")).length, 1);
     const state = service.openConfig(config);
     assert.equal(state.historyCounts.messages, 100);

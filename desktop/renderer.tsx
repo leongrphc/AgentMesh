@@ -24,8 +24,8 @@ function Onboarding({ state, onCreate, onOpenFolder, disabled }: {
     <h1>İlk görevi ver, ajan ayrı bir dalda çalışsın.</h1>
     <ol className="steps">
       <li><b>Görev yaz</b><span>Ne yapılacağını ve kabul kriterlerini anlat. Birden fazla görev ve bağımlılık ekleyebilirsin.</span></li>
-      <li><b>Ajanları başlat</b><span>Her görev kendi Git worktree'sinde çalışır; ana dalın değişmez.</span></li>
-      <li><b>İncele ve onayla</b><span>Diff'i gör, onayla. Kod <code>{state.integrationBranch ?? "entegrasyon"}</code> dalında birikir.</span></li>
+      <li><b>Ajanları başlat</b><span>Her görev bu klasördeki <code>.agentmesh/</code> altında kendi çalışma kopyasında yürür; dosyaların sen onaylayana kadar değişmez.</span></li>
+      <li><b>İncele, onayla, uygula</b><span>Diff'i gör ve onayla. Onaylı işleri tek tıkla <b>Projeme uygula</b> ile kendi dalına al.</span></li>
     </ol>
     <div className="onboarding-actions">
       <button className="primary" disabled={disabled} onClick={onCreate}>＋ İlk görevi oluştur</button>
@@ -38,6 +38,7 @@ function App() {
   const api = window.agentmesh;
   const [state, setState] = useState<DesktopState>();
   const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
   const [selected, setSelected] = useState("");
   const [tab, setTab] = useState<"events" | "context" | "messages">("events");
   const [pending, setPending] = useState(false);
@@ -105,6 +106,15 @@ function App() {
           <p><b>Sıradaki görevler hazır.</b> Onayladığınız işlere bağlı görevler artık başlayabilir.</p>
           <button className="primary" disabled={pending || !!contextPending} onClick={start}>▶ Devam et</button>
         </div>}
+        {!state.demo && state.integrationPending > 0 && <div className="banner ok" role="status">
+          <p><b>{state.integrationPending} onaylı değişiklik projenize uygulanmayı bekliyor.</b>{" "}
+            Şu an <code>{state.integrationBranch}</code> dalında; klasörünüzdeki dosyalar henüz değişmedi.</p>
+          <button className="primary" disabled={state.busy || pending} onClick={() => void act(async () => {
+            const result = await api.applyIntegration();
+            if (result) setNotice(`${result.commits} onaylı commit "${result.branch}" dalına ${result.fastForward ? "eklendi" : "birleştirildi"}. Dosyalar klasörünüzde.`);
+          })}>Projeme uygula</button>
+        </div>}
+        {notice && <div className="banner ok" role="status"><p>{notice}</p><button className="icon-button" aria-label="Bildirimi kapat" onClick={() => setNotice("")}>×</button></div>}
         <PermissionPanel state={state} api={api} pending={pending} act={(action) => void act(action)} />
 
         {!task ? <Onboarding state={state} disabled={state.busy || pending} onCreate={() => setCreating(true)}

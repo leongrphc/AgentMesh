@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { configJournalPath } from "../core/journal-location.js";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, resolve, join, matchesGlob } from "node:path";
@@ -62,6 +62,7 @@ export class DesktopService {
   private source: DesktopState["source"] = "demo";
   private uncommitted = false;
   private integration?: string;
+  private integrationPending = 0;
   private codexProfiles = listCodexProfiles();
   private running?: Promise<void>;
   private abort?: AbortController;
@@ -84,7 +85,7 @@ export class DesktopService {
     if (!this.engine || !this.config) throw new Error("Önce proje açın");
     const snapshot = this.engine.snapshot(this.config.projectId, false);
     return structuredClone({ snapshot, historyCounts: this.engine.historyCounts(this.config.projectId), busy: !!this.running,
-      demo: this.demo, source: this.source, recent: readRecent(this.dataRoot), uncommittedChanges: this.uncommitted, integrationBranch: this.integration, codexProfiles: this.codexProfiles,
+      demo: this.demo, source: this.source, recent: readRecent(this.dataRoot), uncommittedChanges: this.uncommitted, integrationBranch: this.integration, integrationPending: this.integrationPending, codexProfiles: this.codexProfiles,
       defaultAllowedPaths: this.source === "folder" ? DEFAULT_ALLOWED_PATHS : ["src/**"], agents: this.config.agents.map((agent) => ({ ...agent,
         liveMessages: this.demo || (agent.provider === "codex" && agent.transport === "app-server"),
         interactivePermissions: this.demo || (agent.provider === "codex" && agent.transport === "app-server") || (agent.provider === "opencode" && agent.transport === "server") })),
@@ -158,8 +159,7 @@ export class DesktopService {
     const config = JSON.parse(readFileSync(file, "utf8")) as Config;
     validate(config);
     config.repoPath = realpathSync(resolve(dirname(file), config.repoPath));
-    const key = createHash("sha256").update(process.platform === "win32" ? config.repoPath.toLowerCase() : config.repoPath).digest("hex").slice(0, 16);
-    return this.open(config, join(dirname(config.repoPath), ".agentmesh-data", key, "events.sqlite"), false, "config");
+    return this.open(config, configJournalPath(config.repoPath), false, "config");
   }
 
   private open(config: Config, path: string, demo: boolean, source: DesktopState["source"]): DesktopState {
@@ -204,6 +204,7 @@ export class DesktopService {
       try { this.integration = demo ? undefined : integrationBranch(config.repoPath); }
       catch { this.integration = undefined; }
       this.codexProfiles = listCodexProfiles();
+      this.refreshIntegration();
       this.events = journal.recent(config.projectId).map((event) => ({ at: event.at, text: describeEvent(event.payload),
           taskId: eventTaskId(event.payload) }));
       engine.subscribe((notice) => {
@@ -233,7 +234,7 @@ export class DesktopService {
     this.running = Promise.resolve().then(() => this.engine!.run(this.config!.projectId,
       this.state().maxParallel, this.abort!.signal, false)).then(() => {}, (error: unknown) => {
         this.events.push({ at: new Date().toISOString(), text: safeLog(String(error)) });
-      }).finally(() => { this.running = undefined; this.abort = undefined; this.maintainJournal(); this.publish(); });
+      }).finally(() => { this.running = undefined; this.abort = undefined; this.maintainJournal(); this.refreshIntegration(); this.publish(); });
     this.publish();
   }
 
@@ -403,6 +404,29 @@ export class DesktopService {
     this.requireTask(taskId);
     if (typeof digest !== "string" || !/^[a-f0-9]{64}$/.test(digest)) throw new Error("Geçersiz inceleme digest'i");
     this.engine!.approveTask(taskId, digest);
+    this.refreshIntegration();
+    this.publish();
+  }
+
+  /** Approved commits waiting on the integration branch; kept as a cached count for the UI. */
+  private refreshIntegration() {
+    if (this.demo || !this.config) { this.integrationPending = 0; return; }
+    try { this.integrationPending = new WorktreeManager().pendingIntegration(this.config.repoPath); }
+    catch { this.integrationPending = 0; }
+  }
+
+  /** Merges approved work into the user's checked-out branch, so it appears in the selected folder. */
+  applyIntegration(): { branch: string; commits: number; fastForward: boolean } {
+    if (!this.config || !this.engine) throw new Error("Önce proje açın");
+    if (this.demo) throw new Error("Demo projesinde uygulanacak gerçek değişiklik yok");
+    if (this.running) throw new Error("Önce çalışan görevlerin bitmesini bekleyin");
+    this.requireClosedTerminals();
+    try { return new WorktreeManager().applyIntegration(this.config.repoPath); }
+    finally {
+      this.uncommitted = hasUncommittedChanges(this.config.repoPath);
+      this.refreshIntegration();
+      this.publish();
+    }
   }
 
   private workspace(taskId: string) {

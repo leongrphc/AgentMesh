@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { configJournalPath } from "./core/journal-location.js";
 import { existsSync, readFileSync, realpathSync, statSync } from "node:fs";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 import { SqliteJournal } from "./core/sqlite-journal.js";
@@ -65,8 +65,7 @@ async function main(): Promise<void> {
   if (!existsSync(join(repoPath, ".git"))) {
     throw new Error(`Gerçek çalıştırma için ilk commit'i yapılmış Git deposu gerekli: ${repoPath}`);
   }
-  const repoKey = createHash("sha256").update(repoPath.toLowerCase()).digest("hex").slice(0, 16);
-  const dbPath = join(dirname(repoPath), ".agentmesh-data", repoKey, "events.sqlite");
+  const dbPath = configJournalPath(repoPath);
   if ((archiving || checkpointing || compacting) && !existsSync(dbPath)) throw new Error("Journal bulunamadı; önce projeyi açın");
   const journal = new SqliteJournal(dbPath);
   try {

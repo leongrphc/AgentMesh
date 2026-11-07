@@ -21,6 +21,7 @@ const api: DesktopAPI = {
   openDemo: () => ipcRenderer.invoke("mesh:demo"),
   openFolder: () => ipcRenderer.invoke("mesh:open-folder"),
   openRecent: (path) => ipcRenderer.invoke("mesh:open-recent", path),
+  applyIntegration: () => ipcRenderer.invoke("mesh:apply-integration"),
   start: () => ipcRenderer.invoke("mesh:start"),
   cancel: (taskId) => ipcRenderer.invoke("mesh:cancel", taskId),
   retry: (taskId) => ipcRenderer.invoke("mesh:retry", taskId),

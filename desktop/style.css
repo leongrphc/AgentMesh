@@ -202,6 +202,8 @@ progress::-webkit-progress-value { background: var(--ok); }
 }
 .error { background: var(--bad-soft); border-color: color-mix(in srgb, var(--bad) 45%, transparent); }
 .banner.info { background: var(--accent-soft); border-color: color-mix(in srgb, var(--accent) 35%, transparent); }
+.banner.ok { background: var(--ok-soft); border-color: color-mix(in srgb, var(--ok) 40%, transparent); }
+.banner code { color: var(--accent); }
 .banner.warn { background: var(--warn-soft); border-color: color-mix(in srgb, var(--warn) 40%, transparent); }
 .banner button { white-space: nowrap; }
 

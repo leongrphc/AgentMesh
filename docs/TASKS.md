@@ -35,7 +35,8 @@
 - [ ] **E2E-2:** Gerçek, küçük bir projede masaüstü uygulamasıyla 5–10 görev yap. Her sürtünmeyi buraya not et; sonraki işler bu listeden seçilir.
 - [x] **E2E-3 (7 Kasım):** Codex de geçti. Kök neden: kullanıcı Codex'i `codex1` kabuk fonksiyonuyla açıyor (`CODEX_HOME=~/.codex-profiles/codex1`), AgentMesh ise varsayılan `~/.codex` ile çalışıyordu (free plan + `chatgpt-web` köprüsü, "at capacity"). Codex ajanlarına `codexHome` alanı eklendi; profiller otomatik bulunuyor, arayüzde seçiliyor, yeni projede ilk profil varsayılan. `npm run e2e:codex -- codex1`: 34 sn.
 - [x] **E2E-4 (7 Kasım):** Karışık sağlayıcılı ekip: `npm run e2e:team -- claude codex:codex1`. Claude ve Codex paralel çalıştı, Claude bağımlı görevde ikisinin kodunu kullandı; 65 sn.
-- [ ] **UX-1:** Entegrasyon dalını kullanıcının dalına uygulama içinden alma (açık onaylı `git merge` düğmesi).
+- [x] **UX-1 (7 Kasım):** **Projeme uygula** düğmesi onaylı işleri açık dala alır: önce fast-forward, gerekirse merge commit. Kirli depoda ve ayrık HEAD'de reddeder, çakışmada `merge --abort` ile geri alır.
+- [x] **LOC-1 (7 Kasım):** Worktree'ler ve config journal'ı artık seçilen klasörün içinde (`.agentmesh/`, `.git/info/exclude` ile gizli). Önceden üst klasöre (`../.agentmesh-worktrees`, `../.agentmesh-data`) yazılıyordu. Eski görevler ve eski journal'lar çalışmaya devam ediyor; temiz eski entegrasyon worktree'si `git worktree move` ile içeri taşınıyor.
 - [ ] **UX-2:** Commit edilmemiş değişiklik uyarısında "şimdi commit et" yardımı.
 - [ ] **UX-3:** Başarısız görevde sağlayıcı hatasını (giriş yok, kota, ağ) ayırt edip ne yapılacağını söylemek. Kısmen yapıldı: bağlantı reddi ve ölü Codex köprüsü yakalanıyor.
 - [ ] **UX-4:** Her proje açılışında journal'a yeni bir "Ajan ayarları kaydedildi" olayı yazılıyor; değişiklik yoksa yazılmasın.

@@ -59,9 +59,9 @@ export function ReviewDialog({ review, api, integrationBranch, onReview, onDirty
         <pre className="diff">{file.preview}</pre>
       </section>)}
       <p className="review-note">
-        Bu ekran test çalıştırmaz. Onaylanan kod ana dalınıza değil,{" "}
-        {integrationBranch ? <code>{integrationBranch}</code> : "ayrı entegrasyon"} dalına birleştirilir.
-        {integrationBranch && <> Hazır olduğunda kendi dalınıza alın: <code>git merge {integrationBranch}</code></>}
+        Bu ekran test çalıştırmaz. Onaylanan kod önce{" "}
+        {integrationBranch ? <code>{integrationBranch}</code> : "ayrı entegrasyon"} dalında toplanır;
+        hazır olduğunuzda ana ekrandaki <b>Projeme uygula</b> ile klasörünüzdeki açık dala alınır.
       </p>
     </div>
 

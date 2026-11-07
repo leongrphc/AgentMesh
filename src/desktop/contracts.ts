@@ -34,6 +34,8 @@ export interface DesktopState {
   uncommittedChanges: boolean;
   /** Codex accounts found under ~/.codex-profiles, selectable per Codex agent. */
   codexProfiles: Array<{ name: string; path: string }>;
+  /** Approved commits on the integration branch that the user's checked-out branch does not have yet. */
+  integrationPending: number;
   /** Branch that receives approved changes (absent for the demo). */
   integrationBranch?: string;
   /** File scope suggested for new tasks. */
@@ -67,6 +69,8 @@ export interface DesktopAPI {
   openDemo(): Promise<DesktopState>;
   openFolder(): Promise<DesktopState>;
   openRecent(path: string): Promise<DesktopState>;
+  /** Asks for confirmation, then merges approved work into the checked-out branch. Resolves to undefined when declined. */
+  applyIntegration(): Promise<{ branch: string; commits: number; fastForward: boolean } | undefined>;
   start(): Promise<void>;
   cancel(taskId?: string): Promise<void>;
   retry(taskId: string): Promise<void>;

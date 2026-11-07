@@ -6,7 +6,7 @@
  * Uses your provider account and quota. Run: npm run e2e:claude  or  npm run e2e:codex
  */
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DesktopService } from "../src/desktop/service.js";
@@ -71,7 +71,16 @@ try {
   const integration = branches.find((name) => name.includes("integration"));
   const content = integration ? git("show", `${integration}:math.ts`) : "";
   if (!/multiply/.test(content)) throw new Error(`multiply entegrasyon dalında yok (dallar: ${branches.join(", ")})`);
-  console.log(`\nBAŞARILI: değişiklik ${integration} dalına birleştirildi.`);
+  // Everything AgentMesh writes for the project must stay inside the selected folder.
+  const outside = readdirSync(root).filter((name) => name !== "repo" && name !== "data");
+  if (outside.length) throw new Error(`Seçilen klasörün dışına yazıldı: ${outside.join(", ")}`);
+  if (!task.worktree?.path.toLowerCase().startsWith(join(realpathSync(repo), ".agentmesh").toLowerCase())) {
+    throw new Error(`Görev çalışma alanı klasör dışında: ${task.worktree?.path}`);
+  }
+  const applied = service.applyIntegration();
+  if (!/multiply/.test(readFileSync(join(repo, "math.ts"), "utf8"))) throw new Error("Projeme uygula sonrası math.ts değişmedi");
+  if (git("status", "--porcelain")) throw new Error("Uygulama sonrası depo temiz değil");
+  console.log(`\nBAŞARILI: değişiklik ${integration} dalından "${applied.branch}" dalına ${applied.fastForward ? "eklendi" : "birleştirildi"}; math.ts klasörde güncel.`);
 } catch (error) {
   failed = true;
   console.error(`\nBAŞARISIZ: ${error instanceof Error ? error.message : String(error)}`);

@@ -1,6 +1,6 @@
 # AgentMesh
 
-Birden fazla kodlama ajanını (Codex, OpenCode, Claude, Antigravity) **aynı Git projesinde, ayrı dallarda ve paralel** çalıştıran yerel masaüstü IDE'si. Her görev kendi Git worktree'sinde yürür. Ajanın değişikliği, siz diff'i inceleyip onaylamadan hiçbir yere birleşmez.
+Birden fazla kodlama ajanını (Codex, OpenCode, Claude, Antigravity) **aynı Git projesinde, ayrı dallarda ve paralel** çalıştıran yerel masaüstü IDE'si. Her görev, projenin içindeki `.agentmesh/` klasöründe kendi Git worktree'sinde yürür. Ajanın değişikliği, siz diff'i inceleyip onaylamadan hiçbir yere birleşmez.
 
 > **Durum: çalışan prototip.** 7 Kasım'da gerçek modellerle doğrulandı: Claude Code ve Codex ayrı ayrı uçtan uca çalıştı. Karışık ekip senaryosunda Claude ile Codex aynı anda paralel çalıştı, ardından Claude ikisinin onaylanmış kodunu görerek devam etti (65 sn). Komutlar: `npm run e2e:claude`, `npm run e2e:codex -- codex1`, `npm run e2e:team -- claude codex:codex1`.
 
@@ -18,12 +18,11 @@ npm run desktop
 
 1. Sol üstteki proje menüsünden **Klasör aç…** ile herhangi bir Git deposunu seç. Depoda en az bir commit olmalı ve commit edilmemiş değişiklik bulunmamalı.
 2. **＋ Yeni görev** ile ajana ne yapacağını yaz. Başlık ve talimat yeterli; ajan olarak Claude ya da Codex seç.
-3. **▶ Ajanları başlat**. Ajan görevi `agentmesh/…` adlı ayrı bir worktree'de yapar. İlerleme sağdaki **Etkinlik** panelinde akar.
-4. Görev *İnceleme bekliyor* olunca **Değişiklikleri incele** → diff'e bak → **Onayla ve birleştir**.
-5. Onaylanan değişiklikler `agentmesh/integration-…` dalında birikir. Hazır olduğunda kendi dalına al:
-   ```powershell
-   git merge agentmesh/integration-xxxxxxxx
-   ```
+3. **▶ Ajanları başlat**. Ajan görevi proje klasöründeki `.agentmesh/worktrees/` altında, kendi dalında yapar. Senin dosyaların bu sırada değişmez. İlerleme sağdaki **Etkinlik** panelinde akar.
+4. Görev *İnceleme bekliyor* olunca **Değişiklikleri incele** → diff'e bak → **Onayla ve birleştir**. Onaylanan işler `agentmesh/integration-…` dalında birikir.
+5. **Projeme uygula** ile onaylı işleri klasörünün açık dalına al. Çakışma olursa işlem geri alınır, projen değişmez.
+
+AgentMesh projeye ait her şeyi seçilen klasörün içindeki `.agentmesh/` altına yazar ve bu klasörü `.git/info/exclude` ile Git'ten gizler. `.gitignore` dosyana dokunmaz. Önceki sürümlerin projenin yanına açtığı `.agentmesh-worktrees` klasöründeki eski görevler çalışmaya devam eder; temiz entegrasyon alanı ilk kullanımda klasörün içine taşınır.
 
 Uygulama son açtığın projeyle başlar. İlk açılışta model çağırmayan bir **demo** gösterir.
 
@@ -62,7 +61,6 @@ Ek ajanlar (OpenCode, Claude, Antigravity) üst bardaki **Ajanlar** penceresinde
 ## Bilinen sınırlar
 
 - Dosya kapsamı (`allowedPaths`) **çalıştırma sonrasında** denetlenir. Ajan süreci işletim sistemi sandbox'ında değildir (CORE-010).
-- Onay ana dalını değiştirmez. Entegrasyon dalını sizin birleştirmeniz gerekir.
 - Claude bağlantısında izinler arayüzden sorulmaz. Görev worktree'sindeki dosya düzenlemeleri otomatik kabul edilir. Komutlarda Claude Code'un kendi varsayılan kuralları geçerlidir: salt okunur komutlar (ör. `git status`) çalışabilir, onay isteyenler çalışmaz. Arayüzden tek tek izin verme şu an Codex (`app-server`) ve OpenCode (`server`) bağlantılarında var.
 - Kurulum sihirbazı, imzalı sürüm ve otomatik güncelleme yok.
 
