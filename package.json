@@ -8,6 +8,7 @@
     "demo": "tsx src/demo.ts",
     "live": "tsx src/cli.ts",
     "test": "tsx --test tests/*.test.ts",
+    "e2e:codex": "tsx scripts/e2e-codex.ts",
     "typecheck": "tsc --noEmit",
     "desktop:build": "node scripts/build-desktop.mjs",
     "desktop": "npm run desktop:build && node scripts/run-desktop.mjs",
