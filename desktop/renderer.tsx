@@ -19,17 +19,18 @@ declare global { interface Window { agentmesh: DesktopAPI } }
 function Onboarding({ state, onCreate, onOpenFolder, disabled }: {
   state: DesktopState; onCreate: () => void; onOpenFolder: () => void; disabled: boolean;
 }) {
+  const folder = state.demo ? "projenizin" : state.snapshot.project.workspaceRoot.split(/[\\/]/).pop();
   return <section className="onboarding">
-    <div className="eyebrow">Başlarken</div>
-    <h1>İlk görevi ver, ajan ayrı bir dalda çalışsın.</h1>
-    <ol className="steps">
-      <li><b>Görev yaz</b><span>Ne yapılacağını ve kabul kriterlerini anlat. Birden fazla görev ve bağımlılık ekleyebilirsin.</span></li>
-      <li><b>Ajanları başlat</b><span>Her görev bu klasördeki <code>.agentmesh/</code> altında kendi çalışma kopyasında yürür; dosyaların sen onaylayana kadar değişmez.</span></li>
-      <li><b>İncele, onayla, uygula</b><span>Diff'i gör ve onayla. Onaylı işleri tek tıkla <b>Projeme uygula</b> ile kendi dalına al.</span></li>
+    <h1>Ajanlara iş verin, siz yönetin.</h1>
+    <p className="lede">Her görev {folder} klasöründeki <code>.agentmesh/</code> altında, kendi dalında çalışır. Siz onaylamadan dosyalarınız değişmez.</p>
+    <ol className="route">
+      <li><b>Görevi yazın</b><span>Ne yapılacağını ve işin ne zaman bitmiş sayılacağını anlatın. Birbirine bağlı birden fazla görev ekleyebilirsiniz.</span></li>
+      <li><b>Ajanları başlatın</b><span>Bağımsız görevler farklı ajanlarda aynı anda çalışır; bağlı olanlar sırasını bekler.</span></li>
+      <li><b>İnceleyin ve uygulayın</b><span>Değişiklikleri satır satır görün, onaylayın, sonra <b>Projeme uygula</b> ile kendi dalınıza alın.</span></li>
     </ol>
     <div className="onboarding-actions">
-      <button className="primary" disabled={disabled} onClick={onCreate}>＋ İlk görevi oluştur</button>
-      {state.demo && <button disabled={disabled} onClick={onOpenFolder}>Kendi projeni aç…</button>}
+      <button className="primary" disabled={disabled} onClick={onCreate}>İlk görevi yaz</button>
+      {state.demo && <button disabled={disabled} onClick={onOpenFolder}>Kendi projenizi açın…</button>}
     </div>
   </section>;
 }

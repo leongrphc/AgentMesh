@@ -3,6 +3,15 @@ import type { DesktopAPI, DesktopState } from "../src/desktop/contracts.js";
 
 const SOURCE_LABEL: Record<DesktopState["source"], string> = { demo: "Demo", folder: "Git projesi", config: "Config projesi" };
 
+/** Two lines meeting at one stop: parallel branches merging, which is what the app does. */
+function Mark() {
+  return <svg className="brand-mark" viewBox="0 0 24 24" aria-hidden>
+    <path d="M4 4 C4 12, 12 10, 12 20" />
+    <path d="M20 4 C20 12, 12 10, 12 20" />
+    <circle cx="12" cy="20" r="2.6" />
+  </svg>;
+}
+
 /** Project switcher: open a folder, reopen a recent one, load a config file or return to the demo. */
 function ProjectMenu({ state, api, disabled, guard, act }: {
   state: DesktopState;
@@ -21,30 +30,29 @@ function ProjectMenu({ state, api, disabled, guard, act }: {
     if (menu.current) menu.current.open = false;
     if (guard()) act(action);
   };
-  const { project } = state.snapshot;
-  const current = project.workspaceRoot.toLowerCase();
+  const root = state.snapshot.project.workspaceRoot;
+  const name = state.demo ? "Demo projesi" : root.split(/[\\/]/).pop();
 
   return <details className="project-menu" ref={menu}>
     <summary aria-label="Proje değiştir">
-      <span className="project-avatar" aria-hidden>{(state.demo ? "D" : project.workspaceRoot.split(/[\\/]/).pop() ?? "P").slice(0, 1).toUpperCase()}</span>
       <span className="project-label">
-        <strong>{state.demo ? "Demo projesi" : project.workspaceRoot.split(/[\\/]/).pop()}</strong>
-        <small title={project.workspaceRoot}>{state.demo ? "Model çağırmaz" : project.workspaceRoot}</small>
+        <strong>{name}</strong>
+        <small className={state.demo ? "" : "path"} title={root}>{state.demo ? "Örnek akış · model çağırmaz" : root}</small>
       </span>
       <span className="chevron" aria-hidden>▾</span>
     </summary>
     <div className="menu-panel" role="menu">
       <button role="menuitem" className="menu-primary" disabled={disabled} onClick={() => run(() => api.openFolder())}>
-        <b>Klasör aç…</b><small>Herhangi bir Git deposunu proje olarak aç</small>
+        <b>Klasör aç…</b><small>Bir Git deposunu proje olarak aç</small>
       </button>
       {!!state.recent.length && <div className="menu-label">Son projeler</div>}
-      {state.recent.map((item) => <button role="menuitem" key={item.path} disabled={disabled || item.path.toLowerCase() === current}
+      {state.recent.map((item) => <button role="menuitem" key={item.path} disabled={disabled || item.path.toLowerCase() === root.toLowerCase()}
         onClick={() => run(() => api.openRecent(item.path))}>
         <b>{item.name}</b><small>{item.path}</small>
       </button>)}
       <div className="menu-label">Diğer</div>
       <button role="menuitem" disabled={disabled} onClick={() => run(() => api.openConfig())}>
-        <b>Config dosyası aç…</b><small>agentmesh.config.json ile hazır görevler</small>
+        <b>Config dosyası aç…</b><small>Görevleri hazır bir agentmesh.config.json dosyasından yükle</small>
       </button>
       <button role="menuitem" disabled={disabled || state.demo} onClick={() => run(() => api.openDemo())}>
         <b>Demo projesi</b><small>Gerçek model çağırmayan örnek akış</small>
@@ -66,16 +74,17 @@ export function TopBar({ state, api, pending, ready, blocked, guard, act, onAgen
 }) {
   const running = state.snapshot.tasks.filter((task) => task.status === "running").length;
   return <header className="topbar">
-    <div className="brand" aria-label="AgentMesh"><span className="brand-mark" aria-hidden>◆</span>AgentMesh</div>
+    <div className="brand"><Mark /><span>AgentMesh</span></div>
+    <span className="topbar-divider" aria-hidden />
     <ProjectMenu state={state} api={api} disabled={state.busy || pending} guard={guard} act={act} />
     <span className={`mode-tag ${state.source}`}>{SOURCE_LABEL[state.source]}</span>
-    <div className="topbar-status" role="status">
-      <span className={`status-light ${state.busy ? "on" : ""}`} />
-      {state.busy ? `${running} ajan çalışıyor` : "Hazır"}
+    <div className={`topbar-status ${state.busy ? "live" : ""}`} role="status">
+      <span className="status-light" />
+      {state.busy ? `${running} ajan çalışıyor` : "Boşta"}
     </div>
     <div className="run-actions">
-      <button data-testid="agent-center" onClick={onAgents}>Ajanlar <span className="count">{state.agents.length}</span></button>
-      <button disabled={!state.busy || pending} onClick={() => act(() => api.cancel())}>Durdur</button>
+      <button className="ghost" data-testid="agent-center" onClick={onAgents}>Ajanlar <span className="count">{state.agents.length}</span></button>
+      {state.busy && <button disabled={pending} onClick={() => act(() => api.cancel())}>Durdur</button>}
       <button className="primary" data-testid="start" disabled={state.busy || !ready || pending || blocked} onClick={onStart}>
         {state.busy ? "Çalışıyor…" : "▶ Ajanları başlat"}
       </button>
