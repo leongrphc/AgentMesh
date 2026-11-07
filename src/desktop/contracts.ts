@@ -7,6 +7,7 @@ import type { ProviderHealth } from "../adapters/provider-health.js";
 import type { TerminalInfo, TerminalOutput } from "./terminals.js";
 import type { ProviderMessageInput, ProviderMessageResult } from "../adapters/provider-message.js";
 import type { AgentConfig } from "../core/config.js";
+import type { RecentProject } from "./folder-project.js";
 
 export type TaskDraft = Omit<AgentTask, "projectId">;
 
@@ -26,6 +27,15 @@ export interface DesktopState {
   snapshot: ProjectSnapshot;
   busy: boolean;
   demo: boolean;
+  /** How the current project was opened. */
+  source: "demo" | "folder" | "config";
+  recent: RecentProject[];
+  /** Uncommitted changes in the repository are invisible to agents, which start from HEAD. */
+  uncommittedChanges: boolean;
+  /** Branch that receives approved changes (absent for the demo). */
+  integrationBranch?: string;
+  /** File scope suggested for new tasks. */
+  defaultAllowedPaths: string[];
   agents: Array<AgentConfig & { interactivePermissions?: boolean; liveMessages?: boolean }>;
   permissions: PermissionRequest[];
   health: Record<string, ProviderHealth>;
@@ -53,6 +63,8 @@ export interface DesktopAPI {
   state(): Promise<DesktopState>;
   openConfig(): Promise<DesktopState>;
   openDemo(): Promise<DesktopState>;
+  openFolder(): Promise<DesktopState>;
+  openRecent(path: string): Promise<DesktopState>;
   start(): Promise<void>;
   cancel(taskId?: string): Promise<void>;
   retry(taskId: string): Promise<void>;

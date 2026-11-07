@@ -5,7 +5,7 @@ import { dirname, resolve, join, matchesGlob } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { SqliteJournal } from "../core/sqlite-journal.js";
 import { Orchestrator } from "../core/orchestrator.js";
-import { WorktreeManager } from "../core/worktrees.js";
+import { WorktreeManager, integrationBranch } from "../core/worktrees.js";
 import { validate, reconcileTasks, type Config, type AgentConfig } from "../core/config.js";
 import { cleanAgent, resolveAgentSettings, validateAgentEdit } from "../core/agent-settings.js";
 import { MockAgent } from "../adapters/mock.js";
@@ -19,6 +19,8 @@ import { Terminals } from "./terminals.js";
 import { sendProviderMessage, validateProviderMessage, type ProviderMessageInput, type ProviderMessageResult } from "../adapters/provider-message.js";
 import type { MessageDraft } from "../core/contracts.js";
 import { maintainJournal } from "../core/journal-maintenance.js";
+import { describeEvent, describeOutput, eventTaskId } from "./event-text.js";
+import { DEFAULT_ALLOWED_PATHS, folderConfig, hasUncommittedChanges, readRecent, rememberRecent, repositoryKey, resolveRepository } from "./folder-project.js";
 
 export class DesktopService {
   readonly terminals = new Terminals();
@@ -56,6 +58,9 @@ export class DesktopService {
   private config?: Config;
   private sourceAgents: AgentConfig[] = [];
   private demo = true;
+  private source: DesktopState["source"] = "demo";
+  private uncommitted = false;
+  private integration?: string;
   private running?: Promise<void>;
   private abort?: AbortController;
   private events: DesktopState["events"] = [];
@@ -77,7 +82,8 @@ export class DesktopService {
     if (!this.engine || !this.config) throw new Error("Önce proje açın");
     const snapshot = this.engine.snapshot(this.config.projectId, false);
     return structuredClone({ snapshot, historyCounts: this.engine.historyCounts(this.config.projectId), busy: !!this.running,
-      demo: this.demo, agents: this.config.agents.map((agent) => ({ ...agent,
+      demo: this.demo, source: this.source, recent: readRecent(this.dataRoot), uncommittedChanges: this.uncommitted, integrationBranch: this.integration,
+      defaultAllowedPaths: this.source === "folder" ? DEFAULT_ALLOWED_PATHS : ["src/**"], agents: this.config.agents.map((agent) => ({ ...agent,
         liveMessages: this.demo || (agent.provider === "codex" && agent.transport === "app-server"),
         interactivePermissions: this.demo || (agent.provider === "codex" && agent.transport === "app-server") || (agent.provider === "opencode" && agent.transport === "server") })),
       permissions: this.engine.pendingPermissions(this.config.projectId), events: this.events,
@@ -127,7 +133,23 @@ export class DesktopService {
         dependsOn: dependsOn as string[], title: title as string, instruction: title as string,
         projectId, allowedPaths: ["src/**"] })),
     };
-    return this.open(config, join(this.dataRoot, "demo.sqlite"), true);
+    return this.open(config, join(this.dataRoot, "demo.sqlite"), true, "demo");
+  }
+
+  /** Opens any Git repository as a project without a hand-written config file. */
+  openFolder(folder: string): DesktopState {
+    const root = resolveRepository(folder);
+    this.open(folderConfig(root), join(this.dataRoot, "repos", repositoryKey(root), "events.sqlite"), false, "folder");
+    rememberRecent(this.dataRoot, root);
+    return this.state();
+  }
+
+  /** Reopens the most recent folder project; returns false when there is none or it can no longer be opened. */
+  openLastProject(): boolean {
+    const [last] = readRecent(this.dataRoot);
+    if (!last) return false;
+    try { this.openFolder(last.path); return true; }
+    catch { return false; }
   }
 
   openConfig(file: string): DesktopState {
@@ -135,10 +157,10 @@ export class DesktopService {
     validate(config);
     config.repoPath = realpathSync(resolve(dirname(file), config.repoPath));
     const key = createHash("sha256").update(process.platform === "win32" ? config.repoPath.toLowerCase() : config.repoPath).digest("hex").slice(0, 16);
-    return this.open(config, join(dirname(config.repoPath), ".agentmesh-data", key, "events.sqlite"), false);
+    return this.open(config, join(dirname(config.repoPath), ".agentmesh-data", key, "events.sqlite"), false, "config");
   }
 
-  private open(config: Config, path: string, demo: boolean): DesktopState {
+  private open(config: Config, path: string, demo: boolean, source: DesktopState["source"]): DesktopState {
     if (this.messageAbort) throw new Error("Önce mesaj testini bitirin veya iptal edin");
     if (this.running) throw new Error("Proje değiştirmeden önce çalışan görevleri durdurun");
     if (this.terminals.count) throw new Error("Proje değiştirmeden önce terminal sekmelerini kapatın");
@@ -170,15 +192,18 @@ export class DesktopService {
       this.config = config;
       this.sourceAgents = sourceAgents;
       this.demo = demo;
-      this.events = journal.recent(config.projectId).map((event) => ({ at: event.at, text: event.payload.type,
-          taskId: "taskId" in event.payload ? event.payload.taskId : event.payload.type === "task.created" ? event.payload.task.id : undefined }));
+      this.source = source;
+      this.uncommitted = !demo && hasUncommittedChanges(config.repoPath);
+      // Informational only: a config may point at a folder that becomes a repository later.
+      try { this.integration = demo ? undefined : integrationBranch(config.repoPath); }
+      catch { this.integration = undefined; }
+      this.events = journal.recent(config.projectId).map((event) => ({ at: event.at, text: describeEvent(event.payload),
+          taskId: eventTaskId(event.payload) }));
       engine.subscribe((notice) => {
-        this.events.push({ at: new Date().toISOString(),
-          taskId: notice.kind === "output" ? notice.taskId : "taskId" in notice.event.payload ? notice.event.payload.taskId : undefined,
-          text: notice.kind === "event" ? notice.event.payload.type
-            : safeLog(notice.output.channel === "stderr" ? notice.output.data
-              : typeof notice.output.data.text === "string" ? notice.output.data.text : JSON.stringify(notice.output.data)),
-        });
+        const text = notice.kind === "event" ? describeEvent(notice.event.payload) : describeOutput(notice.output);
+        if (text === undefined) return;
+        this.events.push({ at: new Date().toISOString(), text: safeLog(text),
+          taskId: notice.kind === "output" ? notice.taskId : eventTaskId(notice.event.payload) });
         this.events = this.events.slice(-200);
         this.publish();
       });
@@ -195,6 +220,7 @@ export class DesktopService {
     if (!this.engine || !this.config) throw new Error("Önce proje açın");
     if (this.state().snapshot.contextConflicts.some((conflict) => conflict.status === "pending")) throw new Error("Önce Ortak context sekmesindeki çakışmaları çözün");
     this.healthAbort?.abort(); this.healthAbort = undefined;
+    if (!this.demo) this.uncommitted = hasUncommittedChanges(this.config.repoPath);
     this.abort = new AbortController();
     // Defer execution so busy is visible before the first synchronous domain event.
     this.running = Promise.resolve().then(() => this.engine!.run(this.config!.projectId,

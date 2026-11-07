@@ -25,6 +25,8 @@ let window: BrowserWindow | undefined;
 let service: DesktopService;
 let quitting = false;
 const smokeAssetRequests = new Set<string>();
+/** Per-run smoke data. scripts/run-desktop.mjs removes it after a successful run; failures keep it for debugging. */
+const smokeDataRoot = resolve(".agentmesh", "desktop-smoke", String(process.pid));
 
 async function createWindow() {
   window = new BrowserWindow({ width: 1440, height: 950, minWidth: 960, minHeight: 640,
@@ -353,8 +355,8 @@ async function createWindow() {
 }
 
 app.whenReady().then(async () => {
-  service = new DesktopService(smoke ? resolve(".agentmesh", "desktop-smoke", String(process.pid)) : join(app.getPath("userData"), "projects"));
-  service.openDemo();
+  service = new DesktopService(smoke ? smokeDataRoot : join(app.getPath("userData"), "projects"));
+  if (smoke || !service.openLastProject()) service.openDemo();
   const rendererRoot = resolve(__dirname, "../renderer");
   protocol.handle("agentmesh", (request) => {
     const url = new URL(request.url);
@@ -394,6 +396,18 @@ app.whenReady().then(async () => {
     const result = await dialog.showOpenDialog(window!, { title: "AgentMesh proje ayarlarını aç",
       properties: ["openFile"], filters: [{ name: "AgentMesh config", extensions: ["json"] }] });
     return result.canceled ? service.state() : service.openConfig(result.filePaths[0]!);
+  });
+  handle("mesh:open-folder", async () => {
+    if (service.state().busy) throw new Error("Proje açmadan önce çalışmayı durdurun");
+    const result = await dialog.showOpenDialog(window!, { title: "Proje klasörünü seç (Git deposu)", properties: ["openDirectory"] });
+    return result.canceled ? service.state() : service.openFolder(result.filePaths[0]!);
+  });
+  handle("mesh:open-recent", (path) => {
+    if (typeof path !== "string") throw new Error("Geçersiz proje yolu");
+    if (service.state().busy) throw new Error("Proje açmadan önce çalışmayı durdurun");
+    // Only paths the service itself remembered can be reopened from the renderer.
+    if (!service.state().recent.some((item) => item.path === path)) throw new Error("Proje son açılanlar listesinde yok");
+    return service.openFolder(path);
   });
   handle("mesh:start", async () => {
     if (!service.state().demo) {

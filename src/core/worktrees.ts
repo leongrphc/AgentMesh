@@ -47,12 +47,17 @@ function shortHash(value: string): string {
   return createHash("sha256").update(value).digest("hex").slice(0, 16);
 }
 
+/** Branch where approved task changes accumulate; the user's own branches are never modified. */
+export function integrationBranch(repoPath: string): string {
+  return `agentmesh/integration-${shortHash(exactRoot(repoPath).toLowerCase()).slice(0, 8)}`;
+}
+
 /** Ayrı branch/worktree üretir. Repoya otomatik merge veya force-delete yapmaz. */
 export class WorktreeManager {
   integration(repoPath: string): WorktreeLease {
     const root = exactRoot(repoPath);
     const repoId = shortHash(root.toLowerCase());
-    const branch = `agentmesh/integration-${repoId.slice(0, 8)}`;
+    const branch = integrationBranch(root);
     const path = join(dirname(root), ".agentmesh-worktrees", repoId, "integration");
     if (existsSync(path)) return this.reopen(root, { path, branch });
     if (git(root, "status", "--porcelain", "--untracked-files=normal").trim()) {

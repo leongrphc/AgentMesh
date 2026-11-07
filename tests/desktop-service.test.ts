@@ -49,7 +49,7 @@ test("desktop service cancels, retries and restores persisted demo without calli
     assert.equal(service.state().snapshot.tasks[1]?.status, "cancelled");
     assert.equal(service.state().snapshot.tasks.find((task) => task.id === "custom")?.title, "Custom task");
     assert.equal(service.state().maxParallel, 3);
-    assert.ok(service.state().events.some((event) => event.text === "project.parallelism.updated"));
+    assert.ok(service.state().events.some((event) => event.text === "Paralel ajan sayısı değişti"));
   } finally { await service.close(); rmSync(root, { recursive: true, force: true }); }
 });
 
