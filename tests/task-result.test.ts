@@ -39,3 +39,14 @@ test("structured test evidence validates statuses and bounds and redacts diagnos
   assert.equal(repaired([{ name: "x", status: "passed", command: "x".repeat(2001) }])?.[0]?.command?.length, 2000);
   assert.ok((repaired([{ name: "x", status: "failed", details: "x".repeat(8193) }])?.[0]?.details?.length ?? 0) <= 8192);
 });
+
+test("the envelope is found after prose, in a fence or at the end of the message", () => {
+  const envelope = JSON.stringify({ agentmeshVersion: 1, summary: "multiply eklendi", facts: [], messages: [] });
+  for (const summary of [
+    `math.ts güncellendi.\n\n\`\`\`json\n${envelope}\n\`\`\``,
+    `Önce açıklama.\n${envelope}`,
+    `Açıklama.\n${envelope}\nBaşka bir not.`,
+  ]) assert.equal(normalizeTaskResult({ summary }).summary, "multiply eklendi", summary);
+  assert.equal(normalizeTaskResult({ summary: "Sadece düz metin {ama süslü parantez var}" }).summary, "Sadece düz metin {ama süslü parantez var}");
+  assert.throws(() => normalizeTaskResult({ summary: `Not:\n\`\`\`json\n{"agentmeshVersion":2,"summary":"x"}\n\`\`\`` }), /Geçersiz AgentMesh sonuç zarfı/);
+});

@@ -15,6 +15,21 @@ export function headlessCommand(provider: HeadlessProvider): string {
   return existsSync(installed) ? installed : provider === "antigravity" ? "agy.exe" : "claude.exe";
 }
 
+/** Read-only commands an agent may run to look around its worktree. Everything else in Bash is refused. */
+const READ_ONLY_COMMANDS = ["git status", "git diff", "git log", "git show", "ls", "dir", "pwd"];
+
+/**
+ * Claude Code permission rules for one task: reading is free, writing is limited to the task's file
+ * patterns (relative to the worktree, gitignore-style like AgentMesh's own check), Bash to read-only
+ * commands. "**" allows every file; the post-run scope check still applies on top.
+ */
+export function claudeTaskRules(allowedPaths: readonly string[]): string[] {
+  const patterns = allowedPaths.map((path) => path.trim().replace(/\\/g, "/")).filter(Boolean);
+  const edits = patterns.includes("**") ? ["Edit", "Write"]
+    : patterns.flatMap((pattern) => [`Edit(${pattern})`, `Write(${pattern})`]);
+  return ["Read", "Glob", "Grep", ...edits, ...READ_ONLY_COMMANDS.map((command) => `Bash(${command}:*)`)];
+}
+
 /** Cost and token totals from a Claude Code result event; cached input counts as input. */
 function claudeUsage(result: Record<string, unknown>): AgentUsage | undefined {
   const usage = record(result.usage);
@@ -45,9 +60,12 @@ export class HeadlessCliAdapter implements AgentAdapter {
       // Claude Code authenticates itself (ANTHROPIC_API_KEY or its own login). User-level settings,
       // hooks and MCP servers are skipped so a personal setup cannot change task behaviour.
       : ["--print", "--verbose", "--setting-sources", "project", "--strict-mcp-config", "--input-format", "stream-json", "--output-format", "stream-json",
-        "--permission-mode", this.options.conversationOnly ? "plan" : "acceptEdits",
+        // Tasks run in dontAsk mode: only the rules in --allowedTools apply and anything else is refused
+        // up front, so file edits are limited to the task's allowedPaths before the agent writes.
+        "--permission-mode", this.options.conversationOnly ? "plan" : "dontAsk",
         // Without any tool a model that wants to look at files prints imitation tool calls instead of answering.
         "--tools", this.options.conversationOnly ? this.options.readOnlyTools ? "Read,Glob,Grep" : "" : "Read,Edit,Write,Glob,Grep,Bash"];
+    if (!agy && !this.options.conversationOnly) args.push("--allowedTools", claudeTaskRules(input.task.allowedPaths).join(","));
     if (agy && this.options.conversationOnly) args.push("--mode", "plan");
     if (this.options.model) args.push("--model", this.options.model);
     if (input.sessionId) args.push(agy ? "--conversation" : "--resume", input.sessionId);

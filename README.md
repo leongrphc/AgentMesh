@@ -64,8 +64,8 @@ Ek ajanlar (OpenCode, Claude, Antigravity) üst bardaki **Ajanlar** penceresinde
 
 ## Bilinen sınırlar
 
-- Dosya kapsamı (`allowedPaths`) **çalıştırma sonrasında** denetlenir. Ajan süreci işletim sistemi sandbox'ında değildir (CORE-010).
-- Claude bağlantısında izinler arayüzden sorulmaz. Görev worktree'sindeki dosya düzenlemeleri otomatik kabul edilir. Komutlarda Claude Code'un kendi varsayılan kuralları geçerlidir: salt okunur komutlar (ör. `git status`) çalışabilir, onay isteyenler çalışmaz. Arayüzden tek tek izin verme şu an Codex (`app-server`) ve OpenCode (`server`) bağlantılarında var.
+- Dosya kapsamı (`allowedPaths`) **Claude** görevlerinde çalışmadan önce uygulanır: kapsam dışına yazma isteği daha baştan reddedilir, kabukta yalnızca okuma komutlarına izin verilir. **Codex** işletim sistemi sandbox'ında yalnızca kendi çalışma alanına yazabilir; alan içindeki kapsam, Codex'in dosya izin istekleri ve iş sonrası denetimle sağlanır. Tüm ajanlar için iş bittikten sonra da ayrıca denetlenir.
+- Claude bağlantısında izinler arayüzden sorulmaz; kurallar önceden verilir (kapsam içi dosya düzenleme, okuma komutları). Test çalıştırmak gibi işler için proje ayarlarındaki **test komutunu** kullanın; AgentMesh onu kendisi çalıştırır. Arayüzden tek tek izin verme Codex (`app-server`) ve OpenCode (`server`) bağlantılarında var.
 - Kurulum sihirbazı, imzalı sürüm ve otomatik güncelleme yok.
 
 ## Belgeler

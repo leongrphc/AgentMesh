@@ -96,3 +96,24 @@ test("Claude terminal failures retain masked diagnostics for successful and fail
     }
   }
 });
+
+test("Claude tasks are limited to their file patterns before they run", async () => {
+  const { claudeTaskRules } = await import("../src/adapters/headless-cli.js");
+  assert.deepEqual(claudeTaskRules(["src/**", "tests\\unit/**"]).filter((rule) => /^(Edit|Write)/.test(rule)),
+    ["Edit(src/**)", "Write(src/**)", "Edit(tests/unit/**)", "Write(tests/unit/**)"]);
+  assert.ok(claudeTaskRules(["**"]).includes("Edit") && claudeTaskRules(["**"]).includes("Write"));
+  assert.ok(claudeTaskRules(["src/**"]).every((rule) => rule !== "Bash"), "no unrestricted shell");
+  const adapter = new HeadlessCliAdapter("a", "claude", { runner: async (spec) => {
+    assert.equal(spec.args[spec.args.indexOf("--permission-mode") + 1], "dontAsk");
+    assert.match(spec.args[spec.args.indexOf("--allowedTools") + 1]!, /Edit\(src\/\*\*\)/);
+    return { events: [init("claude"), result("claude")], stderr: "" };
+  } });
+  await adapter.execute(input());
+  const planner = new HeadlessCliAdapter("a", "claude", { conversationOnly: true, readOnlyTools: true, runner: async (spec) => {
+    assert.equal(spec.args[spec.args.indexOf("--permission-mode") + 1], "plan");
+    assert.ok(!spec.args.includes("--allowedTools"));
+    assert.equal(spec.args[spec.args.indexOf("--tools") + 1], "Read,Glob,Grep");
+    return { events: [init("claude"), result("claude")], stderr: "" };
+  } });
+  await planner.execute(input());
+});
