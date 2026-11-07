@@ -39,7 +39,15 @@ try {
     }
   });
   service.start();
-  while (service.state().busy) await new Promise((resolve) => setTimeout(resolve, 500));
+  const deadline = Date.now() + 5 * 60_000;
+  while (service.state().busy) {
+    if (Date.now() > deadline) {
+      service.cancel();
+      while (service.state().busy) await new Promise((resolve) => setTimeout(resolve, 200));
+      throw new Error("5 dakika içinde bitmedi; görev iptal edildi. Yukarıdaki sağlayıcı hatalarına bakın.");
+    }
+    await new Promise((resolve) => setTimeout(resolve, 500));
+  }
   const task = service.state().snapshot.tasks[0]!;
   console.log(`\nDurum: ${task.status} (${((Date.now() - started) / 1000).toFixed(1)} sn)`);
   if (task.status !== "pending_review") throw new Error(`Beklenen pending_review, gelen ${task.status}: ${task.error ?? ""}`);

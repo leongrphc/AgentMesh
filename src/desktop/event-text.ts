@@ -48,6 +48,15 @@ function clip(text: string, max = 400): string {
   return flat.length > max ? `${flat.slice(0, max - 1)}…` : flat;
 }
 
+/** Hint appended when a provider cannot reach its model endpoint at all. */
+const REFUSED_HINT = " — Model sunucusuna bağlanılamadı. Sağlayıcının kendi ayarındaki adresi (Codex için ~/.codex/config.toml içindeki openai_base_url) ve proxy/köprü uygulamasının çalıştığını kontrol edin.";
+
+/** Provider adapters wrap each JSON line as `{ text: "<json>" }`; recover the structured message. */
+function parseLine(text: string): Record<string, unknown> | undefined {
+  if (!text.startsWith("{")) return undefined;
+  try { return record(JSON.parse(text)); } catch { return undefined; }
+}
+
 /**
  * Turns raw provider output into one readable activity line, or undefined for protocol noise
  * (MCP startup, hooks, streaming deltas, account notices) that only clutters the activity feed.
@@ -56,28 +65,57 @@ export function describeOutput(output: AgentOutput): string | undefined {
   if (output.channel === "stderr") return clip(String(output.data));
   const data = record(output.data);
   if (!data) return clip(JSON.stringify(output.data));
-  if (typeof data.text === "string") return clip(data.text);
-  if (typeof data.method !== "string") return clip(JSON.stringify(data));
-  const params = record(data.params) ?? {};
-  switch (data.method) {
+  if (typeof data.text === "string") {
+    const parsed = parseLine(data.text);
+    return parsed ? describeMessage(parsed) : clip(data.text);
+  }
+  return describeMessage(data);
+}
+
+function describeMessage(data: Record<string, unknown>): string | undefined {
+  if (typeof data.method === "string") return describeRpc(data.method, record(data.params) ?? {});
+  if (typeof data.type === "string") return describeJsonl(data);
+  return undefined;
+}
+
+/** Codex App Server JSON-RPC notifications. */
+function describeRpc(method: string, params: Record<string, unknown>): string | undefined {
+  switch (method) {
     case "turn/started": return "Model turu başladı";
     case "turn/completed": return "Model turu bitti";
     case "warning": return typeof params.message === "string" ? `Uyarı: ${clip(params.message, 240)}` : undefined;
     case "error": {
       const error = record(params.error);
       const message = typeof error?.message === "string" ? error.message : "Bilinmeyen hata";
-      const details = typeof error?.additionalDetails === "string" ? ` — ${error.additionalDetails}` : "";
-      return `Sağlayıcı hatası: ${clip(message + details, 300)}`;
+      const details = typeof error?.additionalDetails === "string" ? error.additionalDetails : "";
+      return `Sağlayıcı hatası: ${clip(details ? `${message} — ${details}` : message, 300)}${/10061|ECONNREFUSED/.test(details) ? REFUSED_HINT : ""}`;
     }
-    case "item/completed": {
-      const item = record(params.item);
-      if (item?.type === "agentMessage" && typeof item.text === "string") return `Ajan: ${clip(item.text)}`;
-      if (item?.type === "commandExecution" && typeof item.command === "string") return `Komut çalıştı: ${clip(item.command, 200)}`;
-      if (item?.type === "fileChange") {
-        const changes = Array.isArray(item.changes) ? item.changes.map((change) => record(change)?.path).filter((path): path is string => typeof path === "string") : [];
-        return changes.length ? `Dosya değişti: ${clip(changes.join(", "), 240)}` : "Dosya değişikliği yapıldı";
-      }
-      return undefined;
+    case "item/completed": return describeItem(record(params.item));
+    default: return undefined;
+  }
+}
+
+function describeItem(item: Record<string, unknown> | undefined): string | undefined {
+  if (!item) return undefined;
+  const text = typeof item.text === "string" ? item.text : undefined;
+  if ((item.type === "agentMessage" || item.type === "agent_message") && text) return `Ajan: ${clip(text)}`;
+  const command = typeof item.command === "string" ? item.command : undefined;
+  if ((item.type === "commandExecution" || item.type === "command_execution") && command) return `Komut çalıştı: ${clip(command, 200)}`;
+  if (item.type === "fileChange" || item.type === "file_change") {
+    const changes = Array.isArray(item.changes) ? item.changes.map((change) => record(change)?.path).filter((path): path is string => typeof path === "string") : [];
+    return changes.length ? `Dosya değişti: ${clip(changes.join(", "), 240)}` : "Dosya değişikliği yapıldı";
+  }
+  return undefined;
+}
+
+/** Headless CLI JSONL events (codex exec, opencode run and similar). */
+function describeJsonl(data: Record<string, unknown>): string | undefined {
+  switch (data.type) {
+    case "item.completed": return describeItem(record(data.item));
+    case "turn.failed": case "error": {
+      const error = record(data.error);
+      const message = typeof data.message === "string" ? data.message : typeof error?.message === "string" ? error.message : "Bilinmeyen hata";
+      return `Sağlayıcı hatası: ${clip(message, 300)}${/10061|ECONNREFUSED/.test(message) ? REFUSED_HINT : ""}`;
     }
     default: return undefined;
   }
