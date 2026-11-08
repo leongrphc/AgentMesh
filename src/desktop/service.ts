@@ -11,7 +11,7 @@ import { cleanAgent, resolveAgentSettings, savedSourceAgents, validateAgentEdit 
 import { MockAgent } from "../adapters/mock.js";
 import { configuredAdapter } from "../adapters/registry.js";
 import type { PermissionDecision } from "../core/permissions.js";
-import { probeCodex, probeOpenCode, probeOpenCodeServer, probeHeadlessProvider, type ProviderHealth } from "../adapters/provider-health.js";
+import { probeCodex, probeOpenCode, probeOpenCodeServer, probeHeadlessProvider, probeCopilot, type ProviderHealth } from "../adapters/provider-health.js";
 import { safeLog } from "../core/safe-log.js";
 import { createWorkspaceEntry, listWorkspace, readWorkspaceFile, saveWorkspaceFile, readConflictFile, writeConflictResolution } from "../core/workspace-files.js";
 import type { DesktopState, DesktopReview, TaskDraft } from "./contracts.js";
@@ -22,6 +22,7 @@ import { maintainJournal } from "../core/journal-maintenance.js";
 import { listCodexProfiles } from "../adapters/codex-profiles.js";
 import { CodexAppServerAdapter } from "../adapters/codex-app-server.js";
 import { HeadlessCliAdapter } from "../adapters/headless-cli.js";
+import { CopilotSdkAdapter } from "../adapters/copilot-sdk.js";
 import { buildPlanPrompt, parsePlan, projectOverview } from "./planner.js";
 import { describeEvent, describeOutput, eventTaskId } from "./event-text.js";
 import { DEFAULT_ALLOWED_PATHS, folderConfig, hasUncommittedChanges, readRecent, rememberRecent, prepareRepository, repositoryKey } from "./folder-project.js";
@@ -93,7 +94,7 @@ export class DesktopService {
       demo: this.demo, source: this.source, recent: readRecent(this.dataRoot), uncommittedChanges: this.uncommitted, integrationBranch: this.integration, integrationPending: this.integrationPending, openNotice: this.openNotice, codexProfiles: this.codexProfiles, planning: !!this.planAbort,
       defaultAllowedPaths: this.source === "folder" ? DEFAULT_ALLOWED_PATHS : ["src/**"], agents: this.config.agents.map((agent) => ({ ...agent,
         liveMessages: this.demo || (agent.provider === "codex" && agent.transport === "app-server"),
-        interactivePermissions: this.demo || (agent.provider === "codex" && agent.transport === "app-server") || (agent.provider === "opencode" && agent.transport === "server") })),
+        interactivePermissions: this.demo || agent.provider === "copilot" || (agent.provider === "codex" && agent.transport === "app-server") || (agent.provider === "opencode" && agent.transport === "server") })),
       permissions: this.engine.pendingPermissions(this.config.projectId), events: this.events,
       health: this.health, checkingAgents: !!this.healthAbort, testingProvider: this.testingProvider,
       maxParallel: snapshot.project.maxParallel ?? this.config.maxParallel ?? 2 });
@@ -279,10 +280,12 @@ export class DesktopService {
     if (!agent) throw new Error(`Bu projede böyle bir ajan yok: ${agentId}`);
     const adapter = agent.provider === "codex"
       ? new CodexAppServerAdapter(agent.id, { model: agent.model, codexHome: agent.codexHome, conversationOnly: true })
+      : agent.provider === "copilot"
+        ? new CopilotSdkAdapter(agent.id, { model: agent.model, conversationOnly: true, readOnlyTools: true })
       : agent.provider === "claude" || agent.provider === "antigravity"
         ? new HeadlessCliAdapter(agent.id, agent.provider, { model: agent.model, conversationOnly: true, readOnlyTools: true })
         : undefined;
-    if (!adapter) throw new Error("Planlama şimdilik Claude, Codex ve Antigravity ajanlarıyla yapılabilir.");
+    if (!adapter) throw new Error("Planlama şimdilik Claude, Codex, Copilot ve Antigravity ajanlarıyla yapılabilir.");
     const abort = new AbortController();
     this.planAbort = abort;
     this.publish();
@@ -431,6 +434,7 @@ export class DesktopService {
       for (const agent of state.agents) if (!probes.has(key(agent))) probes.set(key(agent),
         state.demo ? Promise.resolve({ status: "configured", checkedAt: new Date().toISOString(), detail: "Yerel mock ajan; model veya CLI çağrısı yapılmaz." })
           : agent.provider === "codex" ? probeCodex(state.snapshot.project.workspaceRoot, abort.signal, undefined, undefined, agent.codexHome)
+          : agent.provider === "copilot" ? probeCopilot(state.snapshot.project.workspaceRoot, abort.signal)
           : agent.provider === "antigravity" || agent.provider === "claude" ? probeHeadlessProvider(agent.provider, state.snapshot.project.workspaceRoot, abort.signal)
           : agent.transport === "server" ? probeOpenCodeServer(state.snapshot.project.workspaceRoot, agent.model, abort.signal)
           : probeOpenCode(state.snapshot.project.workspaceRoot, abort.signal));

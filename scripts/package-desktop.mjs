@@ -31,12 +31,27 @@ const copied = new Set();
 async function copyDependency(name) {
   if (copied.has(name)) return;
   copied.add(name);
-  const source = dirname(require.resolve(`${name}/package.json`));
+  // Some runtime packages intentionally do not export package.json.
+  let source;
+  try { source = dirname(require.resolve(`${name}/package.json`)); }
+  catch {
+    source = dirname(require.resolve(name));
+    while (true) {
+      try { if (JSON.parse(await readFile(join(source, "package.json"), "utf8")).name === name) break; } catch { /* Walk to package root. */ }
+      const parent = dirname(source);
+      if (parent === source) throw new Error(`Dependency package root not found: ${name}`);
+      source = parent;
+    }
+  }
   const dependency = JSON.parse(await readFile(join(source, "package.json"), "utf8"));
   await cp(source, join(app, "node_modules", name), { recursive: true });
   for (const child of Object.keys(dependency.dependencies ?? {})) await copyDependency(child);
 }
 await copyDependency("node-pty");
+// Keep the official SDK unbundled: its version-matched native CLI is resolved relative to the package.
+await copyDependency("@github/copilot-sdk");
+await copyDependency(`@github/copilot-sdk-win32-${process.arch}`);
+await copyDependency(`@koromix/koffi-win32-${process.arch}`);
 const notices = [], noticed = new Set();
 async function collectNotices(name) {
   if (noticed.has(name)) return;
@@ -52,6 +67,8 @@ async function collectNotices(name) {
   for (const child of Object.keys(dependency.dependencies ?? {})) await collectNotices(child);
 }
 for (const name of Object.keys(manifest.dependencies)) await collectNotices(name);
+await collectNotices(`@github/copilot-sdk-win32-${process.arch}`);
+await collectNotices(`@koromix/koffi-win32-${process.arch}`);
 await writeFile(join(output, "THIRD-PARTY-NOTICES.txt"), notices.join("\n"));
 await cp(join(root, "docs", "TRYOUT.md"), join(output, "TRYOUT.md"));
 await writeFile(join(output, "README.txt"), "AgentMesh.exe ile açın. Tüm klasörü birlikte taşıyın. Node/npm gerekmez. Gerçek projeler için Git ve seçilen sağlayıcının CLI kurulumu gerekir. Demo model çağırmaz. Bu paket imzasız yerel deneme sürümüdür; otomatik güncelleme içermez.\r\n");

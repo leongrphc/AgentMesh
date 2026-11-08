@@ -9,6 +9,7 @@ import { safeLog } from "../core/safe-log.js";
 import { OpenCodeServerClient, type OpenCodeServerOptions } from "./opencode-server-client.js";
 import { headlessCommand, type HeadlessProvider } from "./headless-cli.js";
 import { codexEnv, defaultCodexHome } from "./codex-profiles.js";
+import { closeCopilot, copilotClientOptions, createCopilotClient, type CopilotFactory } from "./copilot-sdk.js";
 
 export interface ProviderHealth {
   status: "configured" | "needs_login" | "needs_setup" | "installed" | "unavailable";
@@ -33,6 +34,28 @@ export async function probeHeadlessProvider(provider: HeadlessProvider, cwd: str
     }
     return { status: "installed", checkedAt, detail: `${provider === "antigravity" ? "Antigravity" : "Claude Code"} ${version} bulundu; giriş, model erişimi ve kota sınanmadı. Native headless politikaları geçerlidir; etkileşimli izin köprüsü yok.` };
   } catch { return { status: "unavailable", checkedAt, detail: signal?.aborted ? "Kontrol iptal edildi." : `${provider} CLI açılamadı; kurulumu ve PATH ayarını kontrol edin.` }; }
+}
+/** Read-only runtime/auth metadata only: no session, login, refresh request or model call. */
+export async function probeCopilot(cwd: string, signal?: AbortSignal, factory: CopilotFactory = createCopilotClient): Promise<ProviderHealth> {
+  const checkedAt = new Date().toISOString();
+  const client = factory(copilotClientOptions(cwd));
+  const bounded = AbortSignal.any([AbortSignal.timeout(10000), ...(signal ? [signal] : [])]);
+  let onAbort: (() => void) | undefined;
+  const aborted = new Promise<never>((_, reject) => {
+    onAbort = () => reject(new Error("Copilot kontrolü iptal edildi"));
+    bounded.addEventListener("abort", onAbort, { once: true });
+    if (bounded.aborted) onAbort();
+  });
+  void aborted.catch(() => {});
+  try {
+    await Promise.race([client.start(), aborted]);
+    const [status, auth] = await Promise.race([Promise.all([client.getStatus(), client.getAuthStatus()]), aborted]);
+    const version = status.version.match(/\b\d+\.\d+\.\d+\b/)?.[0] ?? "SDK";
+    return { status: auth.isAuthenticated ? "configured" : "needs_login", checkedAt,
+      detail: auth.isAuthenticated ? `GitHub Copilot ${version} · native hesap kaydı bulundu; model erişimi ve kota sınanmadı.`
+        : `GitHub Copilot ${version} · giriş gerekli. Terminalde copilot açıp /login kullanın.` };
+  } catch { return { status: "unavailable", checkedAt, detail: signal?.aborted ? "Kontrol iptal edildi." : "Copilot native runtime veya protokolü açılamadı; SDK kurulumunu kontrol edin." }; }
+  finally { if (onAbort) bounded.removeEventListener("abort", onAbort); await closeCopilot(client); }
 }
 type ClientFactory = (options: Omit<RpcOptions, "executable" | "args">) => JsonlRpcClient;
 

@@ -5,8 +5,10 @@ import { CodexAppServerAdapter } from "./codex-app-server.js";
 import { OpenCodeCliAdapter } from "./opencode-cli.js";
 import { OpenCodeServerAdapter } from "./opencode-server.js";
 import { HeadlessCliAdapter } from "./headless-cli.js";
+import { CopilotSdkAdapter } from "./copilot-sdk.js";
 
 export function configuredAdapter(agent: Config["agents"][number]): AgentAdapter {
+  if (agent.provider === "copilot") return new CopilotSdkAdapter(agent.id, { model: agent.model });
   if (agent.provider === "antigravity" || agent.provider === "claude") return new HeadlessCliAdapter(agent.id, agent.provider, { model: agent.model });
   if (agent.provider === "codex") return agent.transport === "app-server"
     ? new CodexAppServerAdapter(agent.id, { model: agent.model, codexHome: agent.codexHome })

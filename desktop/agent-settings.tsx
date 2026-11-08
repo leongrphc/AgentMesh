@@ -43,16 +43,17 @@ export function AgentSettings({ state, api }: { state: DesktopState; api: Deskto
             onChange={(event) => setDraft({ ...draft, id: event.target.value })} /></label>
           <label>Sağlayıcı<select name="agentProvider" value={draft.provider} onChange={(event) => setDraft({
             ...draft, provider: event.target.value as AgentConfig["provider"], transport: "exec", model: undefined,
-          })}><option value="codex">Codex</option><option value="opencode">OpenCode</option><option value="antigravity">Antigravity</option><option value="claude">Claude Code</option></select></label>
+          })}><option value="codex">Codex</option><option value="opencode">OpenCode</option><option value="antigravity">Antigravity</option><option value="claude">Claude Code</option><option value="copilot">GitHub Copilot</option></select></label>
         </div>
         <div className="provider-test-fields">
           <label>Bağlantı<select name="agentTransport" value={draft.transport ?? "exec"} onChange={(event) => setDraft({ ...draft, transport: event.target.value as AgentConfig["transport"] })}>
-            <option value="exec">CLI / exec</option>{draft.provider === "codex" && <option value="app-server">CLI / App Server</option>}
+            <option value="exec">{draft.provider === "copilot" ? "Native CLI / Official SDK" : "CLI / exec"}</option>{draft.provider === "codex" && <option value="app-server">CLI / App Server</option>}
             {draft.provider === "opencode" && <option value="server">CLI / HTTP Server</option>}
           </select></label>
           <label>Model (isteğe bağlı)<input name="agentModel" maxLength={200} placeholder={draft.provider === "opencode" ? "provider/model" : "Sağlayıcı varsayılanı"}
             value={draft.model ?? ""} onChange={(event) => setDraft({ ...draft, model: event.target.value })} /></label>
         </div>
+        {draft.provider === "copilot" && <p className="form-help">Resmî SDK, sürümle eşleşen native Copilot CLI ve yerel GitHub girişini kullanır. Dosya araçları görev kapsamıyla sınırlı ve tek istek izinlidir; shell, MCP ve ağ araçları kapalıdır. Testleri proje test komutuyla çalıştırın.</p>}
         {draft.provider === "codex" && <label>Codex hesabı / profili
           <select name="agentCodexHome" value={draft.codexHome ?? ""} onChange={(event) => setDraft({ ...draft, codexHome: event.target.value || undefined })}>
             <option value="">Varsayılan (~/.codex)</option>

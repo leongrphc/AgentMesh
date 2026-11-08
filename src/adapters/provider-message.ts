@@ -10,17 +10,19 @@ import { safeLog } from "../core/safe-log.js";
 import { sendOpenCodeCliMessage } from "./opencode-message.js";
 import type { ProcessRunner } from "./cli-process.js";
 import { HeadlessCliAdapter } from "./headless-cli.js";
+import { CopilotSdkAdapter, type CopilotFactory } from "./copilot-sdk.js";
 
-export interface ProviderMessageInput { provider: "codex" | "opencode" | "antigravity" | "claude"; message: string; model?: string; transport?: "exec" | "server" }
+export interface ProviderMessageInput { provider: "codex" | "opencode" | "antigravity" | "claude" | "copilot"; message: string; model?: string; transport?: "exec" | "server" }
 export interface ProviderMessageResult { provider: string; model?: string; transport?: "exec" | "server"; response: string; elapsedMs: number; checkedAt: string }
 interface MessageDependencies {
   codex?: (input: ProviderMessageInput, cwd: string, signal: AbortSignal) => Promise<string>;
   openCode?: (cwd: string, signal: AbortSignal) => Promise<Pick<OpenCodeServerClient, "request" | "close">>;
   cliRunner?: ProcessRunner;
+  copilot?: CopilotFactory;
 }
 
 export function validateProviderMessage(input: ProviderMessageInput) {
-  if (!input || !["codex", "opencode", "antigravity", "claude"].includes(input.provider) || typeof input.message !== "string" || !input.message.trim() || input.message.length > 2000
+  if (!input || !["codex", "opencode", "antigravity", "claude", "copilot"].includes(input.provider) || typeof input.message !== "string" || !input.message.trim() || input.message.length > 2000
     || (input.model !== undefined && (typeof input.model !== "string" || input.model.length > 200 || !input.model.trim()))) throw new Error("Sağlayıcı ve 1–2000 karakterlik mesaj gerekli");
   if (input.provider === "opencode" && input.model && !/^[^/\s]+\/[^\s]+$/.test(input.model)) throw new Error("OpenCode modeli provider/model biçiminde olmalı");
   if (input.transport !== undefined && (input.provider !== "opencode" || !["exec", "server"].includes(input.transport))) throw new Error("Geçersiz mesaj bağlantısı");
@@ -45,6 +47,11 @@ export async function sendProviderMessage(input: ProviderMessageInput, signal?: 
         });
         response = result.summary;
       }
+    } else if (input.provider === "copilot") {
+      response = (await new CopilotSdkAdapter("connection-test", { model: input.model, conversationOnly: true, clientFactory: dependencies.copilot }).execute({
+        workspaceRoot: cwd, signal: bounded, context: {}, inbox: [],
+        task: { id: "connection-test", projectId: "connection-test", agentId: "connection-test", title: "Bağlantı testi", instruction: input.message.trim(), dependsOn: [], allowedPaths: [] },
+      })).summary;
     } else if (input.provider === "antigravity" || input.provider === "claude") {
       response = (await new HeadlessCliAdapter("connection-test", input.provider, { model: input.model, conversationOnly: true }).execute({
         workspaceRoot: cwd, signal: bounded, context: {}, inbox: [],
