@@ -20,6 +20,9 @@ export function TaskForm({ state, onClose, onCreate }: {
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
   const [contextMode, setContextMode] = useState("all");
+  const [agentId, setAgentId] = useState(state.agents[0]?.id ?? "");
+  const [model, setModel] = useState("");
+  const agent = state.agents.find((item) => item.id === agentId);
   const title = useRef<HTMLInputElement>(null);
   // showModal focuses the first focusable element (the close button); start in the title instead.
   useEffect(() => { dialog.current?.showModal(); title.current?.focus(); }, []);
@@ -35,7 +38,8 @@ export function TaskForm({ state, onClose, onCreate }: {
         id: String(values.get("id") ?? "").trim() || taskId(title, new Set(tasks.map((task) => task.id))),
         title,
         instruction: String(values.get("instruction")).trim(),
-        agentId: String(values.get("agentId")),
+        agentId,
+        ...(model.trim() ? { model: model.trim() } : {}),
         dependsOn: values.getAll("dependsOn").map(String),
         allowedPaths: lines(values.get("allowedPaths")),
         ...(contextMode === "selected" ? { contextKeys: lines(values.get("contextKeys")) } : {}),
@@ -57,8 +61,16 @@ export function TaskForm({ state, onClose, onCreate }: {
         <label>Başlık<input name="title" ref={title} required maxLength={200} placeholder="Giriş ekranına şifre sıfırlama ekle" /></label>
         <label>Talimat<textarea name="instruction" required rows={6} maxLength={16000}
           placeholder="Ne yapılmalı, hangi dosyalar etkilenir, iş ne zaman bitmiş sayılır? Kabul kriterlerini yazın." /></label>
-        <label>Ajan<select name="agentId" required>{state.agents.map((agent) => <option key={agent.id} value={agent.id}>
+        <label>Ajan<select name="agentId" required value={agentId} onChange={(event) => { setAgentId(event.target.value); setModel(""); }}>{state.agents.map((agent) => <option key={agent.id} value={agent.id}>
           {[agent.id, state.demo ? "demo" : agent.provider === agent.id ? undefined : agent.provider, agent.model].filter(Boolean).join(" · ")}</option>)}</select></label>
+        <label>Görev modeli (isteğe bağlı)<input name="model" value={model} maxLength={200} list="task-model-options"
+          placeholder={agent?.model ? `Ajan varsayılanı: ${agent.model}` : agent?.provider === "opencode" ? "provider/model" : "Sağlayıcı varsayılanı"}
+          onChange={(event) => setModel(event.target.value)} /></label>
+        <datalist id="task-model-options">{[...new Set([
+          ...state.agents.filter((item) => item.provider === agent?.provider).map((item) => item.model),
+          ...tasks.filter((task) => state.agents.find((item) => item.id === task.agentId)?.provider === agent?.provider).map((task) => task.model),
+        ].filter((value): value is string => !!value))].map((value) => <option key={value} value={value} />)}</datalist>
+        <p className="form-help">Model kimliğini girin. Boş bırakırsanız ajanın veya sağlayıcının varsayılanı kullanılır. Bu seçim yalnızca bu görevi etkiler; modelin hesabınızda kullanılabilir olması gerekir.</p>
 
         {!!tasks.length && <fieldset>
           <legend>Önce bitmesi gereken görevler</legend>

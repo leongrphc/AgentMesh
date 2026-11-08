@@ -66,10 +66,17 @@ export class HeadlessCliAdapter implements AgentAdapter {
         // Without any tool a model that wants to look at files prints imitation tool calls instead of answering.
         "--tools", this.options.conversationOnly ? this.options.readOnlyTools ? "Read,Glob,Grep" : "" : "Read,Edit,Write,Glob,Grep,Bash"];
     if (!agy && !this.options.conversationOnly) args.push("--allowedTools", claudeTaskRules(input.task.allowedPaths).join(","));
-    if (agy && this.options.conversationOnly) args.push("--mode", "plan");
-    if (this.options.model) args.push("--model", this.options.model);
+    if (agy) {
+      args.push("--mode", this.options.conversationOnly ? "plan" : "accept-edits");
+      // Headless runs cannot ask for command approval. Keep shell access blocked rather than
+      // granting broad command prefixes merely to let the model inspect its workspace.
+      args.push("--settings", JSON.stringify({ permissions: { deny: ["command(*)"] } }));
+    }
+    const model = input.task.model ?? this.options.model;
+    if (model) args.push("--model", model);
     if (input.sessionId) args.push(agy ? "--conversation" : "--resume", input.sessionId);
-    const prompt = this.options.conversationOnly ? input.task.instruction : buildPrompt(input);
+    const taskPrompt = this.options.conversationOnly ? input.task.instruction : buildPrompt(input);
+    const prompt = agy ? `${taskPrompt}\n\nTerminal commands are unavailable in this headless session, including dir, ls, pwd and tests. Use native file listing, search, read and edit tools instead. Do not call RunCommand. Report command-based tests as not_run.` : taskPrompt;
     const stdin = JSON.stringify(agy ? { event: "user", message: { content: prompt } }
       : { type: "user", message: { role: "user", content: prompt } }) + "\n";
     let sessionId = input.sessionId;
@@ -96,7 +103,7 @@ export class HeadlessCliAdapter implements AgentAdapter {
       if (id === undefined) return;
       acceptSession(id);
     };
-    const { events } = await (this.options.runner ?? runJsonlProcess)({ executable: this.options.executable ?? headlessCommand(this.provider),
+    const { events, stderr } = await (this.options.runner ?? runJsonlProcess)({ executable: this.options.executable ?? headlessCommand(this.provider),
       args, cwd: input.workspaceRoot, stdin, signal: input.signal, timeoutMs: 9 * 60 * 1000, onEvent, onOutput: input.onOutput })
       .catch((error: unknown) => { if (nativeFailure && !input.signal?.aborted) throw new Error(`${this.provider}: ${safeLog(nativeFailure, "storage")}`); throw error; });
     // Injected runners and replay fixtures must obey the same identity checks.
@@ -112,7 +119,12 @@ export class HeadlessCliAdapter implements AgentAdapter {
       throw new Error(`${this.provider}: ${safeLog(nativeFailure || `Görev tamamlanmadı (${String(agy ? result.status : result.subtype)})`, "storage")}`);
     }
     const summary = agy ? result.response : result.result;
-    if (typeof summary !== "string" || !summary.trim()) throw new Error(`${this.provider}: sonuç özeti boş`);
+    if (typeof summary !== "string" || !summary.trim()) {
+      if (agy && /tool required .*permission|soft.denied|auto.denied/i.test(stderr)) {
+        throw new Error(`${this.provider}: headless araç izni reddedildi: ${safeLog(stderr, "storage")}`);
+      }
+      throw new Error(`${this.provider}: sonuç özeti boş`);
+    }
     const output = { summary: summary.trim(), sessionId: id };
     const usage = agy ? undefined : claudeUsage(result);
     const normalized = this.options.conversationOnly ? output : normalizeTaskResult(output, input.knownAgentIds);

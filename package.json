@@ -22,7 +22,8 @@
     "desktop:package": "npm run desktop:build && node scripts/package-desktop.mjs",
     "desktop:package:smoke": "node scripts/smoke-package.mjs",
     "desktop:installer": "npm run desktop:package && node scripts/build-installer.mjs",
-    "icon": "electron scripts/make-icon.cjs"
+    "icon": "electron scripts/make-icon.cjs",
+    "e2e": "tsx scripts/e2e.ts"
   },
   "devDependencies": {
     "@types/node": "^24.0.0",

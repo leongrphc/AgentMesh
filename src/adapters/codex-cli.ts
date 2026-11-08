@@ -18,7 +18,8 @@ export class CodexCliAdapter implements AgentAdapter {
     const args = input.sessionId
       ? ["exec", "resume", "--json", "-c", 'sandbox_mode="workspace-write"', input.sessionId, "-"]
       : ["exec", "--json", "--sandbox", "workspace-write", "--cd", input.workspaceRoot, "-"];
-    if (this.options.model) args.splice(input.sessionId ? 3 : 2, 0, "-m", this.options.model);
+    const model = input.task.model ?? this.options.model;
+    if (model) args.splice(input.sessionId ? 3 : 2, 0, "-m", model);
     const { events } = await (this.options.runner ?? runJsonlProcess)({
       executable: this.options.executable ?? (process.platform === "win32" ? "codex.exe" : "codex"),
       args,

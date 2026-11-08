@@ -18,6 +18,8 @@ export interface AgentTask {
   title: string;
   instruction: string;
   agentId: string;
+  /** Task-local override; omitted uses the agent/provider default. Immutable across retries. */
+  model?: string;
   dependsOn: string[];
   /** Daha sonra worktree/izin sınırlarına bağlanacak dosya yolları. */
   allowedPaths: string[];

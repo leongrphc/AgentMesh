@@ -22,6 +22,14 @@ export interface AgentConfig {
   codexHome?: string;
 }
 
+export function validateTaskModel(model: unknown, provider?: AgentConfig["provider"]): void {
+  if (model === undefined) return;
+  if (typeof model !== "string" || !model.trim() || model !== model.trim() || model.length > 200 || /[\s\u0000-\u001f\u007f]/.test(model)) {
+    throw new Error("Görev modeli boşluksuz, 1–200 karakterlik model kimliği olmalı");
+  }
+  if (provider === "opencode" && !/^[^/\s]+\/[^\s]+$/.test(model)) throw new Error("OpenCode modeli provider/model biçiminde olmalı");
+}
+
 export function validate(config: Config): void {
   if (!config || typeof config.projectId !== "string" || !config.projectId.trim() || typeof config.repoPath !== "string" || !config.repoPath.trim() || !Array.isArray(config.agents) || !Array.isArray(config.tasks)) {
     throw new Error("Config: projectId, repoPath, agents[] ve tasks[] zorunlu");
@@ -55,6 +63,7 @@ export function validate(config: Config): void {
     }
     seen.add(task.id);
     validateContextKeys(task.contextKeys);
+    validateTaskModel(task.model, config.agents.find((agent) => agent.id === task.agentId)?.provider);
   }
   for (const task of config.tasks) {
     if (task.dependsOn.some((id) => !seen.has(id))) throw new Error(`Bulunmayan görev bağımlılığı: ${task.id}`);
@@ -69,7 +78,7 @@ export function reconcileTasks(config: Config, existing: readonly AgentTask[], r
   for (const task of existing) {
     if (!agents.has(task.agentId)) throw new Error(`Config uyumsuzluğu: ${task.id} görevinin ${task.agentId} ajanı eksik. Ajan eşlemesini geri ekleyin.`);
   }
-  const fields = ["title", "instruction", "agentId", "dependsOn", "allowedPaths", "contextKeys"] as const;
+  const fields = ["title", "instruction", "agentId", "model", "dependsOn", "allowedPaths", "contextKeys"] as const;
   const value = (task: AgentTask, field: typeof fields[number]) => {
     const input = task[field];
     return Array.isArray(input) ? JSON.stringify([...new Set(input)].sort()) : input;
@@ -79,7 +88,7 @@ export function reconcileTasks(config: Config, existing: readonly AgentTask[], r
     if (!old) continue;
     // A task handed to another agent in the app legitimately differs from the file's agentId.
     const handedOff = "handoff" in old && !!(old as { handoff?: unknown }).handoff;
-    const changed = fields.filter((field) => !(field === "agentId" && handedOff) && value(old, field) !== value(task, field));
+    const changed = fields.filter((field) => !((field === "agentId" || field === "model") && handedOff) && value(old, field) !== value(task, field));
     if (changed.length) throw new Error(`Config uyumsuzluğu: ${task.id} için değişen alanlar: ${changed.join(", ")}. Kayıtlı tanımı geri yükleyin veya yeni görev kimliği kullanın; mevcut görev değiştirilmedi.`);
   }
   const additions = config.tasks.filter((task) => !known.has(task.id));

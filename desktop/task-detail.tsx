@@ -82,6 +82,7 @@ export function TaskDetail({ task, state, api, pending, act, onReview }: {
 
     <div className="instruction"><h4>Talimat</h4><p>{task.instruction}</p></div>
     <dl>
+      <dt>Seçilen model</dt><dd>{task.model ?? state.agents.find((agent) => agent.id === task.agentId)?.model ?? "Sağlayıcı varsayılanı (model kimliği belirtilmedi)"}</dd>
       <dt>Önce bitmesi gereken</dt><dd>{waitsFor.length ? waitsFor.join(", ") : "Yok, bağımsız"}</dd>
       <dt>Değiştirebileceği dosyalar</dt><dd><code>{task.allowedPaths.join("  ")}</code></dd>
     </dl>

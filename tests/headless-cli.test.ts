@@ -43,6 +43,35 @@ test("Antigravity and Claude build native headless requests with context, exact 
   }
 });
 
+test("Antigravity uses native file tools without granting shell permissions", async () => {
+  for (const conversationOnly of [false, true]) {
+    const adapter = new HeadlessCliAdapter("a", "antigravity", { conversationOnly, runner: async (spec) => {
+      assert.equal(spec.args[spec.args.indexOf("--mode") + 1], conversationOnly ? "plan" : "accept-edits");
+      assert.ok(spec.args.includes("--sandbox"));
+      assert.deepEqual(JSON.parse(spec.args[spec.args.indexOf("--settings") + 1]!), {
+        permissions: { deny: ["command(*)"] },
+      });
+      assert.match(JSON.parse(spec.stdin!).message.content, /Do not call RunCommand/);
+      assert.match(JSON.parse(spec.stdin!).message.content, /tests as not_run/);
+      return { events: [init("antigravity"), result("antigravity")], stderr: "" };
+    } });
+    await adapter.execute(input());
+  }
+});
+
+test("Antigravity empty results preserve masked headless permission diagnostics", async () => {
+  const adapter = new HeadlessCliAdapter("a", "antigravity", { runner: async () => ({
+    events: [init("antigravity"), result("antigravity", { response: "" })],
+    stderr: 'jetski: no output produced — a tool required the "command" permission for user@example.com; auto-denied.',
+  }) });
+  await assert.rejects(adapter.execute(input()), (error: Error) => {
+    assert.match(error.message, /headless araç izni reddedildi/);
+    assert.match(error.message, /command/);
+    assert.ok(!error.message.includes("user@example.com"));
+    return true;
+  });
+});
+
 test("headless adapters reject nonterminal, duplicate, failed and mismatched results", async () => {
   for (const provider of ["antigravity", "claude"] as const) {
     for (const events of [[], [result(provider), result(provider)], [init(provider), result(provider, provider === "antigravity" ? { conversation_id: "foreign" } : { session_id: "foreign" })],

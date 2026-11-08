@@ -40,7 +40,7 @@ export class OpenCodeServerAdapter implements AgentAdapter {
   constructor(readonly id: string, private readonly options: { model?: string; executable?: string; serverFactory?: Factory } = {}) {}
 
   async execute(input: AgentExecution): Promise<AgentResult> {
-    const model = this.options.model;
+    const model = input.task.model ?? this.options.model;
     if (model !== undefined && !/^[^/\s]+\/[^\s]+$/.test(model)) throw new Error("OpenCode modeli provider/model biçiminde olmalı");
     if (input.sessionId && !/^ses[\w-]{1,200}$/.test(input.sessionId)) throw new Error("Geçersiz OpenCode oturumu");
     const server = await (this.options.serverFactory ?? OpenCodeServerClient.start)({ cwd: input.workspaceRoot, signal: input.signal, executable: this.options.executable });

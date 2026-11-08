@@ -108,8 +108,9 @@ export class CodexAppServerAdapter implements AgentAdapter {
     try {
       await client.request("initialize", { clientInfo: { name: "agentmesh", title: "AgentMesh IDE", version: "0.1.0" } });
       client.notify("initialized");
+      const model = input.task.model ?? this.options.model;
       const params: RpcRecord = { cwd: input.workspaceRoot, approvalPolicy: this.options.conversationOnly ? "never" : "on-request", sandbox: this.options.conversationOnly ? "read-only" : "workspace-write",
-        approvalsReviewer: "user", ...(this.options.model ? { model: this.options.model } : {}) };
+        approvalsReviewer: "user", ...(model ? { model } : {}) };
       if (this.options.conversationOnly) Object.assign(params, { ephemeral: true,
         config: { "features.shell_tool": false, "web_search": "disabled" },
         developerInstructions: "This is a short connection test. Reply briefly in the user's language. Do not use tools, read files, or run commands." });

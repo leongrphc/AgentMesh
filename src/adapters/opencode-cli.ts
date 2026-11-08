@@ -22,7 +22,8 @@ export class OpenCodeCliAdapter implements AgentAdapter {
 
   async execute(input: AgentExecution): Promise<AgentResult> {
     const args = ["run", "--format", "json", "--dir", input.workspaceRoot];
-    if (this.options.model) args.push("--model", this.options.model);
+    const model = input.task.model ?? this.options.model;
+    if (model) args.push("--model", model);
     if (input.sessionId) args.push("--session", input.sessionId);
     args.push(buildPrompt(input));
     const { events } = await (this.options.runner ?? runJsonlProcess)({

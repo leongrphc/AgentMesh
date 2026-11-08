@@ -63,12 +63,15 @@ export function PlanDialog({ state, api, onClose, onCreated }: {
         {drafts.map((draft, index) => <li key={draft.id} style={laneStyle(state, draft.agentId)}>
           <div className="plan-row">
             <input aria-label="Görev başlığı" value={draft.title} maxLength={200} disabled={busy} onChange={(event) => update(index, { title: event.target.value })} />
-            <select aria-label="Ajan" value={draft.agentId} disabled={busy} onChange={(event) => update(index, { agentId: event.target.value })}>
+            <select aria-label="Ajan" value={draft.agentId} disabled={busy} onChange={(event) => update(index, { agentId: event.target.value, model: undefined })}>
               {state.agents.map((agent) => <option key={agent.id} value={agent.id}>{agent.id}</option>)}
             </select>
             <button type="button" className="icon-button" aria-label={`${draft.title} görevini plandan çıkar`} disabled={busy}
               onClick={() => setDrafts((list) => list?.filter((_, i) => i !== index))}>×</button>
           </div>
+          <label>Görev modeli (isteğe bağlı)<input aria-label={`${draft.title} görev modeli`} maxLength={200} disabled={busy}
+            value={draft.model ?? ""} placeholder={state.agents.find((agent) => agent.id === draft.agentId)?.model ?? "Sağlayıcı varsayılanı"}
+            onChange={(event) => update(index, { model: event.target.value.trim() || undefined })} /></label>
           <textarea aria-label="Talimat" rows={3} maxLength={16000} value={draft.instruction} disabled={busy} onChange={(event) => update(index, { instruction: event.target.value })} />
           <small>{draft.dependsOn.length ? `Önce: ${draft.dependsOn.map(titleOf).join(", ")}` : "Bağımsız; diğerleriyle aynı anda çalışabilir"} · Dosyalar: <code>{draft.allowedPaths.join(" ")}</code></small>
         </li>)}

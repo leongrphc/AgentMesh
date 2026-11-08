@@ -22,7 +22,7 @@ import type {
 import type { EventStore } from "./journal.js";
 import type { WorktreeManager } from "./worktrees.js";
 import { MergeConflictError } from "./worktrees.js";
-import type { AgentConfig } from "./config.js";
+import { validateTaskModel, type AgentConfig } from "./config.js";
 import { validate } from "./config.js";
 import { validateAgentEdit } from "./agent-settings.js";
 import { normalizeTestReports } from "./test-reports.js";
@@ -278,6 +278,7 @@ export class Orchestrator {
 
   addTask(task: AgentTask): void {
     validateContextKeys(task.contextKeys);
+    validateTaskModel(task.model);
     if (!this.projects.has(task.projectId)) throw new Error(`Proje bulunamadı: ${task.projectId}`);
     if (this.tasks.has(task.id)) throw new Error(`Görev ID'si zaten mevcut: ${task.id}`);
     if (!this.adapters.has(task.agentId)) throw new Error(`Ajan kayıtlı değil: ${task.agentId}`);
@@ -911,6 +912,8 @@ export class Orchestrator {
       case "task.reassigned": {
         const task = this.requireTask(event.taskId);
         task.agentId = event.agentId;
+        // A different provider/profile may not support the previous task override.
+        task.model = undefined;
         task.sessionId = undefined;
         task.handoff = { from: event.previousAgentId, at: event.at };
         task.status = "pending";

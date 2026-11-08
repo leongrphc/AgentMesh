@@ -13,8 +13,10 @@ import { DesktopService } from "../src/desktop/service.js";
 import { listCodexProfiles } from "../src/adapters/codex-profiles.js";
 
 const agentId = process.argv[2] ?? "claude";
-const profileName = process.argv[3];
-if (!["claude", "codex"].includes(agentId) || (profileName && agentId !== "codex")) throw new Error("Kullanım: tsx scripts/e2e.ts <claude | codex [profil]>");
+/** codex: profile name (e.g. codex1); opencode/antigravity: model (e.g. opencode/deepseek-v4.1-flash-free). */
+const option = process.argv[3];
+if (!["claude", "codex", "opencode", "antigravity"].includes(agentId)) throw new Error("Kullanım: tsx scripts/e2e.ts <claude | codex [profil] | opencode [model] | antigravity [model]>");
+const profileName = agentId === "codex" ? option : undefined;
 const profile = profileName ? listCodexProfiles().find((item) => item.name === profileName) : undefined;
 if (profileName && !profile) throw new Error(`Codex profili bulunamadı: ${profileName} (bulunanlar: ${listCodexProfiles().map((item) => item.name).join(", ") || "yok"})`);
 const root = mkdtempSync(join(tmpdir(), "agentmesh-e2e-"));
@@ -32,6 +34,11 @@ try {
   let state = service.openFolder(repo);
   if (profile) {
     service.saveAgent({ id: "codex", provider: "codex", transport: "app-server", codexHome: profile.path });
+    state = service.state();
+  }
+  if (agentId === "opencode" || agentId === "antigravity") {
+    // Not in the folder defaults; added the way the agent center does.
+    service.saveAgent({ id: agentId, provider: agentId, transport: "exec", ...(option ? { model: option } : {}) });
     state = service.state();
   }
   console.log(`Proje: ${state.snapshot.project.id} · ajan: ${state.agents.map((agent) => `${agent.id} (${agent.provider}/${agent.transport ?? "exec"}${agent.codexHome ? ` · ${agent.codexHome}` : ""})`).join(", ")}`);
