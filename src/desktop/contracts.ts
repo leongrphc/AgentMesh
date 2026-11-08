@@ -68,10 +68,10 @@ export interface DesktopAPI {
   terminalWrite(id: string, data: string): Promise<void>;
   terminalResize(id: string, cols: number, rows: number): Promise<void>;
   terminalClose(id: string): Promise<void>;
-  state(): Promise<DesktopState>;
-  openConfig(): Promise<DesktopState>;
+  state(): Promise<DesktopState | undefined>;
+  openConfig(): Promise<DesktopState | undefined>;
   openDemo(): Promise<DesktopState>;
-  openFolder(): Promise<DesktopState>;
+  openFolder(): Promise<DesktopState | undefined>;
   openRecent(path: string): Promise<DesktopState>;
   /** Merges approved work into the checked-out branch. */
   applyIntegration(): Promise<{ branch: string; commits: number; fastForward: boolean; cleaned: number }>;

@@ -87,6 +87,10 @@ export class DesktopService {
     return () => { this.listeners.delete(listener); };
   }
 
+  currentState(): DesktopState | undefined {
+    return this.engine && this.config ? this.state() : undefined;
+  }
+
   state(): DesktopState {
     if (!this.engine || !this.config) throw new Error("Önce proje açın");
     const snapshot = this.engine.snapshot(this.config.projectId, false);

@@ -7,6 +7,18 @@ import { test } from "node:test";
 import { DesktopService } from "../src/desktop/service.js";
 import { SqliteJournal } from "../src/core/sqlite-journal.js";
 
+test("desktop startup stays empty when there is no recent project", async () => {
+  const root = mkdtempSync(join(tmpdir(), "mesh-welcome-"));
+  const service = new DesktopService(root);
+  try {
+    assert.equal(service.openLastProject(), false);
+    assert.equal(service.currentState(), undefined);
+    assert.throws(() => service.state(), /Önce proje açın/);
+    service.openDemo();
+    assert.equal(service.currentState()?.demo, true);
+  } finally { await service.close(); rmSync(root, { recursive: true, force: true }); }
+});
+
 test("desktop service cancels, retries and restores persisted demo without calling providers", async () => {
   const root = mkdtempSync(join(tmpdir(), "mesh-desktop-"));
   const service = new DesktopService(root);

@@ -12,10 +12,11 @@ import { mergeSmoke } from "./merge-smoke.js";
 
 protocol.registerSchemesAsPrivileged([{ scheme: "agentmesh", privileges: { standard: true, secure: true, supportFetchAPI: true } }]);
 const origin = "agentmesh://desktop";
+const welcomeSmoke = process.argv.includes("--welcome-smoke-test");
 const windowSmoke = process.argv.includes("--window-smoke-test");
 const nativeTuiSmoke = process.argv.includes("--opencode-tui-smoke-test");
 const editorSmokeOnly = process.argv.includes("--editor-smoke-test");
-const smoke = process.argv.includes("--smoke-test") || windowSmoke || nativeTuiSmoke;
+const smoke = process.argv.includes("--smoke-test") || windowSmoke || nativeTuiSmoke || welcomeSmoke;
 if (smoke) {
   const smokeProfile = resolve(".agentmesh", "desktop-smoke", String(process.pid), "electron-profile");
   mkdirSync(smokeProfile, { recursive: true });
@@ -71,7 +72,7 @@ async function createWindow() {
     })().catch((error) => console.error(safeLog(String(error)))).finally(() => { checkingClose = false; });
   });
   await window.loadURL(`${origin}/index.html`);
-  if (!smoke || windowSmoke) {
+  if (!smoke || windowSmoke || welcomeSmoke) {
     window.show();
     window.focus();
     console.log("AgentMesh penceresi açıldı");
@@ -79,6 +80,23 @@ async function createWindow() {
   if (windowSmoke && !window.isVisible()) throw new Error("Masaüstü penceresi görünür değil");
   if (smoke) {
     try {
+      if (welcomeSmoke) {
+        await window.webContents.executeJavaScript(`new Promise((resolve, reject) => {
+          const timeout = setTimeout(() => reject(new Error('Ana ekran açılmadı')), 10000);
+          const check = setInterval(() => {
+            if (!document.querySelector('[data-testid="welcome"]')) return;
+            clearInterval(check); clearTimeout(timeout); resolve(true);
+          }, 50);
+        })`);
+        if (service.currentState()) throw new Error("Ana ekranda proje açık olmamalı");
+        const opened = await window.webContents.executeJavaScript(`(async () => {
+          const state = await window.agentmesh.openDemo();
+          return state.demo;
+        })()`);
+        if (!opened) throw new Error("Ana ekrandan proje açılamadı");
+        console.log("Ana ekran smoke testi geçti");
+        await service.close(); app.exit(0); return;
+      }
       if (editorSmokeOnly) {
         await mergeSmoke(window, service);
         await service.close(); app.exit(0); return;
@@ -314,7 +332,8 @@ async function createWindow() {
       await window.webContents.executeJavaScript(`(async () => {
         const input = document.querySelector('[aria-label="Test mesajı"]');
         const provider = document.querySelector('[aria-label="Test sağlayıcısı"]');
-        if (input?.value !== 'Selam' || provider?.options.length !== 4) throw new Error('Mesaj testi formu eksik');
+        const providers = Array.from(provider?.options ?? [], option => option.value);
+        if (input?.value !== 'Selam' || !['codex', 'opencode', 'antigravity', 'claude', 'copilot'].every(value => providers.includes(value))) throw new Error('Mesaj testi formu eksik');
         document.querySelector('[data-testid="send-provider-message"]').click();
         for (let i = 0; i < 100; i++) {
           if (document.querySelector('.agent-center .file-error')?.textContent.includes('Smoke testinde gerçek model çağrısı kapalı')) return;
@@ -368,7 +387,8 @@ app.whenReady().then(async () => {
   // No File/Edit/View/Window menu: every action lives in the app's own title bar.
   Menu.setApplicationMenu(null);
   service = new DesktopService(smoke ? smokeDataRoot : join(app.getPath("userData"), "projects"));
-  if (smoke || !service.openLastProject()) service.openDemo();
+  if (smoke && !welcomeSmoke) service.openDemo();
+  else service.openLastProject();
   const rendererRoot = resolve(__dirname, "../renderer");
   protocol.handle("agentmesh", (request) => {
     const url = new URL(request.url);
@@ -389,7 +409,7 @@ app.whenReady().then(async () => {
       catch (error) { throw new Error(safeLog(error instanceof Error ? error.message : String(error))); }
     });
   }
-  handle("mesh:state", () => service.state());
+  handle("mesh:state", () => service.currentState());
   handle("mesh:provider-terminal", (model) => service.openProviderTerminal(model as string | undefined));
   handle("mesh:test-provider", (input) => {
     if (smoke) throw new Error("Smoke testinde gerçek model çağrısı kapalı");
@@ -404,19 +424,19 @@ app.whenReady().then(async () => {
   handle("mesh:check-agents", () => service.checkAgents());
   handle("mesh:demo", () => service.openDemo());
   handle("mesh:open", async () => {
-    if (service.state().busy) throw new Error("Proje açmadan önce çalışmayı durdurun");
+    if (service.currentState()?.busy) throw new Error("Proje açmadan önce çalışmayı durdurun");
     const result = await dialog.showOpenDialog(window!, { title: "AgentMesh proje ayarlarını aç",
       properties: ["openFile"], filters: [{ name: "AgentMesh config", extensions: ["json"] }] });
-    return result.canceled ? service.state() : service.openConfig(result.filePaths[0]!);
+    return result.canceled ? service.currentState() : service.openConfig(result.filePaths[0]!);
   });
   handle("mesh:open-folder", async () => {
-    if (service.state().busy) throw new Error("Proje açmadan önce çalışmayı durdurun");
+    if (service.currentState()?.busy) throw new Error("Proje açmadan önce çalışmayı durdurun");
     const result = await dialog.showOpenDialog(window!, { title: "Proje klasörünü seç", properties: ["openDirectory"] });
-    return result.canceled ? service.state() : service.openFolder(result.filePaths[0]!);
+    return result.canceled ? service.currentState() : service.openFolder(result.filePaths[0]!);
   });
   handle("mesh:open-recent", (path) => {
     if (typeof path !== "string") throw new Error("Geçersiz proje yolu");
-    if (service.state().busy) throw new Error("Proje açmadan önce çalışmayı durdurun");
+    if (service.currentState()?.busy) throw new Error("Proje açmadan önce çalışmayı durdurun");
     // Only paths the service itself remembered can be reopened from the renderer.
     if (!service.state().recent.some((item) => item.path === path)) throw new Error("Proje son açılanlar listesinde yok");
     return service.openFolder(path);
@@ -533,7 +553,7 @@ app.whenReady().then(async () => {
   });
   await createWindow();
   app.on("activate", () => {
-    if (BrowserWindow.getAllWindows().length === 0) { service.openDemo(); void createWindow(); }
+    if (BrowserWindow.getAllWindows().length === 0) { service.openLastProject(); void createWindow(); }
   });
 }).catch((error) => { console.error(safeLog(String(error))); app.exit(1); });
 

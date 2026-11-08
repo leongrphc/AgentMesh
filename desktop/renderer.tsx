@@ -53,6 +53,7 @@ function Onboarding({ state, onCreate, onOpenFolder, disabled }: {
 function App() {
   const api = window.agentmesh;
   const [state, setState] = useState<DesktopState>();
+  const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [selected, setSelected] = useState("");
@@ -95,8 +96,8 @@ function App() {
   useEffect(() => {
     let live = true;
     let received = false;
-    const unsubscribe = api.subscribe((value) => { received = true; if (live) setState(value); });
-    api.state().then((value) => { if (live && !received) setState(value); }).catch((e) => { if (live) setError(String(e)); });
+    const unsubscribe = api.subscribe((value) => { received = true; if (live) { setState(value); setLoaded(true); } });
+    api.state().then((value) => { if (live && !received) { setState(value); setLoaded(true); } }).catch((e) => { if (live) setError(String(e)); });
     return () => { live = false; unsubscribe(); };
   }, [api]);
 
@@ -111,7 +112,17 @@ function App() {
     return !editorDirty || window.confirm("Kaydedilmemiş değişiklikler var. Yerel kurtarma kaydı mevcutsa dönüşte açılır. Yine de devam edilsin mi?");
   }
 
-  if (!state) return <main className="loading"><b>AgentMesh</b><p>{error || "Çalışma alanı açılıyor…"}</p></main>;
+  if (!state) return <main className="loading"><b>AgentMesh</b>
+    {!loaded ? <p>{error || "Çalışma alanı açılıyor…"}</p> : <section className="onboarding" data-testid="welcome">
+      <h1>Projenizi açın, çalışmaya başlayın.</h1>
+      <p className="lede">Proje klasörünüzü seçin. Görevlerinizi oluşturun, ajanların değişikliklerini inceleyip uygulayın.</p>
+      {error && <p role="alert" className="error">{error}</p>}
+      <div className="onboarding-actions">
+        <button className="primary" disabled={pending} onClick={() => void act(() => api.openFolder())}>Klasör aç…</button>
+        <button disabled={pending} onClick={() => void act(() => api.openConfig())}>Proje ayarlarını aç…</button>
+      </div>
+    </section>}
+  </main>;
 
   const { tasks, project } = state.snapshot;
   const contextPending = state.snapshot.contextConflicts.filter((conflict) => conflict.status === "pending").length;
