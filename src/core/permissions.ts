@@ -3,7 +3,7 @@ import { safeLog } from "./safe-log.js";
 import type { DomainEvent } from "./contracts.js";
 
 export type PermissionDecision = "allow_once" | "deny";
-export type PermissionSource = "user" | "timeout" | "cancel" | "disconnect" | "execution_ended" | "restart";
+export type PermissionSource = "user" | "timeout" | "cancel" | "disconnect" | "execution_ended" | "restart" | "full_mode";
 export interface PermissionProposal {
   provider: string;
   sessionId: string;
@@ -33,7 +33,7 @@ export class PermissionBroker {
       .map((entry) => ({ ...entry.request }));
   }
 
-  request(scope: { projectId: string; taskId: string; executionId: string }, proposal: PermissionProposal, signal: AbortSignal): Promise<PermissionDecision> {
+  request(scope: { projectId: string; taskId: string; executionId: string }, proposal: PermissionProposal, signal: AbortSignal, autoApprove = false): Promise<PermissionDecision> {
     if (signal.aborted || !["command", "file"].includes(proposal.kind) || !proposal.nativeRequestId
       || !proposal.sessionId || !proposal.provider || typeof proposal.description !== "string"
       || proposal.description.length > 8192) return Promise.resolve("deny");
@@ -59,6 +59,7 @@ export class PermissionBroker {
         this.pending.delete(request.id); cleanup(); settle("deny");
       }
       if (signal.aborted) cancel();
+      else if (autoApprove) this.finish(request.id, "allow_once", "full_mode");
     });
   }
 

@@ -3,8 +3,8 @@ import type { DesktopAPI, DesktopState, TaskDraft } from "../src/desktop/contrac
 import { laneStyle } from "./lanes.js";
 
 /**
- * Goal → plan → tasks. An agent drafts the tasks; nothing is created until the user has
- * reviewed (and possibly edited or trimmed) the plan and pressed "Görevleri ekle".
+ * Goal → plan → tasks. Normal mode lets the user review the drafts before adding them.
+ * Full Mode accepts the generated plan and starts its tasks immediately.
  */
 export function PlanDialog({ state, api, onClose, onCreated }: {
   state: DesktopState; api: DesktopAPI; onClose: () => void; onCreated: (firstTaskId: string) => void;
@@ -19,7 +19,15 @@ export function PlanDialog({ state, api, onClose, onCreated }: {
 
   async function plan() {
     setBusy(true); setError("");
-    try { setDrafts(await api.planTasks(goal.trim(), planner)); }
+    try {
+      const planned = await api.planTasks(goal.trim(), planner);
+      setDrafts(planned);
+      if (state.snapshot.project.settings?.fullMode) {
+        for (const draft of planned) await api.createTask(draft);
+        await api.start();
+        onCreated(planned[0]!.id);
+      }
+    }
     catch (e) { setError(e instanceof Error ? e.message : String(e)); }
     finally { setBusy(false); }
   }
@@ -58,7 +66,7 @@ export function PlanDialog({ state, api, onClose, onCreated }: {
             {state.agents.map((agent) => <option key={agent.id} value={agent.id}>{agent.id}</option>)}
           </select>
         </label>
-        <p className="form-help">Planlayıcı yalnızca okur: proje dosyalarının listesini ve README'yi görür, hiçbir dosyayı değiştirmez. Plan size gösterilmeden görev oluşturulmaz.</p>
+        <p className="form-help">Planlayıcı yalnızca okur: proje dosyalarının listesini ve README'yi görür, hiçbir dosyayı değiştirmez. {state.snapshot.project.settings?.fullMode ? "Full Mode açık: plan otomatik kabul edilir, görevler eklenir ve başlar." : "Plan size gösterilmeden görev oluşturulmaz."}</p>
       </> : <ol className="plan-list">
         {drafts.map((draft, index) => <li key={draft.id} style={laneStyle(state, draft.agentId)}>
           <div className="plan-row">

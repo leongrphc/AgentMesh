@@ -82,6 +82,13 @@ export function TopBar({ state, api, pending, ready, blocked, guard, act, onStar
       {state.busy ? `${running} ajan çalışıyor` : "Boşta"}
     </div>
     <div className="run-actions">
+      <button type="button" className={state.snapshot.project.settings?.fullMode ? "primary" : ""}
+        aria-pressed={!!state.snapshot.project.settings?.fullMode} data-testid="full-mode"
+        disabled={state.busy || state.planning || pending}
+        title="Full Mode: araç izinleri, değişiklik onayı ve projeye uygulama otomatik. Çakışma ve başarısız testte durur."
+        onClick={() => act(() => api.updateSettings({ ...state.snapshot.project.settings, fullMode: !state.snapshot.project.settings?.fullMode }))}>
+        {state.snapshot.project.settings?.fullMode ? "⚡ Full Mode açık" : "Full Mode kapalı"}
+      </button>
       {state.busy && <button disabled={pending} onClick={() => act(() => api.cancel())}>Durdur</button>}
       <button className="primary" data-testid="start" disabled={state.busy || !ready || pending || blocked} onClick={onStart}>
         {state.busy ? "Çalışıyor…" : "▶ Ajanları başlat"}

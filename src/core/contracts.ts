@@ -153,6 +153,8 @@ export interface ProjectSettings {
   testCommand?: string;
   /** Start newly unblocked tasks automatically after an approval or a change request. */
   autoContinue?: boolean;
+  /** Automatically approve supported permissions, merge reviewed work and apply it to the project. */
+  fullMode?: boolean;
 }
 
 export interface Project {

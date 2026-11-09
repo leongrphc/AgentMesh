@@ -246,7 +246,19 @@ export class DesktopService {
     this.running = Promise.resolve().then(() => this.engine!.run(this.config!.projectId,
       this.state().maxParallel, this.abort!.signal, false)).then(() => {}, (error: unknown) => {
         this.events.push({ at: new Date().toISOString(), text: safeLog(String(error)) });
-      }).finally(() => { this.running = undefined; this.abort = undefined; this.maintainJournal(); this.refreshIntegration(); this.publish(); });
+      }).finally(() => {
+        const cancelled = this.abort?.signal.aborted;
+        this.running = undefined; this.abort = undefined;
+        this.maintainJournal(); this.refreshIntegration();
+        const snapshot = this.engine!.snapshot(this.config!.projectId, false);
+        if (!cancelled && snapshot.project.settings?.fullMode && !this.demo && this.integrationPending > 0
+          && snapshot.tasks.every((task) => task.status === "completed")
+          && !snapshot.contextConflicts.some((conflict) => conflict.status === "pending")) {
+          try { this.applyIntegration(); }
+          catch (error) { this.events.push({ at: new Date().toISOString(), text: safeLog(`Full Mode durdu: ${String(error)}`) }); }
+        }
+        this.publish();
+      });
     this.publish();
   }
 
@@ -309,7 +321,7 @@ export class DesktopService {
 
   updateSettings(settings: import("../core/contracts.js").ProjectSettings): void {
     if (!this.config || !this.engine) throw new Error("Önce proje açın");
-    if (this.running) throw new Error("Ayarları değiştirmeden önce çalışmanın bitmesini bekleyin");
+    if (this.running || this.planAbort) throw new Error("Ayarları değiştirmeden önce çalışmanın bitmesini bekleyin");
     this.engine.updateSettings(this.config.projectId, settings);
   }
 

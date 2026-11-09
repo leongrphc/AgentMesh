@@ -272,8 +272,10 @@ export class Orchestrator {
     if (settings.testCommand !== undefined && typeof settings.testCommand !== "string") throw new Error("Test komutu metin olmalı");
     if (testCommand && (testCommand.length > 1000 || /[\0\r\n]/.test(testCommand))) throw new Error("Test komutu tek satır ve en fazla 1000 karakter olmalı");
     if (settings.autoContinue !== undefined && typeof settings.autoContinue !== "boolean") throw new Error("Otomatik devam açık/kapalı olmalı");
+    if (settings.fullMode !== undefined && typeof settings.fullMode !== "boolean") throw new Error("Full Mode açık/kapalı olmalı");
     this.emit({ type: "project.settings.updated", projectId, settings: {
-      ...(testCommand ? { testCommand } : {}), ...(settings.autoContinue ? { autoContinue: true } : {}) } });
+      ...(testCommand ? { testCommand } : {}), ...(settings.autoContinue ? { autoContinue: true } : {}),
+      ...(settings.fullMode ? { fullMode: true } : {}) } });
   }
 
   addTask(task: AgentTask): void {
@@ -571,6 +573,22 @@ export class Orchestrator {
         if (signal?.aborted) break;
         if ([...this.contextConflicts.get(projectId)?.values() ?? []].some((conflict) => conflict.status === "pending")) break;
         const tasks = this.snapshot(projectId, false).tasks;
+        if (this.projects.get(projectId)?.settings?.fullMode) {
+          if (tasks.some((task) => ["failed", "blocked", "needs_review", "cancelled"].includes(task.status))) break;
+          let stopped = false;
+          for (const task of tasks.filter((item) => item.status === "pending_review")) {
+            if (task.mergeConflict || task.tests?.some((report) => report.status === "failed") || !task.review) {
+              stopped = true; break;
+            }
+            try { this.approveTask(task.id, task.review.digest); }
+            catch (error) {
+              this.notify({ kind: "output", projectId, taskId: task.id,
+                output: { channel: "stderr", data: safeLog(`Full Mode durdu: ${String(error)}`) } });
+              stopped = true; break;
+            }
+          }
+          if (stopped || this.snapshot(projectId, false).contextConflicts.some((conflict) => conflict.status === "pending")) break;
+        }
         for (const task of tasks.filter((item) => item.status === "pending")) {
           if (task.dependsOn.some((id) => {
             const status = this.requireTask(id).status;
@@ -684,7 +702,8 @@ export class Orchestrator {
           if (!controller || controller.signal.aborted || this.controllers.get(task.id) !== controller
             || this.requireTask(task.id).status !== "running") return Promise.resolve("deny");
           return this.permissions.request({ projectId: task.projectId, taskId: task.id, executionId }, proposal,
-            signal ? AbortSignal.any([controller.signal, signal]) : controller.signal);
+            signal ? AbortSignal.any([controller.signal, signal]) : controller.signal,
+            !!this.projects.get(task.projectId)?.settings?.fullMode);
         },
         onOutput: (event) => this.notify({
           kind: "output", projectId: task.projectId, taskId: task.id,

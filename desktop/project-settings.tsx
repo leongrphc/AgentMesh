@@ -14,7 +14,7 @@ export function ProjectSettings({ state, api }: { state: DesktopState; api: Desk
     <h3 id="project-settings-title">Proje ayarları</h3>
     <form onSubmit={async (event) => {
       event.preventDefault(); setSaving(true); setMessage("");
-      try { await api.updateSettings({ testCommand: testCommand.trim() || undefined, autoContinue }); setMessage("Kaydedildi."); }
+      try { await api.updateSettings({ ...current, testCommand: testCommand.trim() || undefined, autoContinue }); setMessage("Kaydedildi."); }
       catch (error) { setMessage(error instanceof Error ? error.message : String(error)); }
       finally { setSaving(false); }
     }}>
